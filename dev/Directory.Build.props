@@ -1,0 +1,8 @@
+<Project>
+  <!-- Build output goes to the temp folder. BmSDK reloads the mod when any .cs file changes
+       inside it, and a build writes .cs files into obj. -->
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>$(TEMP)\Knightfall.check\obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(TEMP)\Knightfall.check\bin\</BaseOutputPath>
+  </PropertyGroup>
+</Project>
