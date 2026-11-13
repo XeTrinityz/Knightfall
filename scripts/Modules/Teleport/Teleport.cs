@@ -23,9 +23,14 @@ static class Teleport
 
     const string Lender = "teleport";
     public const float UnitsPerMetre = 100f;
+
+    // Real seconds, so slow motion doesn't stretch them.
     const float LoadSeconds = 15f;
     const float FadeOut = 0.3f;
     const float FadeBack = 0.4f;
+
+    // Collision can come in a moment after its district shows.
+    const float FloorSeconds = 2f;
 
     // Above the tallest roof and below the lowest street.
     public const float Sky = 100000f;
@@ -47,16 +52,25 @@ static class Teleport
     const float TryStep = 100f;
     const float ArrivedWithin = 60f;
 
+    // A target in the water lands on the nearest dry ground, looked for this far out in metres.
+    static readonly float[] ShoreRings = { 25f, 50f, 100f, 150f, 200f, 300f };
+    public const int Spokes = 12;
+
     // A pin on the map has a made-up height, and districts are boxes, so its district is looked
     // for at a few heights.
     static readonly float[] PinHeights = { 0f, 1500f, 4000f, 8000f, 15000f };
+
+    // Game seconds between looks at what the rows need, for their locks.
+    const float LookEvery = 0.25f;
 
     static SeqAct_Teleport? _action;
     static Vector3 _destination;
     static Rotator _facing;
 
     static Stage _stage;
-    static float _stageAt;
+    static long _stageAt;
+    static long _visibleAt;
+    static int _epoch;
     static Command? _by;
     static Pawn? _mover;
     static Actor.EPhysics _physics;
@@ -68,20 +82,40 @@ static class Teleport
     static Vector3 _from;
     static Vector3? _back;
 
+    static float _lookedAt = -1f;
+
+    // Why a far teleport can't start where the player is, or null when it can.
+    public static string? Away { get; private set; }
+
+    public static bool HasPin { get; private set; }
+
+    public static bool HasObjective { get; private set; }
+
+    public static bool HasCar { get; private set; }
+
     public static readonly Command ToWaypoint = new(
         "teleport.waypoint.to_waypoint", "TELEPORT TO WAYPOINT",
         "Takes you to the waypoint you set on the map, in the Batmobile too. A pin dropped on the map lands you on the highest ground there, usually a roof.",
-        () => Go(ToWaypoint!, Markers.Waypoint(), "NO WAYPOINT"));
+        () => Go(ToWaypoint!, Waypoint(), "NO WAYPOINT"))
+    {
+        Block = static () => Away ?? (HasPin ? null : "NO WAYPOINT"),
+    };
 
     public static readonly Command ToObjective = new(
         "teleport.waypoint.to_objective", "TELEPORT TO OBJECTIVE",
-        "Takes you to the current mission marker.",
-        () => Go(ToObjective!, Markers.Objective(), "NO MARKER"));
+        "Takes you to the current mission marker. For one inside a building you land at its way in.",
+        () => Go(ToObjective!, Objective(), "NO MARKER"))
+    {
+        Block = static () => Away ?? (HasObjective ? null : "NO MARKER"),
+    };
 
     public static readonly Command GoBack = new(
         "teleport.waypoint.go_back", "GO BACK",
         "Takes you back to where you were before the last teleport.",
-        () => Go(GoBack!, _back is { } back ? (back, true) : null, "NOWHERE YET"));
+        () => Go(GoBack!, _back is { } back ? (back, true) : null, "NOWHERE YET"))
+    {
+        Block = static () => Away ?? (_back is null ? "NOWHERE YET" : null),
+    };
 
     public static readonly Slider NoFadeRange = new(
         "teleport.waypoint.no_fade_range", "NO FADE RANGE",
@@ -93,7 +127,7 @@ static class Teleport
 
     public static readonly Slider ArrivalHeight = new(
         "teleport.waypoint.arrival_height", "ARRIVAL HEIGHT",
-        "Arrive this far above the ground and drop in, ready to glide. The Batmobile always lands on its wheels.",
+        "Arrive this far above the ground and drop in, ready to glide. Under a roof you arrive on the floor. The Batmobile always lands on its wheels.",
         min: 0, max: 100, step: 5, value: 0, unit: " M", zero: "GROUND")
     {
         Preference = true,
@@ -113,14 +147,37 @@ static class Teleport
         new("ARRIVAL", NoFadeRange, ArrivalHeight, FaceTravel),
     };
 
-    static RGameRI? Ri => Game.TryGetWorldInfo(out var world) && world.GRI is RGameRI { IsValid: true } ri ? ri : null;
+    public static RGameRI? Ri => Game.TryGetWorldInfo(out var world) && world.GRI is RGameRI { IsValid: true } ri ? ri : null;
 
     static Outcome Go(Command command, (Vector3 At, bool Exact)? target, string missing) =>
         target is { } goal ? Start(command, goal.At, goal.Exact) : Outcome.Failed(missing);
 
+    // The map waypoint. A side mission with no map icon sets a hidden one far outside the city,
+    // which isn't somewhere to go.
+    public static (Vector3 At, bool Exact)? Waypoint() =>
+        World.Info?.PersistentData is { IsValid: true } data && data.CustomWaypointName.ToString() == "HiddenFake" ? null : Markers.Waypoint();
+
+    // The game's own way to a marker. For one inside a building that is its entrance.
+    static (Vector3 At, bool Exact)? Objective()
+    {
+        if (Markers.Objective() is not { } marker)
+        {
+            return null;
+        }
+
+        // Without a player Start says so.
+        return World.Controller is { } controller && Mover is { } mover
+            ? (controller.GetOverworldNavigationTarget(marker.At, mover.Location), marker.Exact)
+            : marker;
+    }
+
     // The city's shift from where the map has it. Only interiors move it. Places from the map add
     // it, and places kept for later take it off.
     public static Vector3 CityOffset => World.Controller is { } controller ? controller.GetCurrentCityXOffset() : Vector3.Zero;
+
+    // Interiors like the GCPD are separate maps that only the game's own doors leave. The game
+    // asks the same before it shows the waypoint.
+    static string? Outside(RGameRI ri) => !World.InCity ? "NOT IN THE CITY" : !ri.IsOverworldGameplay() ? "INDOORS" : null;
 
     // Exact keeps the target's height, for somewhere indoors or on a lower floor. Otherwise only X
     // and Y count and the player lands on the highest ground there. The command gets the result.
@@ -137,16 +194,13 @@ static class Teleport
             return refused;
         }
 
-        var car = mover as RVehicleBatmobileBase;
-
-        // Interiors like the GCPD are separate maps that only the game's own doors leave.
-        var volumes = info.LevelVolumeList;
-        var here = ri.GetLevelVolumeForPoint(mover.Location, 0f, true, false, car is not null, -1, -1, -1);
-        if (here < 0 || here >= volumes.Count)
+        if (Outside(ri) is { } away)
         {
-            return Outcome.Failed("NOT INDOORS");
+            return Outcome.Failed(away);
         }
 
+        var car = mover as RVehicleBatmobileBase;
+        var volumes = info.LevelVolumeList;
         var there = District(ri, goal.At, goal.Exact, car is not null);
         if (there < 0 || there >= volumes.Count)
         {
@@ -156,18 +210,26 @@ static class Teleport
         // The district's Batmobile flags are only about where the car can be called to, so they
         // aren't asked here.
         var district = volumes[there];
+
+        // Batman stays where he is while the car is driven by remote, and his district has to
+        // stay loaded. The game's own rescue doesn't change the level then either.
+        if (car is { bRemoteDrive: true, bFakeRemoteDrive: false } && !district.IsVisible)
+        {
+            return Outcome.Failed("REMOTE CONTROL");
+        }
+
         _by = command;
         _mover = mover;
         _target = goal.At;
         _exact = goal.Exact;
         _level = district.LevelName;
-        _leftLevel = volumes[here].LevelName;
+        _leftLevel = ri.CurrentLevel;
         _from = mover.Location;
 
         var flat = new Vector2(_target.X - _from.X, _target.Y - _from.Y).Length();
-        if (district.IsVisible && flat <= NoFadeRange.Value * UnitsPerMetre && Place())
+        if (district.IsVisible && flat <= NoFadeRange.Value * UnitsPerMetre && Place() is { } placed)
         {
-            return Outcome.Done("ARRIVED");
+            return placed;
         }
 
         ri.SetFadeType(false, FadeOut, false, false, 0f, 0f, 0f, 0f);
@@ -177,8 +239,8 @@ static class Teleport
 
     // A short move inside ground that's already loaded, made straight away. On the floor stands
     // the mover on that point. Otherwise the point is where the player's middle goes, and they
-    // keep falling or gliding as before.
-    public static Outcome Hop(Pawn mover, Vector3 at, Rotator facing, bool onFloor)
+    // keep falling or gliding as before. Keeping motion leaves the player's pose and speed alone.
+    public static Outcome Hop(Pawn mover, Vector3 at, Rotator facing, bool onFloor, bool keepMotion = false)
     {
         if (Refusal(mover) is { } refused)
         {
@@ -188,7 +250,7 @@ static class Teleport
         var from = mover.Location;
         var velocity = mover.Velocity;
         var heading = Flat(mover.Rotation.ToDirection());
-        if (!Put(mover, onFloor ? at + new Vector3(0f, 0f, Lift(mover)) : at, facing))
+        if (!Put(mover, onFloor ? at + new Vector3(0f, 0f, Lift(mover)) : at, facing, !keepMotion))
         {
             return Outcome.Failed("NO ROOM");
         }
@@ -224,6 +286,24 @@ static class Teleport
     public static bool Dry(Vector3 floor) =>
         World.Controller is not { } controller || !controller.TraceWaterVolume(out _, floor, floor + new Vector3(0f, 0f, WaterAbove));
 
+    // The floors round a point that pass the test, ring by ring going out. Rings are in metres.
+    // Each spot is looked at from the sky, so what's found there is always out in the open.
+    public static IEnumerable<Vector3> FloorsAround(Actor tracer, Vector3 centre, float[] rings, int spokes, Func<Vector3, bool> test)
+    {
+        foreach (var ring in rings)
+        {
+            for (var i = 0; i < spokes; i++)
+            {
+                var angle = MathF.Tau * i / spokes;
+                var at = centre + new Vector3(MathF.Cos(angle), MathF.Sin(angle), 0f) * ring * UnitsPerMetre;
+                if (Floor(tracer, at, Sky, Deep, out var floor) && test(floor))
+                {
+                    yield return floor;
+                }
+            }
+        }
+    }
+
     static Outcome? Refusal(Pawn mover)
     {
         if (World.Controller is not { } controller)
@@ -236,7 +316,9 @@ static class Teleport
             return Outcome.Unchanged("ALREADY GOING");
         }
 
-        if (controller.bCinematicMode || mover is RVehicleBatmobileBase { bControlledBySeqAct: true } or RVehicleBatmobileBase { MatineeControlRefCount: not 0 })
+        if (controller.bCinematicMode
+            || mover is RVehicleBatmobileBase { bControlledBySeqAct: true } or RVehicleBatmobileBase { MatineeControlRefCount: not 0 }
+            || (mover is RPawnCharacter character && character.IsControlledByMatinee()))
         {
             return Outcome.Failed("NOT NOW");
         }
@@ -266,12 +348,27 @@ static class Teleport
 
     public static void Tick()
     {
+        // A new world took the trip's player, fade and level with it.
+        if (_epoch != World.Epoch)
+        {
+            _epoch = World.Epoch;
+            _back = null;
+            if (_stage != Stage.Idle)
+            {
+                _stage = Stage.Idle;
+                _held = false;
+                _mover = null;
+                _by = null;
+            }
+        }
+
+        Look();
         if (_stage == Stage.Idle)
         {
             return;
         }
 
-        var waited = World.Now - _stageAt;
+        var waited = Seconds(_stageAt);
         var ri = Ri;
         switch (_stage)
         {
@@ -290,21 +387,19 @@ static class Teleport
             case Stage.Loading when ri is not null:
                 if (_mover is not { IsValid: true })
                 {
-                    Finish(Outcome.Failed("LOST"));
+                    Fail(ri, Outcome.Failed("LOST"));
                 }
-                else if (ri.IsLevelVisible(_level, false) && Place())
+                else if (!ri.IsLevelVisible(_level, false))
                 {
-                    Finish(Outcome.Done("ARRIVED"));
-                }
-                else if (waited > LoadSeconds)
-                {
-                    Log.Info($"Teleport gave up waiting for {_level} to load.");
-                    if (World.Controller is { } owner)
+                    if (waited > LoadSeconds)
                     {
-                        ri.SetCurrentLevel(_leftLevel, owner, true);
+                        Log.Info($"Teleport gave up waiting for {_level} to load.");
+                        Fail(ri, Outcome.Failed("DIDN'T LOAD"));
                     }
-
-                    Finish(Outcome.Failed("DIDN'T LOAD"));
+                }
+                else
+                {
+                    Arrive(ri);
                 }
 
                 break;
@@ -315,10 +410,74 @@ static class Teleport
         }
     }
 
+    // The district shows. Its floor may take a moment longer.
+    static void Arrive(RGameRI ri)
+    {
+        var first = _visibleAt == 0;
+        if (first)
+        {
+            _visibleAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        }
+
+        var since = Seconds(_visibleAt);
+        if (Place() is not { } placed)
+        {
+            if (since > FloorSeconds)
+            {
+                Log.Info($"Teleport found no floor in {_level} {FloorSeconds:0.#} s after it showed.");
+                Fail(ri, Outcome.Failed("NO GROUND"));
+            }
+
+            return;
+        }
+
+        if (placed.Kind != OutcomeKind.Done)
+        {
+            Fail(ri, placed);
+            return;
+        }
+
+        if (!first)
+        {
+            Log.Info($"Teleport found the floor in {_level} {since:0.00} s after it showed.");
+        }
+
+        Finish(placed);
+    }
+
+    static float Seconds(long since) => (float)System.Diagnostics.Stopwatch.GetElapsedTime(since).TotalSeconds;
+
+    // What the rows' locks show. Looked at a few times a second, since a lock is asked every frame.
+    static void Look()
+    {
+        if (MathF.Abs(World.Now - _lookedAt) < LookEvery)
+        {
+            return;
+        }
+
+        _lookedAt = World.Now;
+        Away = Ri is { } ri ? Outside(ri) : null;
+        HasPin = Waypoint() is not null;
+        HasObjective = Markers.Objective() is not null;
+        HasCar = Car.Find() is not null;
+    }
+
     static void Enter(Stage stage)
     {
         _stage = stage;
-        _stageAt = World.Now;
+        _stageAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        _visibleAt = 0;
+    }
+
+    // A trip that can't end where it was going puts back the level the player left.
+    static void Fail(RGameRI ri, Outcome outcome)
+    {
+        if (World.Controller is { } owner)
+        {
+            ri.SetCurrentLevel(_leftLevel, owner, true);
+        }
+
+        Finish(outcome);
     }
 
     static void Finish(Outcome outcome)
@@ -364,38 +523,76 @@ static class Teleport
         }
     }
 
-    // Finds the floor and moves the player there. False when the ground isn't loaded yet.
-    static bool Place()
+    // Finds the floor and moves the player there. Null while the ground isn't loaded yet.
+    static Outcome? Place()
     {
-        if (_mover is not { IsValid: true } mover || !Ground(mover, _target, _exact, out var floor))
+        if (_mover is not { IsValid: true } mover)
         {
-            return false;
+            return Outcome.Failed("LOST");
+        }
+
+        if (!Ground(mover, _target, _exact, out var floor))
+        {
+            return null;
+        }
+
+        if (!Dry(floor))
+        {
+            if (_exact || !Shore(mover, out floor))
+            {
+                return Outcome.Failed("WATER");
+            }
         }
 
         var lift = Lift(mover);
-        if (mover is not RVehicleBatmobileBase)
+        if (mover is not RVehicleBatmobileBase && ArrivalHeight.Value > 0)
         {
-            lift += (float)ArrivalHeight.Value * UnitsPerMetre;
+            var high = lift + (float)ArrivalHeight.Value * UnitsPerMetre;
+            if (mover.FastTrace(floor + new Vector3(0f, 0f, high), floor + new Vector3(0f, 0f, lift), Vector3.Zero, false))
+            {
+                lift = high;
+            }
         }
 
         var way = new Vector3(_target.X - _from.X, _target.Y - _from.Y, 0f);
         var facing = FaceTravel.On && way.LengthSquared() > 1f ? Rotator.FromDirection(way) : new Rotator(0f, mover.Rotation.Yaw, 0f);
-        if (!Put(mover, floor + new Vector3(0f, 0f, lift), facing))
+        if (!Put(mover, floor + new Vector3(0f, 0f, lift), facing, true))
         {
-            return false;
+            return Outcome.Failed("NO ROOM");
         }
 
         _back = _from;
         Let();
-        return true;
+
+        // What the game does after each of its own teleports on foot. The car tidies up itself.
+        if (mover is not RVehicle && World.Controller is { } controller)
+        {
+            mover.Velocity = Vector3.Zero;
+            (controller.PlayerCamera as R3rdPersonCamera)?.ResetCamera(default, true, true);
+            controller.OnPlayerHasBeenMoved();
+        }
+
+        return Outcome.Done("ARRIVED");
+    }
+
+    static bool Shore(Pawn mover, out Vector3 floor)
+    {
+        foreach (var dry in FloorsAround(mover, _target, ShoreRings, Spokes, Dry))
+        {
+            floor = dry;
+            return true;
+        }
+
+        floor = default;
+        return false;
     }
 
     // Somewhere a pawn doesn't fit refuses the move, so a little higher is tried. The car is
     // always put where it's sent.
-    static bool Put(Pawn mover, Vector3 point, Rotator facing)
+    static bool Put(Pawn mover, Vector3 point, Rotator facing, bool stop)
     {
         _facing = facing;
-        var action = Action();
+        var action = Action(stop);
         var start = mover.Location;
         for (var i = 0; i < Tries; i++)
         {
@@ -438,8 +635,8 @@ static class Teleport
     }
 
     // The game's own teleport action, made once. Kept from the clean-up, since nothing in the
-    // game holds on to it.
-    static SeqAct_Teleport Action()
+    // game holds on to it. Stopping all movement also stands the player up.
+    static SeqAct_Teleport Action(bool stop)
     {
         if (_action is not { IsValid: true })
         {
@@ -447,7 +644,7 @@ static class Teleport
         }
 
         _action.bUpdateRotation = true;
-        _action.bStopAllMovement = true;
+        _action.bStopAllMovement = stop;
         _action.bDontResetCamera = false;
         _action.bForcePawnIntoCrouch = false;
         _action.bForceResetBatmobileRigidBody = true;

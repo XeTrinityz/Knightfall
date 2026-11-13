@@ -18,6 +18,7 @@ static class Pin
 
     static bool _pending;
     static float _readyAt = -1f;
+    static int _epoch;
 
     public static readonly Toggle OnSet = new(
         "teleport.waypoint.on_set", "TELEPORT ON WAYPOINT",
@@ -34,7 +35,10 @@ static class Pin
     public static readonly Command Clear = new(
         "teleport.waypoint.clear", "CLEAR WAYPOINT",
         "Takes away your map waypoint.",
-        () => Markers.Clear() ? Outcome.Done("CLEARED") : Outcome.Unchanged("NO WAYPOINT"));
+        () => Markers.Clear() ? Outcome.Done("CLEARED") : Outcome.Unchanged("NO WAYPOINT"))
+    {
+        Block = static () => Teleport.HasPin ? null : "NO WAYPOINT",
+    };
 
     static Outcome Mark()
     {
@@ -56,6 +60,14 @@ static class Pin
     // The map pauses the game, so the wait starts once it's running again.
     static void Watch()
     {
+        // A pin set just before a load belongs to the last world's clock.
+        if (_epoch != World.Epoch)
+        {
+            _epoch = World.Epoch;
+            _pending = false;
+            _readyAt = -1f;
+        }
+
         if (!_pending)
         {
             return;
@@ -80,7 +92,7 @@ static class Pin
 
         _pending = false;
         _readyAt = -1f;
-        if (Markers.Waypoint() is not null)
+        if (Teleport.Waypoint() is not null)
         {
             Catalog.Pressed(Teleport.ToWaypoint);
         }

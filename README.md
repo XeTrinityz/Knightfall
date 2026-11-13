@@ -145,6 +145,8 @@ TELEPORT > WAYPOINT
 TELEPORT > PLACES
 
 - CATEGORY, PLACE, TELEPORT TO PLACE, WAYPOINT TO PLACE, NEAREST IN CATEGORY and RANDOM IN CATEGORY. Every area, landmark, Riddler trophy, breakable, riddle, bomb, race, AR challenge and Most Wanted spot on the game's map, by the game's own names.
+- SHOW. LEFT TO DO lists only the Riddler items you haven't picked up and the Most Wanted places the map shows, so NEAREST IN CATEGORY takes you to the next one. ALL lists everything.
+- WAYPOINT TO PLACE gives a Riddler item the map shows its own icon at its real height, and the waypoint goes away when you collect it.
 - SAVED SPOTS. Ten places of your own, kept between sessions.
 
 TELEPORT > MOVE
@@ -152,6 +154,8 @@ TELEPORT > MOVE
 - BLINK TO CROSSHAIR and BLINK FORWARD, with BLINK RANGE. Instant short hops that never go through a wall. They work in the Batmobile too.
 - SKY DROP, TO THE ROOF, DROP TO GROUND and TO THE STREET.
 - GO TO THE BATMOBILE and BRING THE BATMOBILE.
+- LEAVE BUILDING. Takes you out of an interior like the GCPD through its own door to the city. A door the game has locked stays locked.
+- A row that can't act right now is locked with the reason, like INDOORS, NO WAYPOINT, EMPTY or NO CAR. Far teleports only work outdoors in the city.
 
 CAMERA > VIEW
 

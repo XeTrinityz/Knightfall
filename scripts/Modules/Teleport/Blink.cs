@@ -34,7 +34,6 @@ static class Blink
     // How far round you TO THE STREET looks, in metres, and how much lower than your feet it has
     // to be.
     static readonly float[] StreetRings = { 8f, 15f, 25f, 40f, 60f };
-    const int StreetSpokes = 12;
     const float StreetDrop = 300f;
     const float SameLevel = 100f;
 
@@ -62,7 +61,10 @@ static class Blink
     public static readonly Command SkyDrop = new(
         "teleport.move.sky_drop", "SKY DROP",
         "Lifts you straight up so you can glide away. Not in the Batmobile.",
-        Up);
+        Up)
+    {
+        Block = static () => World.Driving is not null ? "NOT IN THE CAR" : null,
+    };
 
     public static readonly Slider DropHeight = new(
         "teleport.move.sky_drop_height", "SKY DROP HEIGHT",
@@ -156,7 +158,7 @@ static class Blink
         var facing = new Rotator(0f, mover.Rotation.Yaw, 0f);
         if (!car && InAir(mover))
         {
-            return Teleport.Hop(mover, to, facing, false);
+            return Teleport.Hop(mover, to, facing, false, keepMotion: true);
         }
 
         return Teleport.Floor(mover, to, mover.Location.Z + StepUp, mover.Location.Z - StepDown, out var floor)
@@ -225,8 +227,8 @@ static class Blink
             : Land(mover, floor, new Rotator(0f, mover.Rotation.Yaw, 0f));
     }
 
-    // Each spot round you is looked at from the sky, so what's found there is always out in the
-    // open. The lowest wins, and the nearest of those about as low, since the rings go outward.
+    // The lowest open ground round you wins, and the nearest of those about as low, since the
+    // rings go outward.
     static Outcome Street()
     {
         if (Teleport.Mover is not { } mover)
@@ -234,24 +236,13 @@ static class Blink
             return Outcome.NoPlayer;
         }
 
-        var here = mover.Location;
         var highest = Feet(mover) - StreetDrop;
         Vector3? best = null;
-        foreach (var ring in StreetRings)
+        foreach (var floor in Teleport.FloorsAround(mover, mover.Location, StreetRings, Teleport.Spokes, spot => spot.Z <= highest && Teleport.Dry(spot)))
         {
-            for (var i = 0; i < StreetSpokes; i++)
+            if (best is not { } lowest || floor.Z < lowest.Z - SameLevel)
             {
-                var angle = MathF.Tau * i / StreetSpokes;
-                var at = here + new Vector3(MathF.Cos(angle), MathF.Sin(angle), 0f) * ring * Metre;
-                if (!Teleport.Floor(mover, at, Teleport.Sky, Teleport.Deep, out var floor) || floor.Z > highest || !Teleport.Dry(floor))
-                {
-                    continue;
-                }
-
-                if (best is not { } lowest || floor.Z < lowest.Z - SameLevel)
-                {
-                    best = floor;
-                }
+                best = floor;
             }
         }
 

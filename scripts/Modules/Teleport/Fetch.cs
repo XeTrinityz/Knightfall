@@ -33,12 +33,18 @@ static class Fetch
     public static readonly Command GoToCar = new(
         "teleport.move.to_batmobile", "GO TO THE BATMOBILE",
         "Takes you to the Batmobile wherever it is. Far away it fades like a waypoint teleport.",
-        ToCar);
+        ToCar)
+    {
+        Block = static () => World.Driving is not null ? "IN THE CAR" : Teleport.Away ?? (Teleport.HasCar ? null : "NO CAR"),
+    };
 
     public static readonly Command BringCar = new(
         "teleport.move.bring_batmobile", "BRING THE BATMOBILE",
         "Puts the Batmobile beside you straight away, on the ground you're on, facing the way you look.",
-        Bring);
+        Bring)
+    {
+        Block = static () => World.Driving is not null ? "IN THE CAR" : Teleport.HasCar ? null : "NO CAR",
+    };
 
     public static readonly Catalog.Section Section = new("BATMOBILE", GoToCar, BringCar);
 

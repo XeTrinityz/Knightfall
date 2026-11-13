@@ -25,22 +25,34 @@ static class Spots
     public static readonly Command SaveHere = new(
         "teleport.places.save_spot", "SAVE HERE",
         "Keeps where you are now in the spot picked above. It is kept between sessions.",
-        Save);
+        Save)
+    {
+        Block = static () => Teleport.Away,
+    };
 
     public static readonly Command GoThere = new(
-        "teleport.places.go_spot", "GO TO SPOT",
+        "teleport.places.go_spot", "TELEPORT TO SPOT",
         "Takes you back to the spot picked above.",
-        () => Saved[Spot.Index] is { } at ? Teleport.Start(GoThere!, at + Teleport.CityOffset, true) : Outcome.Failed("EMPTY"));
+        () => Saved[Spot.Index] is { } at ? Teleport.Start(GoThere!, at + Teleport.CityOffset, true) : Outcome.Failed("EMPTY"))
+    {
+        Block = static () => Teleport.Away ?? Empty(),
+    };
 
     public static readonly Command MarkThere = new(
         "teleport.places.waypoint_spot", "WAYPOINT TO SPOT",
         "Sets your map waypoint on the spot picked above.",
-        Mark);
+        Mark)
+    {
+        Block = Empty,
+    };
 
     public static readonly Command Clear = new(
         "teleport.places.clear_spot", "CLEAR SPOT",
         "Empties the spot picked above.",
-        Forget);
+        Forget)
+    {
+        Block = Empty,
+    };
 
     static (string, string)[] Labels()
     {
@@ -109,6 +121,8 @@ static class Spots
         Refresh();
         return Outcome.Done("CLEARED");
     }
+
+    static string? Empty() => Saved[Spot.Index] is null ? "EMPTY" : null;
 
     static string Key(int i) => "spot_" + (i + 1);
 

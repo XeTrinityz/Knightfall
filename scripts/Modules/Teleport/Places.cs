@@ -12,10 +12,23 @@ namespace Knightfall;
 // BmGame.ini, named by the game's own text so they follow its language.
 static class Places
 {
-    sealed record Place(string Label, Vector3 At);
+    // Name and Type are the game's own, which its flags and waypoints go by.
+    sealed record Place(string Label, Vector3 At, string Name, string Type, int Flags);
+
+    // When a place still counts as left to do.
+    enum Rule
+    {
+        Always,
+
+        // Until it's picked up.
+        Riddler,
+
+        // While the map shows it.
+        MostWanted,
+    }
 
     // Exact is false for areas and landmarks, which land on the highest ground there.
-    sealed record Kind(string Id, string Label, bool Exact, Func<string, bool> Takes)
+    sealed record Kind(string Id, string Label, bool Exact, Rule Left, Func<string, bool> Takes)
     {
         public readonly List<Place> Items = new();
     }
@@ -24,29 +37,46 @@ static class Places
 
     static readonly Kind[] Kinds =
     {
-        new("areas", "AREAS", false, type => type is "LabelTextBigArea" or "LabelTextArea"),
-        new("landmarks", "LANDMARKS", false, type => type is "LabelTextFeature1" or "BuildingMarker"),
-        new("trophies", "RIDDLER TROPHIES", true, type => type == "RiddlerPickup"),
-        new("breakables", "RIDDLER BREAKABLES", true, type => type == "RiddlerBreakable"),
-        new("riddles", "RIDDLES", true, type => type == "RiddlerCameo"),
-        new("bombs", "RIDDLER BOMBS", true, type => type == "RiddlerBomb"),
-        new("races", "RACES", true, type => type == "NigmaRace"),
-        new("ar", "AR CHALLENGES", true, type => type == "ARChallenge"),
-        new("most_wanted", "MOST WANTED", true, type => type.StartsWith("MostWanted", StringComparison.Ordinal)),
+        new("areas", "AREAS", false, Rule.Always, type => type is "LabelTextBigArea" or "LabelTextArea"),
+        new("landmarks", "LANDMARKS", false, Rule.Always, type => type is "LabelTextFeature1" or "BuildingMarker"),
+        new("trophies", "RIDDLER TROPHIES", true, Rule.Riddler, type => type == "RiddlerPickup"),
+        new("breakables", "RIDDLER BREAKABLES", true, Rule.Riddler, type => type == "RiddlerBreakable"),
+        new("riddles", "RIDDLES", true, Rule.Riddler, type => type == "RiddlerCameo"),
+        new("bombs", "RIDDLER BOMBS", true, Rule.Riddler, type => type == "RiddlerBomb"),
+        new("races", "RACES", true, Rule.Always, type => type == "NigmaRace"),
+        new("ar", "AR CHALLENGES", true, Rule.Always, type => type == "ARChallenge"),
+        new("most_wanted", "MOST WANTED", true, Rule.MostWanted, type => type.StartsWith("MostWanted", StringComparison.Ordinal)),
     };
+
+    const int LeftToDo = 1;
+
+    // The map's own flag for an item it shows whatever else is set.
+    const int AlwaysOnMap = 4;
 
     static readonly (string, string)[] Nothing = { ("none", "NONE") };
 
     // The named parts of each island, like KINGSTON or CHINATOWN, without the islands themselves.
     static readonly List<Place> Districts = new();
 
+    // What PLACE lists, by each place's number in its whole category.
+    static readonly List<int> Shown = new();
+
     static bool _built;
-    static int _shown = -1;
+    static (int Kind, int Show) _shown = (-1, -1);
 
     public static readonly Choice Category = new(
         "teleport.places.category", "CATEGORY",
         "Which kind of place PLACE lists.",
         Kinds.Select(kind => (kind.Id, kind.Label)).ToArray())
+    {
+        Preference = true,
+        Opening = static () => List(),
+    };
+
+    public static readonly Choice Show = new(
+        "teleport.places.show", "SHOW",
+        "LEFT TO DO leaves out Riddler items you've picked up and Most Wanted places the map doesn't show. Areas, landmarks, races and AR challenges are always listed.",
+        new[] { ("all", "ALL"), ("left", "LEFT TO DO") }, LeftToDo)
     {
         Preference = true,
     };
@@ -59,32 +89,44 @@ static class Places
     public static readonly Command GoThere = new(
         "teleport.places.go", "TELEPORT TO PLACE",
         "Takes you to the place picked above. Areas and landmarks land you on the highest ground there.",
-        () => Go(GoThere!, Picked()));
+        () => Go(GoThere!, Picked()))
+    {
+        Block = static () => Teleport.Away ?? None(),
+    };
 
     public static readonly Command MarkThere = new(
         "teleport.places.waypoint", "WAYPOINT TO PLACE",
-        "Sets your map waypoint on the place picked above, the way the map does.",
-        () => Mark(Picked()));
+        "Sets your map waypoint on the place picked above. Riddler items the map shows get their own icon, the way the map does it.",
+        () => Mark(Picked()))
+    {
+        Block = None,
+    };
 
     public static readonly Command Nearest = new(
         "teleport.places.nearest", "NEAREST IN CATEGORY",
-        "Takes you to the nearest place of the category picked above.",
-        () => Go(Nearest!, Closest()));
+        "Takes you to the nearest place of the category picked above, and shows it in PLACE.",
+        () => Go(Nearest!, Closest()))
+    {
+        Block = static () => Teleport.Away ?? None(),
+    };
 
     public static readonly Command Anywhere = new(
         "teleport.places.random", "RANDOM IN CATEGORY",
         "Takes you to a random place of the category picked above, and shows it in PLACE.",
-        () => Go(Anywhere!, Random()));
+        () => Go(Anywhere!, Random()))
+    {
+        Block = static () => Teleport.Away ?? None(),
+    };
 
     static readonly Random Dice = new();
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("PLACES", Category, Pick, GoThere, MarkThere, Nearest, Anywhere),
+        new("PLACES", Category, Show, Pick, GoThere, MarkThere, Nearest, Anywhere),
         new("SAVED SPOTS", Spots.Spot, Spots.SaveHere, Spots.GoThere, Spots.MarkThere, Spots.Clear),
     };
 
-    // Runs every tick. The list under PLACE follows CATEGORY.
+    // Runs every tick. The list under PLACE follows CATEGORY and SHOW.
     public static void Tick()
     {
         if (!_built && World.Info is { } info)
@@ -96,15 +138,58 @@ static class Places
             }
         }
 
-        if (!_built || _shown == Category.Index)
+        if (_shown != (Category.Index, Show.Index))
         {
-            return;
+            List();
+        }
+    }
+
+    // Made again whenever it's looked at, since what's left to do changes as you play. The pick
+    // stays when it is still listed. False when the game's flags can't be read yet.
+    static bool List()
+    {
+        if (!_built)
+        {
+            return false;
         }
 
-        _shown = Category.Index;
-        var items = Kinds[_shown].Items;
-        Pick.SetOptions(items.Count == 0 ? Nothing : items.Select((place, i) => (i.ToString(), place.Label)).ToArray(), 0);
+        var kind = Kinds[Category.Index];
+        RFlagManager? flags = null;
+        if (Show.Index == LeftToDo && kind.Left != Rule.Always && (flags = Flags()) is null)
+        {
+            return false;
+        }
+
+        var keep = _shown.Kind == Category.Index ? Pick.CurrentId : null;
+        Shown.Clear();
+        for (var i = 0; i < kind.Items.Count; i++)
+        {
+            if (flags is null || Left(kind.Left, kind.Items[i], flags))
+            {
+                Shown.Add(i);
+            }
+        }
+
+        var options = Shown.Count == 0 ? Nothing : Shown.Select(i => (i.ToString(), kind.Items[i].Label)).ToArray();
+        Pick.SetOptions(options, Math.Max(0, Array.FindIndex(options, option => option.Item1 == keep)));
+        _shown = (Category.Index, Show.Index);
+        return true;
     }
+
+    static bool Left(Rule rule, Place place, RFlagManager flags) => rule switch
+    {
+        Rule.Riddler => !flags.GetGlobalFlag(GameText.Of("PickedUp_" + place.Name)),
+        Rule.MostWanted => !flags.GetGlobalFlag(GameText.Of("PickedUp_" + place.Name))
+            && ((place.Flags & AlwaysOnMap) != 0 || flags.GetGlobalFlag(GameText.Of("MapObj_" + place.Name))),
+        _ => true,
+    };
+
+    static RFlagManager? Flags() => Teleport.Ri?.FlagManager is { IsValid: true } flags ? flags : null;
+
+    static string? None() => Shown.Count == 0 ? "NONE" : null;
+
+    // The list as it is now, or null when it couldn't be made.
+    static List<int>? Fresh() => List() ? Shown : null;
 
     // The name of the part of the city nearest a point.
     public static string AreaNear(Vector3 at)
@@ -130,36 +215,34 @@ static class Places
         return int.TryParse(Pick.CurrentId, out var i) && i >= 0 && i < kind.Items.Count ? (kind.Items[i], kind.Exact) : null;
     }
 
+    // Both picks are shown in PLACE, so WAYPOINT TO PLACE and TELEPORT TO PLACE can find them
+    // again.
     static (Place Place, bool Exact)? Closest()
     {
         var kind = Kinds[Category.Index];
         Pawn? mover = World.Driving is { IsValid: true } driving ? driving : World.Player;
-        if (mover is null || kind.Items.Count == 0)
+        if (mover is null || Fresh() is not { Count: > 0 } shown)
         {
             return null;
         }
 
         var here = mover.Location - Teleport.CityOffset;
-        var best = kind.Items.MinBy(place => Flat(place.At - here))!;
-        return (best, kind.Exact);
+        var best = Enumerable.Range(0, shown.Count).MinBy(at => Flat(kind.Items[shown[at]].At - here));
+        Pick.SetTo(best);
+        return (kind.Items[shown[best]], kind.Exact);
     }
 
     static (Place Place, bool Exact)? Random()
     {
         var kind = Kinds[Category.Index];
-        if (kind.Items.Count == 0)
+        if (Fresh() is not { Count: > 0 } shown)
         {
             return null;
         }
 
-        // Shown in PLACE, so WAYPOINT TO PLACE and TELEPORT TO PLACE can find it again.
-        var index = Dice.Next(kind.Items.Count);
-        if (_shown == Category.Index)
-        {
-            Pick.SetTo(index);
-        }
-
-        return (kind.Items[index], kind.Exact);
+        var at = Dice.Next(shown.Count);
+        Pick.SetTo(at);
+        return (kind.Items[shown[at]], kind.Exact);
     }
 
     static Outcome Go(Command command, (Place Place, bool Exact)? target) =>
@@ -177,8 +260,15 @@ static class Places
             return Outcome.NoPlayer;
         }
 
-        var at = goal.Place.At + Teleport.CityOffset;
-        Markers.Set(at);
+        // The map's own waypoint for a Riddler item only lasts while the map shows the item.
+        // The game takes it away straight after otherwise.
+        var place = goal.Place;
+        if (Kinds[Category.Index].Left == Rule.Riddler && Flags() is { } flags && flags.GetGlobalFlag(GameText.Of("Riddler_" + place.Name)))
+        {
+            return Markers.SetItem(place.At, place.Name, place.Type) ? Outcome.Done("SET") : Outcome.NoPlayer;
+        }
+
+        Markers.Set(place.At + Teleport.CityOffset);
         return Outcome.Done("SET");
     }
 
@@ -191,13 +281,13 @@ static class Places
         }
 
         // Areas first, so the others can be named by them.
-        var rows = new List<(string Type, string Name, Vector3 At)>();
+        var rows = new List<(string Type, string Name, Vector3 At, int Flags)>();
         for (var i = 0; i < list.Count; i++)
         {
             var row = list[i];
             if (CityMaps.Contains(row.MapName.ToString() ?? ""))
             {
-                rows.Add((row.ItemType.ToString() ?? "", row.ItemName.ToString() ?? "", new Vector3(row.X, row.Y, row.Z)));
+                rows.Add((row.ItemType.ToString() ?? "", row.ItemName.ToString() ?? "", new Vector3(row.X, row.Y, row.Z), row.Flags));
             }
         }
 
@@ -208,7 +298,7 @@ static class Places
 
         Districts.Clear();
         var islands = new HashSet<string>();
-        foreach (var (type, name, _) in rows)
+        foreach (var (type, name, _, _) in rows)
         {
             if (type == "LabelTextBigArea" && Localized("LevelDesc", name, "FRONTEND") is { } island)
             {
@@ -217,16 +307,17 @@ static class Places
         }
 
         // Only places the game has a name for. The rest are working names never meant to be seen.
-        foreach (var (type, name, at) in rows)
+        foreach (var (type, name, at, flags) in rows)
         {
             for (var k = 0; k < 2; k++)
             {
                 if (Kinds[k].Takes(type) && Localized("LevelDesc", name, "FRONTEND") is { } label)
                 {
-                    AddOnce(Kinds[k], label, at);
+                    var place = new Place(label, at, name, type, flags);
+                    AddOnce(Kinds[k], place);
                     if (type == "LabelTextArea" && !islands.Contains(label))
                     {
-                        Districts.Add(new Place(label, at));
+                        Districts.Add(place);
                     }
                 }
             }
@@ -240,7 +331,7 @@ static class Places
         // Collectibles are numbered within the area they are in. Most Wanted spots are named by
         // their mission.
         var counts = new Dictionary<string, int>();
-        foreach (var (type, _, at) in rows.OrderBy(row => row.At.X).ThenBy(row => row.At.Y))
+        foreach (var (type, name, at, flags) in rows.OrderBy(row => row.At.X).ThenBy(row => row.At.Y))
         {
             for (var k = 2; k < Kinds.Length; k++)
             {
@@ -253,7 +344,7 @@ static class Places
                 var group = kind.Id == "most_wanted" ? Mission(type) : AreaNear(at);
                 var key = kind.Id + "|" + group;
                 counts[key] = counts.GetValueOrDefault(key) + 1;
-                kind.Items.Add(new Place(group + " " + counts[key], at));
+                kind.Items.Add(new Place(group + " " + counts[key], at, name, type, flags));
             }
         }
 
@@ -265,11 +356,11 @@ static class Places
         return true;
     }
 
-    static void AddOnce(Kind kind, string label, Vector3 at)
+    static void AddOnce(Kind kind, Place place)
     {
-        if (label.Length > 0 && !kind.Items.Exists(place => place.Label == label))
+        if (place.Label.Length > 0 && !kind.Items.Exists(other => other.Label == place.Label))
         {
-            kind.Items.Add(new Place(label, at));
+            kind.Items.Add(place);
         }
     }
 

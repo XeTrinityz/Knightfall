@@ -55,6 +55,38 @@ static class Markers
     // The game's waypoint cheat sets the pin, compass, map marker and route in one go.
     public static void Set(Vector3 at) => Game.GetCheatManager().SetWaypoint(at.X, at.Y, at.Z);
 
+    // What the map does when you pick a Riddler item as the waypoint. It keeps the item's icon
+    // and height, and the game takes it away once the item is collected. At is where the map's
+    // list has it. The game keeps the texts given to it.
+    public static bool SetItem(Vector3 at, string name, string type)
+    {
+        if (World.Info is not { } info || info.PersistentData is not { IsValid: true } data || World.Controller is not { } controller)
+        {
+            return false;
+        }
+
+        // A pin set by the cheat leaves its own compass entry behind.
+        if (controller.ModularHud is { IsValid: true } hud && hud.TargetsModule is { IsValid: true } targets)
+        {
+            targets.DeregisterCompassItem("Custom");
+        }
+
+        data.CustomWaypointName = GameText.Once(name);
+        data.CustomWaypointTypeName = GameText.Once(type);
+        data.SetCustomWaypoint(at, true, false);
+        data.CustomWaypoint_NotReached = 1;
+        data.CustomWaypoint_SilentWhenReached = 0;
+        info.Map3DRenderingData.WaypointPosition = new Vector4(at, 1f);
+        if (controller.Map3DActRef is { IsValid: true } map)
+        {
+            map.SetUserMarker(true, true, at.X, at.Y, at.Z, GameText.Once(name));
+        }
+
+        data.CustomWaypoint_Type = RPersistentData.ECustomWayPointType.CustomWayType_Riddler;
+        data.CustomWaypoint_VisibleFlag = GameText.Once("Riddler_" + name);
+        return true;
+    }
+
     // Undoes what the map does when a pin goes down. The controller notices the pin is off on its
     // next frame and drops the marker in the world itself, as when the map removes one.
     public static bool Clear()

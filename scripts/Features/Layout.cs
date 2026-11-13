@@ -57,7 +57,7 @@ static class Layout
         Catalog.AddPage("TELEPORT")
             .Add("WAYPOINT", Teleport.Sections)
             .Add("PLACES", Places.Sections)
-            .Add("MOVE", Blink.Sections.Append(Fetch.Section).ToArray());
+            .Add("MOVE", Blink.Sections.Append(Fetch.Section).Append(Leave.Section).ToArray());
 
         Catalog.Background("teleport.waypoint", Teleport.Tick, Teleport.Release);
         Catalog.Background("teleport.places", Places.Tick);
