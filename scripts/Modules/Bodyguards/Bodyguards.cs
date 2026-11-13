@@ -9,7 +9,8 @@ namespace Knightfall;
 
 // SPAWNER > BODYGUARDS. People who follow you everywhere and fight for you. They can be hired
 // from anyone the area has loaded, or recruited from the enemies in front of you. GuardBrain runs
-// each one, Strikes lands their hits and Hunters sends enemies after them.
+// each one, Strikes lands their hits and Hunters sends enemies after them. Other features bring
+// their own people in with Enlist and Take, and send them off with Let.
 static class Bodyguards
 {
     const float Metre = Teleport.UnitsPerMetre;
@@ -28,14 +29,16 @@ static class Bodyguards
     // UNBEATABLE BODYGUARDS gets a fallen one up after this long.
     const float GetUpAfter = 4f;
 
-    // A body the game has hidden this long has gone back to its pool.
+    // A body the game has hidden this long isn't coming back.
     const float GoneAfter = 3f;
 
-    const float OrderSeconds = 30f;
+    // BODYGUARDS RECOVER. This long after their last fight or hit, a share of their health comes
+    // back each second.
+    const float RecoverAfter = 5f;
+    const float RecoverShare = 0.08f;
 
-    public const int Protect = 0;
-    public const int Hold = 1;
-    public const int StandDown = 2;
+    const int Hold = 1;
+    const int StandDown = 2;
 
     static readonly List<Guard> Team = new();
     static readonly List<RPawnVillain> Enemies = new();
@@ -79,12 +82,12 @@ static class Bodyguards
 
     public static readonly Command Recruit = new(
         "spawner.bodyguards.recruit", "RECRUIT WHO I AIM AT",
-        "Turns the enemy in the middle of your screen into a bodyguard. DISMISS makes them an enemy again.",
+        "Turns the enemy in the middle of your screen into a bodyguard. DISMISS puts them back how they were.",
         RecruitAimed);
 
     public static readonly Choice Orders = new(
         "spawner.bodyguards.orders", "ORDERS",
-        "PROTECT ME has them follow you and fight whoever comes near. HOLD HERE keeps them in place. STAND DOWN has them follow you and fight nobody.",
+        "PROTECT ME has them follow you and fight whoever comes near. HOLD HERE keeps each where they stand. They fight what comes near that spot and walk back to it after. STAND DOWN has them follow you and fight nobody.",
         new[] { ("protect", "PROTECT ME"), ("hold", "HOLD HERE"), ("stand_down", "STAND DOWN") }, saved: false);
 
     public static readonly Command Attack = new(
@@ -92,12 +95,12 @@ static class Bodyguards
         "Sends every bodyguard after the enemy in the middle of your screen until that one is down.",
         AttackAimed)
     {
-        Block = NoTeam,
+        Block = static () => NoTeam() ?? (StoodDown ? "THEY'RE STOOD DOWN" : null),
     };
 
     public static readonly Command Regroup = new(
         "spawner.bodyguards.regroup", "BRING THEM TO ME",
-        "Puts every bodyguard still standing in a ring around you, wherever they are.",
+        "Puts every bodyguard still standing in a ring around you, wherever they are. Ones told to HOLD HERE hold there from then on.",
         RegroupNow)
     {
         Block = NoTeam,
@@ -113,7 +116,7 @@ static class Bodyguards
 
     public static readonly Command DismissAimed = new(
         "spawner.bodyguards.dismiss_aimed", "DISMISS WHO I AIM AT",
-        "Lets the bodyguard in the middle of your screen go. A hired one leaves the world. A recruited one goes back to being an enemy.",
+        "Lets the bodyguard in the middle of your screen go. A hired one leaves the world. A recruited one goes back to how they were.",
         DismissOne)
     {
         Block = NoTeam,
@@ -121,7 +124,7 @@ static class Bodyguards
 
     public static readonly Command Dismiss = new(
         "spawner.bodyguards.dismiss", "DISMISS BODYGUARDS",
-        "Lets every bodyguard go. Hired ones leave the world. Recruited ones go back to being enemies.",
+        "Lets every bodyguard go. Hired ones leave the world. Recruited ones go back to how they were.",
         DismissAll)
     {
         Block = NoTeam,
@@ -153,7 +156,15 @@ static class Bodyguards
 
     public static readonly Toggle CatchUp = new(
         "spawner.bodyguards.catch_up", "BODYGUARDS CATCH UP",
-        "A bodyguard left far behind, because you glided, grappled or drove off, appears behind you once you stop, where you can't see it happen.",
+        "A bodyguard left far behind, or with no way up to you, appears behind you once you stop, where you can't see it happen.",
+        on: true)
+    {
+        Preference = true,
+    };
+
+    public static readonly Toggle Recover = new(
+        "spawner.bodyguards.recover", "BODYGUARDS RECOVER",
+        "A bodyguard's health comes back by itself, a few seconds after their last fight or hit.",
         on: true)
     {
         Preference = true,
@@ -175,14 +186,21 @@ static class Bodyguards
     {
         new("HIRE", Who, People.RefreshList, People.Weapon, Count, Health, Hire, Recruit),
         new("ORDERS", Orders, Attack, Regroup, Heal, DismissAimed, Dismiss),
-        new("BEHAVIOUR", Range, Gap, EnemiesFight, CatchUp, Unbeatable, HitsToKnockOut),
+        new("BEHAVIOUR", Range, Gap, EnemiesFight, CatchUp, Recover, Unbeatable, HitsToKnockOut),
         GuardMarks.Section,
     };
 
     public static IReadOnlyList<Guard> All => Team;
 
-    // Asked every frame the rows that need a team are on screen.
-    static string? NoTeam() => Team.Count == 0 ? "NO BODYGUARDS" : null;
+    public static bool Holding => Orders.Index == Hold;
+
+    public static bool StoodDown => Orders.Index == StandDown;
+
+    // Room left in the team.
+    public static int Room => Math.Max(0, Most - Team.Count);
+
+    // Why a row that needs a team can't be used. Asked every frame such a row is on screen.
+    public static string? NoTeam() => Team.Count == 0 ? "NO BODYGUARDS" : null;
 
     // Whether anyone is being steered. The hit redirects ask this first, so every other attack
     // in the game costs one check.
@@ -237,20 +255,19 @@ static class Bodyguards
             }
         }
 
-        var room = Most - Team.Count;
-        if (room <= 0)
+        if (Room == 0)
         {
             return Outcome.Failed($"AT MOST {Most}");
         }
 
-        return People.Hire(Who.CurrentId, Math.Min((int)Count.Value, room), (float)Health.Value, static (body, label, health) => Adopt(body, label, false, health));
+        return People.Hire(Who.CurrentId, Math.Min((int)Count.Value, Room), (float)Health.Value, static (body, label, health) => Adopt(body, label, false, health));
     }
 
     // Hires people for another feature, like a villain's goons, and hands back the bodies made.
     public static List<RPawnVillain> Enlist(string key, int count, float health)
     {
         var made = new List<RPawnVillain>();
-        var room = Math.Min(count, Most - Team.Count);
+        var room = Math.Min(count, Room);
         if (room > 0)
         {
             People.Hire(key, room, health, (body, label, normal) =>
@@ -263,13 +280,10 @@ static class Bodyguards
         return made;
     }
 
-    // Room left in the team.
-    public static int Room => Math.Max(0, Most - Team.Count);
-
     // Takes on someone another feature made, like a villain's squad. False when the team is full.
     public static bool Take(RPawnVillain body, string label, int baseHealth)
     {
-        if (Team.Count >= Most || GuardOf(body) is not null)
+        if (Room == 0 || Is(body))
         {
             return false;
         }
@@ -278,24 +292,47 @@ static class Bodyguards
         return true;
     }
 
-    // Lets one bodyguard go, as DISMISS BODYGUARDS does for everyone.
-    public static void Let(RPawnVillain body)
+    // Lets one bodyguard go, as DISMISS BODYGUARDS does for everyone. False when they weren't one.
+    public static bool Let(RPawnVillain body)
     {
         if (GuardOf(body) is not { } guard)
         {
-            return;
+            return false;
         }
 
+        SendOff(guard);
+        return true;
+    }
+
+    // A recruit goes back to how they were. A hired one leaves the world, and the spawner tells
+    // us as it takes them, which hands them back.
+    static void SendOff(Guard guard)
+    {
         if (guard.Recruited)
         {
-            Team.Remove(guard);
-            GuardBrain.Release(guard, true);
+            Drop(guard, guard.WasHostile);
+            if (guard.WasHostile)
+            {
+                Fight.Rejoin(guard.Body);
+            }
         }
         else
         {
-            Spawned.Take(body);
-            Team.Remove(guard);
+            Spawned.Take(guard.Body);
+
+            // Still here when their body was already gone, so the spawner had nothing to tell.
+            if (Team.Contains(guard))
+            {
+                Drop(guard, false);
+            }
         }
+    }
+
+    // Out of the team, with what we changed on them put back.
+    static void Drop(Guard guard, bool hostile)
+    {
+        Team.Remove(guard);
+        GuardBrain.Release(guard, hostile);
     }
 
     static Outcome RecruitAimed()
@@ -305,7 +342,7 @@ static class Bodyguards
             return Outcome.NoPlayer;
         }
 
-        if (Team.Count >= Most)
+        if (Room == 0)
         {
             return Outcome.Failed($"AT MOST {Most}");
         }
@@ -315,7 +352,7 @@ static class Bodyguards
             return Outcome.Failed("AIM AT AN ENEMY");
         }
 
-        if (GuardOf(thug) is not null)
+        if (Is(thug))
         {
             return Outcome.Unchanged("ALREADY YOURS");
         }
@@ -325,7 +362,9 @@ static class Bodyguards
             return Outcome.Failed("THEY CAN'T JOIN NOW");
         }
 
-        Adopt(thug, Things.NameOf(thug), true, Math.Max(thug.HealthMax, thug.Health));
+        var label = Things.NameOf(thug);
+        Adopt(thug, label, true, Math.Max(thug.HealthMax, thug.Health));
+        Log.Info($"Bodyguards: recruited {label} ({thug.Class.Name}). {Team.Count} of {Most} in the team.");
         return Outcome.Done("RECRUITED");
     }
 
@@ -336,16 +375,19 @@ static class Bodyguards
             return Outcome.Unchanged("NO BODYGUARDS");
         }
 
-        if (Editor.Aimed(Things.Kind.Enemy) is not RPawnVillain thug || GuardOf(thug) is null)
+        if (Editor.Aimed(Things.Kind.Enemy) is not RPawnVillain thug || GuardOf(thug) is not { } guard)
         {
             return Outcome.Failed("AIM AT A BODYGUARD");
         }
 
-        Let(thug);
+        SendOff(guard);
+        Log.Info($"Bodyguards: dismissed {guard.Label}. {Team.Count} left in the team.");
         return Outcome.Done("DISMISSED");
     }
 
-    static void Adopt(RPawnVillain body, string label, bool recruited, int baseHealth)
+    // WasHostile is only given for someone picked up again after a script reload, who has been
+    // stood down by us since they joined.
+    static void Adopt(RPawnVillain body, string label, bool recruited, int baseHealth, bool? wasHostile = null)
     {
         Hunters.Forget(body);
         var guard = new Guard
@@ -353,14 +395,16 @@ static class Bodyguards
             Body = body,
             Label = label,
             Recruited = recruited,
+            WasHostile = wasHostile ?? body.bHostile,
             Slot = _nextSlot++,
             BaseHealth = Math.Max(1, baseHealth),
             WakeAt = recruited ? 0f : World.Now + WakeAfter,
+            SeenHealth = body.Health,
         };
         Team.Add(guard);
 
         // Stood down at once, so they never come for you while their brain starts.
-        if (body.IsHostile())
+        if (body.bHostile)
         {
             body.SetHostile(false, Fight.Reason);
         }
@@ -375,7 +419,7 @@ static class Bodyguards
             return Outcome.Failed("NO BODYGUARDS");
         }
 
-        if (Orders.Index == StandDown)
+        if (StoodDown)
         {
             return Outcome.Failed("THEY'RE STOOD DOWN");
         }
@@ -385,7 +429,7 @@ static class Bodyguards
             return Outcome.Failed("AIM AT AN ENEMY");
         }
 
-        if (GuardOf(thug) is not null)
+        if (Is(thug))
         {
             return Outcome.Failed("THAT'S A BODYGUARD");
         }
@@ -395,8 +439,7 @@ static class Bodyguards
         {
             if (Fight.Standing(guard.Body))
             {
-                guard.Ordered = thug;
-                guard.OrderedUntil = World.Now + OrderSeconds;
+                GuardBrain.Order(guard, thug, World.Now);
                 sent++;
             }
         }
@@ -422,7 +465,7 @@ static class Bodyguards
         for (var i = 0; i < standing.Count && i < spots.Count; i++)
         {
             var away = spots[i] - you.Location;
-            if (GuardBrain.Place(standing[i].Body, spots[i], MathF.Atan2(away.Y, away.X) * 180f / MathF.PI))
+            if (GuardBrain.Place(standing[i], spots[i], MathF.Atan2(away.Y, away.X) * 180f / MathF.PI))
             {
                 brought++;
             }
@@ -452,7 +495,7 @@ static class Bodyguards
                 GetUp(guard);
                 healed++;
             }
-            else if (TopUp(body))
+            else if (TopUp(guard))
             {
                 healed++;
             }
@@ -473,23 +516,16 @@ static class Bodyguards
         {
             if (!guard.Body.IsValid || guard.Body.bDeleteMe)
             {
+                Drop(guard, false);
                 continue;
             }
 
             count++;
-            if (guard.Recruited)
-            {
-                GuardBrain.Release(guard, true);
-            }
-            else
-            {
-                // The spawner tells us before it takes each one, which hands them back.
-                Spawned.Take(guard.Body);
-            }
+            SendOff(guard);
         }
 
-        Team.Clear();
         Hunters.ReleaseAll();
+        Log.Info($"Bodyguards: dismissed all {count}.");
         return Outcome.Done($"{count} DISMISSED");
     }
 
@@ -499,8 +535,7 @@ static class Bodyguards
     {
         if (GuardOf(body) is { } guard)
         {
-            Team.Remove(guard);
-            GuardBrain.Release(guard, true);
+            Drop(guard, true);
         }
     }
 
@@ -549,12 +584,14 @@ static class Bodyguards
         var now = World.Now;
         if (!Crowd.Standing(body))
         {
-            // The gun is stopped, or it keeps firing at its last target from the floor.
-            Fight.StopShooting(guard);
-            guard.Target = null;
+            GuardBrain.Fell(guard);
             if (guard.DownSince < 0f || now < guard.DownSince)
             {
                 guard.DownSince = now;
+                if (!body.bHidden)
+                {
+                    Log.Info($"Bodyguards: {guard.Label} is down.");
+                }
             }
             else if (Unbeatable.On && !body.bHidden && now - guard.DownSince >= GetUpAfter)
             {
@@ -565,18 +602,14 @@ static class Bodyguards
         }
 
         guard.DownSince = -1f;
-        if (Unbeatable.On)
-        {
-            TopUp(body);
-        }
-
+        Mend(guard, now);
         if (body.IsIncapacitated())
         {
             Fight.StopShooting(guard);
             return;
         }
 
-        if (now < guard.WakeAt && guard.WakeAt - now < 5f)
+        if (Fight.Waiting(guard.WakeAt, now, 5f))
         {
             return;
         }
@@ -586,7 +619,8 @@ static class Bodyguards
         Strikes.Combo(guard);
     }
 
-    // Every standing enemy near you or near a bodyguard, a few times a second.
+    // Every standing enemy near you or near a bodyguard, a few times a second. Someone stood down
+    // by the game or by you, like a passive spawn, is left alone.
     static void Scan(Pawn you)
     {
         Enemies.Clear();
@@ -594,7 +628,8 @@ static class Bodyguards
         var near = range + ScanMargin;
         foreach (var villain in Game.FindObjects<RPawnVillain>())
         {
-            if (!villain.IsValid || villain.IsClassDefaultObject || !Crowd.Standing(villain) || villain.Base is Vehicle || GuardOf(villain) is not null)
+            if (!villain.IsValid || villain.IsClassDefaultObject || !villain.bHostile || !Crowd.Standing(villain) || villain.Base is Vehicle
+                || GuardOf(villain) is not null)
             {
                 continue;
             }
@@ -605,8 +640,7 @@ static class Bodyguards
                 close = Vector3.DistanceSquared(villain.Location, Team[i].Body.Location) <= near * near;
             }
 
-            // Someone stood down by the game or by you, like a passive spawn, is left alone.
-            if (close && villain.IsHostile())
+            if (close)
             {
                 Enemies.Add(villain);
             }
@@ -621,7 +655,17 @@ static class Bodyguards
             var body = guard.Body;
             if (!body.IsValid || body.bDeleteMe)
             {
-                Team.RemoveAt(i);
+                Drop(guard, false);
+                Log.Info($"Bodyguards: {guard.Label} left the world. {Team.Count} left in the team.");
+                continue;
+            }
+
+            // Back in the game's pool, where it comes out again as somebody else. So it goes
+            // back as the game made it.
+            if (Fight.Pooled(body))
+            {
+                Drop(guard, true);
+                Log.Info($"Bodyguards: the game took {guard.Label} back. {Team.Count} left in the team.");
                 continue;
             }
 
@@ -635,25 +679,58 @@ static class Bodyguards
             }
             else if (now - guard.HiddenSince >= GoneAfter)
             {
-                // Back in the game's pool, where it may come out again as somebody else.
-                Team.RemoveAt(i);
-                GuardBrain.Release(guard, guard.Recruited);
+                Drop(guard, guard.Recruited && guard.WasHostile);
+                Log.Info($"Bodyguards: {guard.Label} was hidden by the game and left the team. {Team.Count} left.");
             }
         }
     }
 
-    static int Full(RPawnVillain body) => Math.Max(Math.Max(body.HealthMax, body.MaxHealth), 1);
+    public static int FullHealth(RPawnVillain body) => Math.Max(Math.Max(body.HealthMax, body.MaxHealth), 1);
 
-    static bool TopUp(RPawnVillain body)
+    static bool TopUp(Guard guard)
     {
-        var full = Full(body);
+        var body = guard.Body;
+        var full = FullHealth(body);
         if (body.Health >= full)
         {
             return false;
         }
 
         body.Health = full;
+        guard.SeenHealth = full;
         return true;
+    }
+
+    // Runs every tick for someone on their feet. UNBEATABLE keeps them full. BODYGUARDS RECOVER
+    // gives health back once they have been left alone for a while.
+    static void Mend(Guard guard, float now)
+    {
+        if (Unbeatable.On)
+        {
+            TopUp(guard);
+            return;
+        }
+
+        var body = guard.Body;
+        var health = body.Health;
+        if (health < guard.SeenHealth)
+        {
+            guard.HurtAt = now;
+        }
+
+        guard.SeenHealth = health;
+        if (!Recover.On || guard.Target is not null || Fight.Since(guard.HurtAt, now) < RecoverAfter || Fight.Since(guard.FoughtAt, now) < RecoverAfter
+            || !Fight.Due(ref guard.RecoverAt, now, 1f))
+        {
+            return;
+        }
+
+        var full = FullHealth(body);
+        if (health < full)
+        {
+            guard.SeenHealth = Math.Min(full, health + Math.Max(1, (int)MathF.Ceiling(full * RecoverShare)));
+            body.Health = guard.SeenHealth;
+        }
     }
 
     // The game's own wake-up for someone knocked out. It starts them over, so they are stood
@@ -662,29 +739,35 @@ static class Bodyguards
     {
         var body = guard.Body;
         body.WakeFromDeadWithDefaults();
-        body.Health = Full(body);
+        body.Health = FullHealth(body);
+        guard.SeenHealth = body.Health;
         guard.DownSince = -1f;
         guard.Benched = false;
         guard.Target = null;
         guard.WakeAt = World.Now + WakeAfter;
-        if (body.IsHostile())
+        if (body.bHostile)
         {
             body.SetHostile(false, Fight.Reason);
             guard.Benched = true;
         }
+
+        Log.Info($"Bodyguards: {guard.Label} is back up.");
     }
 
     // On unload they are left stood down and what we changed is put back. A script reload picks
     // them up again from the list kept here.
     public static void Release()
     {
-        var kept = Team.Where(guard => guard.Body.IsValid && !guard.Body.bDeleteMe).ToArray();
+        var kept = Team.Where(guard => guard.Body.IsValid && !guard.Body.bDeleteMe && !Fight.Pooled(guard.Body)).ToArray();
         Survive.Set(Survive.BodyguardBodies, kept.Select(guard => (long)guard.Body.Ptr).ToArray());
         Survive.Set(Survive.BodyguardLabels, kept.Select(guard => guard.Label).ToArray());
         Survive.Set(Survive.BodyguardRecruited, kept.Select(guard => guard.Recruited).ToArray());
+        Survive.Set(Survive.BodyguardHostile, kept.Select(guard => guard.WasHostile).ToArray());
         Survive.Set(Survive.BodyguardHealth, kept.Select(guard => guard.BaseHealth).ToArray());
+        Survive.Set(Survive.BodyguardOrders, Orders.CurrentId);
 
-        foreach (var guard in kept)
+        // Everyone is let go of, kept or not, which also takes their hold markers away.
+        foreach (var guard in Team)
         {
             Kernel.Run("spawner.bodyguards.release", static held => GuardBrain.Release(held, false), guard);
         }
@@ -698,10 +781,11 @@ static class Bodyguards
         var bodies = Survive.Get<long[]?>(Survive.BodyguardBodies, null);
         var labels = Survive.Get<string[]?>(Survive.BodyguardLabels, null);
         var recruited = Survive.Get<bool[]?>(Survive.BodyguardRecruited, null);
+        var hostile = Survive.Get<bool[]?>(Survive.BodyguardHostile, null);
         var health = Survive.Get<int[]?>(Survive.BodyguardHealth, null);
         Survive.Set<long[]?>(Survive.BodyguardBodies, null);
-        if (bodies is null || labels is null || recruited is null || health is null || bodies.Length == 0
-            || labels.Length != bodies.Length || recruited.Length != bodies.Length || health.Length != bodies.Length)
+        if (bodies is null || labels is null || recruited is null || hostile is null || health is null || bodies.Length == 0
+            || labels.Length != bodies.Length || recruited.Length != bodies.Length || hostile.Length != bodies.Length || health.Length != bodies.Length)
         {
             return;
         }
@@ -714,10 +798,16 @@ static class Bodyguards
             }
 
             var at = Array.IndexOf(bodies, (long)villain.Ptr);
-            if (at >= 0 && GuardOf(villain) is null)
+            if (at >= 0 && !Is(villain))
             {
-                Adopt(villain, labels[at], recruited[at], health[at]);
+                Adopt(villain, labels[at], recruited[at], health[at], hostile[at]);
             }
+        }
+
+        if (Team.Count > 0)
+        {
+            Orders.Load(Survive.Get<string?>(Survive.BodyguardOrders, null));
+            Log.Info($"Bodyguards: kept {Team.Count} of {bodies.Length} through the reload.");
         }
     }
 }

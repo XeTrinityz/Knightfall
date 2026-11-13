@@ -252,7 +252,7 @@ static partial class JokerVillain
         for (var i = Goons.Count - 1; i >= 0; i--)
         {
             var goon = Goons[i];
-            if (!goon.Body.IsValid || goon.Body.bDeleteMe || Bodyguards.GuardOf(goon.Body) is null)
+            if (!goon.Body.IsValid || goon.Body.bDeleteMe || !Bodyguards.Is(goon.Body))
             {
                 Goons.RemoveAt(i);
                 continue;

@@ -93,8 +93,7 @@ static class GuardMarks
         Draw.Triangle(at.X - 6f, y - 8f, at.X + 6f, y - 8f, at.X, y, color);
 
         var body = guard.Body;
-        var full = Math.Max(Math.Max(body.HealthMax, body.MaxHealth), 1);
-        var fill = down ? 0f : Math.Clamp(body.Health / (float)full, 0f, 1f);
+        var fill = down ? 0f : Math.Clamp(body.Health / (float)Bodyguards.FullHealth(body), 0f, 1f);
         var left = at.X - BarWidth / 2f;
         var top = y - 8f - 4f - BarHeight;
         Draw.Rect(left - 1f, top - 1f, BarWidth + 2f, BarHeight + 2f, Ink with { A = 170 });
@@ -105,12 +104,12 @@ static class GuardMarks
             return;
         }
 
-        var state = down ? "DOWN" : guard.Target is not null ? "FIGHTING" : Bodyguards.Orders.Index switch
-        {
-            Bodyguards.Hold => "HOLDING",
-            Bodyguards.StandDown => "STOOD DOWN",
-            _ => "WITH YOU",
-        };
+        var state = down ? "DOWN"
+            : guard.Target is not null ? "FIGHTING"
+            : guard.Returning ? "GOING BACK"
+            : Bodyguards.Holding ? "HOLDING"
+            : Bodyguards.StoodDown ? "STOOD DOWN"
+            : "WITH YOU";
         var width = MathF.Max(Draw.TrackedWidth(guard.Label, NameSize, 1.5f), Draw.TextWidth(state, NameSize)) + 12f;
         var tagTop = top - 5f - Threats.TagHeight;
         Draw.Rect(at.X - width / 2f, tagTop, width, Threats.TagHeight, Ink with { A = 170 });

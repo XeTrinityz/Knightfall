@@ -49,8 +49,11 @@ sealed class Guard : Fighter
 {
     public required string Label;
 
-    // Someone the game placed, who goes back to being an enemy when dismissed.
+    // Someone the game placed, who goes back to how they were when dismissed.
     public bool Recruited;
+
+    // Whether a recruit was against you when taken on.
+    public bool WasHostile = true;
 
     // Their place in the team, which spreads them out behind you.
     public int Slot;
@@ -73,6 +76,22 @@ sealed class Guard : Fighter
     // ATTACK WHO I AIM AT.
     public RPawnVillain? Ordered;
     public float OrderedUntil;
+
+    // HOLD HERE. The spot they keep, and the hidden marker they walk back to.
+    public bool Posted;
+    public bool Returning;
+    public Vector3 Post;
+    public Actor? PostMark;
+
+    // Where they last moved from and when, which tells when they can't get to you.
+    public Vector3 MovedFrom;
+    public float MovedAt;
+    public float StuckCheckedAt = -100f;
+
+    // BODYGUARDS RECOVER.
+    public int SeenHealth;
+    public float HurtAt;
+    public float RecoverAt;
 }
 
 sealed class Hunter : Fighter
@@ -96,6 +115,10 @@ static class Fight
     public const float MoveEvery = 0.5f;
     const float MakeFollowEvery = 1.5f;
 
+    // A swing started inside this goes straight into its strike.
+    const float WeaponReach = 180f;
+    const float FistReach = 190f;
+
     const float ChestHeight = 40f;
     const float AimSettle = 0.35f;
     const float SightEvery = 0.2f;
@@ -116,6 +139,11 @@ static class Fight
     public static bool Sees(Pawn body, Pawn other) => body.FastTrace(Chest(other), Eye(body), Vector3.Zero, true);
 
     public static float Random(float least, float most) => least + System.Random.Shared.NextSingle() * (most - least);
+
+    public static float Reach(RPawnVillain body) => body.CurrWeapon is { IsValid: true } ? WeaponReach : FistReach;
+
+    // A body sitting in the game's pool, waiting to come out again as somebody else.
+    public static bool Pooled(RPawnVillain body) => body.bPooledPawn_Inactive;
 
     // The game's own follow, which paths over the ground and stops inside the distance. It gives
     // up at once with nobody to follow, so it is made, aimed and only then started.
@@ -143,8 +171,7 @@ static class Fight
             return;
         }
 
-        // Game time starts over with a new world.
-        if (now < fighter.FollowMadeAt && fighter.FollowMadeAt - now < MakeFollowEvery * 2f)
+        if (Waiting(fighter.FollowMadeAt, now, MakeFollowEvery * 2f))
         {
             return;
         }
@@ -163,12 +190,52 @@ static class Fight
         brain.ActivateSpawnedBehaviour(made);
     }
 
+    static RBMBehaviour_Follow? FollowOf(RPawnVillain body) =>
+        body.AIController is { IsValid: true } brain
+        && brain.GetBehaviourOfClass(RBMBehaviour_Follow.StaticClass(), true) is RBMBehaviour_Follow { IsValid: true } follow
+            ? follow
+            : null;
+
+    // The follow is asked to end itself. The brain's own call for ending a behaviour only works
+    // from inside the game's script, and does nothing from here.
     public static void StopFollowing(RPawnVillain body)
     {
-        if (body.AIController is { IsValid: true } brain
-            && brain.GetBehaviourOfClass(RBMBehaviour_Follow.StaticClass(), true) is RBMBehaviour_Follow { IsValid: true } follow)
+        FollowOf(body)?.ExitBehaviour(0);
+    }
+
+    // For someone who is an enemy again. With nothing of their own left to do they'd only stand
+    // there, so they are pulled into a fight the way the game pulls a street thug in.
+    public static void Rejoin(RPawnVillain body)
+    {
+        if (!Standing(body) || body.AIController is not { IsValid: true } brain || brain.GetBehaviour(0) is { IsValid: true })
         {
-            brain.InstantExitBehaviour(follow, false);
+            return;
+        }
+
+        body.SetIsValidCombatant(true);
+        body.ForceIntoCombat();
+        if (!body.bIsCurrentCombatant)
+        {
+            brain.EnterCombat(true, true, false);
+        }
+    }
+
+    // Before someone they may be following is taken out of the world. The follow waits for the
+    // next one it is given.
+    public static void Unfollow(RPawnVillain body, Actor who)
+    {
+        if (FollowOf(body) is { } follow && ReferenceEquals(follow.FollowActor, who))
+        {
+            follow.FollowActor = null!;
+        }
+    }
+
+    // After they are moved by hand. The follow's path still starts from where they were.
+    public static void Repath(RPawnVillain body)
+    {
+        if (FollowOf(body) is { FollowActor: { IsValid: true, bDeleteMe: false } } follow)
+        {
+            follow.SetPathToFollowActor();
         }
     }
 
@@ -193,7 +260,7 @@ static class Fight
             fighter.SightAt = -1f;
         }
 
-        if (now >= fighter.SightAt || fighter.SightAt - now > SightEvery * 2f)
+        if (!Waiting(fighter.SightAt, now, SightEvery * 2f))
         {
             fighter.Sight = Sees(body, target);
             fighter.SightAt = now + SightEvery;
@@ -236,7 +303,7 @@ static class Fight
             return;
         }
 
-        if (body.bFiring || (now < fighter.BurstAt && fighter.BurstAt - now < 5f))
+        if (body.bFiring || Waiting(fighter.BurstAt, now, 5f))
         {
             return;
         }
@@ -346,6 +413,15 @@ static class Fight
             stand.CombatMoveStance = CombatStance;
         }
 
+        // Told whose it is, the way the brain tells any behaviour it takes on. The game asks a
+        // fighter's behaviour about its own pawn, like for the push it gives an enemy waiting to
+        // attack them, and one with no pawn crashes the game there.
+        stand.RegisterController(brain);
+        if (brain.Pawn is RPawnCombat { IsValid: true } body)
+        {
+            stand.CombatManager = body.CombatManager;
+        }
+
         brain.CombatBehaviour = stand;
     }
 
@@ -358,11 +434,10 @@ static class Fight
         }
     }
 
-    // True when the time has come, and sets the next one. Game time starts over with a new
-    // world, so a time far in the future counts as due.
+    // True when the time has come, and sets the next one.
     public static bool Due(ref float at, float now, float every)
     {
-        if (now < at && at - now <= every * 2f)
+        if (Waiting(at, now, every * 2f))
         {
             return false;
         }
@@ -370,4 +445,11 @@ static class Fight
         at = now + every;
         return true;
     }
+
+    // True while a set time is still ahead. Game time starts over with a new world, so a time
+    // further ahead than it could have been set counts as passed.
+    public static bool Waiting(float until, float now, float most) => now < until && until - now <= most;
+
+    // Seconds since a time was noted. One noted in a world before this one counts as long ago.
+    public static float Since(float then, float now) => now >= then ? now - then : float.MaxValue;
 }

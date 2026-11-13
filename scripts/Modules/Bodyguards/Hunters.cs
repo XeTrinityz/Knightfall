@@ -24,8 +24,6 @@ static class Hunters
 
     const int PerGuard = 3;
 
-    const float WeaponReach = 180f;
-    const float FistReach = 190f;
     const float SwingGapLeast = 0.6f;
     const float SwingGapMost = 1.4f;
 
@@ -106,7 +104,7 @@ static class Hunters
                 continue;
             }
 
-            if (Nearest(enemy.Location, out var away) is not { } prey || away > Reach
+            if (Nearest(enemy.Location, true, out var away) is not { } prey || away > Reach
                 || away > Vector3.Distance(enemy.Location, you.Location) - Margin)
             {
                 continue;
@@ -120,14 +118,16 @@ static class Hunters
         }
     }
 
-    static Guard? Nearest(Vector3 at, out float away)
+    // The nearest bodyguard on their feet. Free leaves out the ones who already have all the
+    // hunters one bodyguard gets.
+    static Guard? Nearest(Vector3 at, bool free, out float away)
     {
         Guard? best = null;
         away = float.MaxValue;
         foreach (var guard in Standing)
         {
             var distance = Vector3.Distance(guard.Body.Location, at);
-            if (distance < away)
+            if (distance < away && (!free || After(guard) < PerGuard))
             {
                 away = distance;
                 best = guard;
@@ -135,6 +135,20 @@ static class Hunters
         }
 
         return best;
+    }
+
+    static int After(Guard guard)
+    {
+        var count = 0;
+        foreach (var hunter in List)
+        {
+            if (ReferenceEquals(hunter.Prey, guard))
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     // False when he should go back to the game.
@@ -149,7 +163,7 @@ static class Hunters
         // Sticks with his bodyguard until that one is down, then takes the nearest left.
         if (hunter.Prey is not { } prey || !Standing.Contains(prey))
         {
-            prey = Nearest(body.Location, out _);
+            prey = Nearest(body.Location, false, out _);
             hunter.Prey = prey;
         }
 
@@ -159,7 +173,7 @@ static class Hunters
         }
 
         // Calmed by something else, like a scene. He is left to it.
-        if (scanned && !body.IsHostile())
+        if (scanned && !body.bHostile)
         {
             return false;
         }
@@ -198,14 +212,13 @@ static class Hunters
     static void Swing(Hunter hunter, RPawnVillain target, float now)
     {
         var body = hunter.Body;
-        if ((now < hunter.SwingAt && hunter.SwingAt - now < 5f) || body.CombatMove is { IsValid: true } || body.IsStunned()
+        if (Fight.Waiting(hunter.SwingAt, now, 5f) || body.CombatMove is { IsValid: true } || body.IsStunned()
             || body.AIController is not { IsValid: true } brain)
         {
             return;
         }
 
-        var reach = body.CurrWeapon is { IsValid: true } ? WeaponReach : FistReach;
-        if (Vector3.Distance(body.Location, target.Location) > reach)
+        if (Vector3.Distance(body.Location, target.Location) > Fight.Reach(body))
         {
             return;
         }

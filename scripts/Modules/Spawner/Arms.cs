@@ -87,7 +87,7 @@ static class Arms
         "Puts the weapon above in the hands of every bodyguard still standing.",
         ArmGuards)
     {
-        Block = static () => Bodyguards.All.Count == 0 ? "NO BODYGUARDS" : null,
+        Block = Bodyguards.NoTeam,
     };
 
     public static readonly Catalog.Section[] Sections =
@@ -296,9 +296,9 @@ static class Arms
 
     static Outcome ArmGuards()
     {
-        if (Bodyguards.All.Count == 0)
+        if (Bodyguards.NoTeam() is { } nobody)
         {
-            return Outcome.Failed("NO BODYGUARDS");
+            return Outcome.Failed(nobody);
         }
 
         if (NoWeapon(out var kind) is { } none)

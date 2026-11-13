@@ -309,11 +309,7 @@ static partial class ArkhamKnight
                 continue;
             }
 
-            if (Bodyguards.GuardOf(body) is not null)
-            {
-                Bodyguards.Let(body);
-            }
-            else
+            if (!Bodyguards.Let(body))
             {
                 Spawned.Take(body);
             }
