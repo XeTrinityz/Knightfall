@@ -41,7 +41,10 @@ static partial class Disguise
     public static readonly Choice Stance = new(
         "player.character.disguise_stance", "POSE",
         "THEIR OWN keeps the character's stance, like Croc's hunch, but some hold their hands inside the body. LIKE YOURS copies your pose. Each look keeps its own.",
-        new[] { ("own", "THEIR OWN"), (Yours, "LIKE YOURS") }, saved: false);
+        new[] { ("own", "THEIR OWN"), (Yours, "LIKE YOURS") }, saved: false)
+    {
+        Block = static () => Option.On ? null : "DISGUISE IS OFF",
+    };
 
     static string _stanceOf = "";
     static int _stanceWas = -1;
@@ -287,52 +290,54 @@ static partial class Disguise
     }
 
     // Runs right after the worn body is handed the hidden copy's pose for the tick.
-    static void Shape(RAnimNode_AnimCapture pose, SkeletalMeshComponent own)
+    static void Shape(TArray<Atom> atoms, SkeletalMeshComponent own)
     {
-        var saved = pose.SavedAtoms;
-        var mine = own.LocalAtoms;
-        var mineWhole = own.SpaceBases;
-        var turns = Stance.Index == 1 ? _turns : Array.Empty<(int, int, bool, int[])>();
-        foreach (var (worn, theirs, free, chain) in turns)
+        var saved = atoms.AsSpan();
+        if (Stance.Index == 1 && _turns.Length > 0)
         {
-            if (worn >= saved.Count || theirs >= mine.Count)
+            var mine = own.LocalAtoms.AsSpan();
+            var mineWhole = own.SpaceBases.AsSpan();
+            foreach (var (worn, theirs, free, chain) in _turns)
             {
-                continue;
-            }
-
-            var atom = saved[worn];
-            if (!free)
-            {
-                atom.Rotation = mine[theirs].Rotation;
-            }
-            else if (theirs < mineWhole.Count)
-            {
-                // The worn parent's turn against the whole body, built down from the root, then
-                // taken off the player's turn of this bone against the whole body.
-                var above = Quaternion.Identity;
-                foreach (var up in chain)
+                if (worn >= saved.Length || theirs >= mine.Length)
                 {
-                    if (up < saved.Count)
-                    {
-                        above *= Numeric(saved[up].Rotation);
-                    }
+                    continue;
                 }
 
-                atom.Rotation = ToTurn(Quaternion.Normalize(Quaternion.Inverse(above) * Numeric(mineWhole[theirs].Rotation)));
-            }
+                var atom = saved[worn];
+                if (!free)
+                {
+                    atom.Rotation = mine[theirs].Rotation;
+                }
+                else if (theirs < mineWhole.Length)
+                {
+                    // The worn parent's turn against the whole body, built down from the root, then
+                    // taken off the player's turn of this bone against the whole body.
+                    var above = Quaternion.Identity;
+                    foreach (var up in chain)
+                    {
+                        if (up < saved.Length)
+                        {
+                            above *= Numeric(saved[up].Rotation);
+                        }
+                    }
 
-            saved[worn] = atom;
+                    atom.Rotation = ToTurn(Quaternion.Normalize(Quaternion.Inverse(above) * Numeric(mineWhole[theirs].Rotation)));
+                }
+
+                saved[worn] = atom;
+            }
         }
 
         foreach (var (hold, atom) in HoldAt)
         {
-            if (hold < saved.Count)
+            if (hold < saved.Length)
             {
                 saved[hold] = atom;
             }
         }
 
-        if (_hips >= 0 && _hips < saved.Count && _stride != 1f && _wornRest is null)
+        if (_hips >= 0 && _hips < saved.Length && _stride != 1f && _wornRest is null)
         {
             var atom = saved[_hips];
             atom.Translation = _hipsAt + (atom.Translation - _hipsAt) * _stride;
@@ -381,9 +386,11 @@ static partial class Disguise
                 return;
             }
 
+            Hidden.Hide(wearer, own, Ours, _caped);
             pose.Capture(frame);
-            Shape(pose, own);
-            Repose?.Invoke(body, pose.SavedAtoms);
+            var atoms = pose.SavedAtoms;
+            Shape(atoms, own);
+            Repose?.Invoke(body, atoms);
             body.ForceSkelUpdate();
 
             // The clothes and props copy the body's pose, so they go after it.
@@ -402,6 +409,8 @@ static partial class Disguise
                     follower.ForceSkelUpdate();
                 }
             }
+
+            _caught = true;
         }
         catch (Exception error)
         {

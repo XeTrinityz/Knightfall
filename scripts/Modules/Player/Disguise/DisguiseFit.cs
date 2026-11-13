@@ -123,7 +123,7 @@ static class DisguiseFit
 
     static readonly Dictionary<nint, Moved> Fits = new();
     static readonly HashSet<nint> Seen = new();
-    static nint _fitOn;
+    static SkeletalMeshComponent? _fitMesh;
 
     public static void Tick()
     {
@@ -134,11 +134,11 @@ static class DisguiseFit
             return;
         }
 
-        // A new body. The old one took its gadgets with it.
-        if (_fitOn != own.Ptr)
+        // A new body. The one before gets its gadgets back where the game had them.
+        if (!ReferenceEquals(_fitMesh, own))
         {
-            Fits.Clear();
-            _fitOn = own.Ptr;
+            PutBackGadgets();
+            _fitMesh = own;
         }
 
         Seen.Clear();
@@ -234,7 +234,8 @@ static class DisguiseFit
             return;
         }
 
-        if (World.Player?.Mesh is { IsValid: true } own && own.Ptr == _fitOn)
+        // The body may no longer be the player's, like a partner left behind in a team fight.
+        if (_fitMesh is { IsValid: true, Owner: { IsValid: true, bDeleteMe: false } } own)
         {
             var list = own.Attachments;
             for (var i = 0; i < list.Count; i++)
@@ -258,6 +259,7 @@ static class DisguiseFit
     public static void Release()
     {
         PutBackGadgets();
+        _fitMesh = null;
 
         _weight = 0f;
         _lift = float.NaN;

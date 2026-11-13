@@ -29,6 +29,9 @@ static class FirstPerson
     static SkeletalMeshComponent? _askedMesh;
     static SkeletalMesh? _askedModel;
     static bool _meshHasHead;
+    static SkeletalMeshComponent? _askedWorn;
+    static SkeletalMesh? _askedWornModel;
+    static bool _wornHasHead;
 
     public static readonly Toggle OnFoot = new(
         "camera.view.first_person", "FIRST PERSON",
@@ -66,6 +69,26 @@ static class FirstPerson
         return _meshHasHead;
     }
 
+    // A disguise is worn over the player's own body and can stand taller or shorter, so the view
+    // goes in its head when it has one.
+    static SkeletalMeshComponent Seen(SkeletalMeshComponent mesh)
+    {
+        if (Disguise.WornBody is not { } worn)
+        {
+            return mesh;
+        }
+
+        var model = worn.SkeletalMesh;
+        if (!ReferenceEquals(worn, _askedWorn) || !ReferenceEquals(model, _askedWornModel))
+        {
+            _askedWorn = worn;
+            _askedWornModel = model;
+            _wornHasHead = worn.MatchRefBone(Head) >= 0;
+        }
+
+        return _wornHasHead ? worn : mesh;
+    }
+
     public static void Fit(ref View view, RPlayerController controller, float deltaTime)
     {
         // The free camera replaces the view after this anyway.
@@ -83,7 +106,7 @@ static class FirstPerson
 
         var turn = controller.Rotation;
         var flat = new Rotator(0f, turn.Yaw, 0f).ToDirection();
-        var at = mesh.GetBoneLocation(Head, 0) + flat * (EyeForward + (float)Eye.Value) + new Vector3(0f, 0f, EyeUp);
+        var at = Seen(mesh).GetBoneLocation(Head, 0) + flat * (EyeForward + (float)Eye.Value) + new Vector3(0f, 0f, EyeUp);
         if (!float.IsFinite(at.X) || !float.IsFinite(at.Y) || !float.IsFinite(at.Z))
         {
             return;

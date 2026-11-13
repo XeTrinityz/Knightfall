@@ -21,7 +21,7 @@ static class Layout
                 new Catalog.Section("SUIT", Suits.Suit, Suits.Apply, Suits.Cancel),
                 new Catalog.Section("APPEARANCE", Appearance.NoCape, Appearance.BodySize, Appearance.Damage, Appearance.ApplyDamage),
                 new Catalog.Section("STYLE", MovementStyle.Style),
-                new Catalog.Section("DISGUISE", Disguise.Look, Disguise.Variant, Disguise.Option, Disguise.WearAimed, Disguise.Stance, Disguise.Props, DisguiseFit.Camera, DisguiseFit.Gadgets))
+                new Catalog.Section("DISGUISE", Disguise.Look, Disguise.Variant, Disguise.Option, Disguise.WearAimed, Disguise.Shuffle, Disguise.Stance, Disguise.Props, DisguiseFit.Camera, DisguiseFit.Gadgets))
             .Add("VILLAINS", Villains.Sections)
             .Add("SIDEKICK", Sidekick.Sections)
             .Add("PROGRESS", Progress.Sections);

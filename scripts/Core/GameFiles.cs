@@ -8,6 +8,9 @@ static class GameFiles
 {
     static string[] _folders = Array.Empty<string>();
 
+    // The folders are only listed once, so an answer holds for as long.
+    static readonly Dictionary<string, bool> Installed = new(StringComparer.OrdinalIgnoreCase);
+
     // BmGame, and the mod's own folder.
     public static string Game { get; private set; } = "";
 
@@ -57,19 +60,28 @@ static class GameFiles
         }
 
         _folders = found.ToArray();
+        Installed.Clear();
     }
 
     public static bool HasPackage(string name)
     {
+        if (Installed.TryGetValue(name, out var known))
+        {
+            return known;
+        }
+
+        var found = false;
         foreach (var folder in _folders)
         {
             if (File.Exists(Path.Combine(folder, name + "_SF.upk")) || File.Exists(Path.Combine(folder, name + ".upk")))
             {
-                return true;
+                found = true;
+                break;
             }
         }
 
-        return false;
+        Installed[name] = found;
+        return found;
     }
 
     // How many objects a package adds when it loads, read from the start of its file. 0 when it

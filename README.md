@@ -66,6 +66,7 @@ PLAYER > CHARACTER
 - MOVEMENT STYLE. Stand, walk, run, climb and glide like another character. Your fighting and gadgets stay your own.
 - LOOK, VARIANT and DISGUISE. Wears any character from the game's showcase over your own, wherever you are. Your moves, fighting and gadgets stay the same.
 - WEAR AIMED CHARACTER. Copies the person in the middle of the screen, hat and colours included, and wears them.
+- RANDOM LOOK. Puts on a look picked at random.
 - POSE. Keeps the character's own stance, or moves them at your exact angles. Each look remembers its own.
 - PROPS. Also wears the hats and weapons the character has in the showcase.
 - FIT CAMERA and FIT GADGETS. Moves the camera to the worn character's height and puts your gadgets in their hands.

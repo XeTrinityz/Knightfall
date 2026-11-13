@@ -38,6 +38,13 @@ static partial class Disguise
     // A playable character's suit worn as a look. Its id is this followed by the suit's name.
     const string SuitLook = "suit:";
 
+    const string NoRoom = "NOT ENOUGH ROOM";
+    const string NoLoad = "CAN'T LOAD";
+    const string NoFit = "WON'T FIT";
+
+    // Why the last look didn't go on, for the note.
+    static string _why = NoLoad;
+
     // A model has to have most of these to sit on a person's skeleton.
     static readonly FName[] PersonBones =
     {
@@ -77,15 +84,36 @@ static partial class Disguise
 
     static readonly List<(SkeletalMeshComponent Piece, Part Part)> Worn = new();
     static readonly HashSet<nint> WornAt = new();
+    static readonly Func<nint, bool> Ours = WornAt.Contains;
+
+    // Set when the camera hook hid the player's body and posed the worn one this frame.
+    static bool _caught;
     static readonly HashSet<string> Unfit = new(StringComparer.OrdinalIgnoreCase);
 
     // Props on show, and the worn part each one hangs from.
     static readonly List<(PrimitiveComponent Shown, SkeletalMeshComponent Holder, bool Follows)> Carried = new();
 
     static (string Id, string Label)[] _looks = Array.Empty<(string, string)>();
+
+    // The showcase's characters page is fixed config, so it is only read again when its length
+    // changes.
+    static (string Id, string Key)[] _showcase = Array.Empty<(string, string)>();
+    static int _showcaseCount = -1;
+
     static Model? _model;
     static bool _propsOn;
     static RPawnPlayer? _wearer;
+
+    // The player's mesh and its model when the look went on.
+    static nint _ownAt;
+    static nint _ownModel;
+
+    // How long the LOOK pick has to rest before a worn look is swapped for it, in seconds.
+    const double SwapAfter = 0.35;
+
+    // Set by anything that puts a look on itself, which isn't the player stepping through the list.
+    static bool _swapNow;
+
     static SkeletalMeshComponent? _body;
     static SkeletalMeshComponent? _frame;
     static RAnimNode_AnimCapture? _pose;
@@ -100,7 +128,7 @@ static partial class Disguise
 
     public static readonly Choice Look = new(
         "player.character.disguise_look", "LOOK",
-        "Every character in the game's showcase. Pick one, then turn DISGUISE on. While it is on, picking another swaps straight to it. Playable ones are in PLAY AS.",
+        "Every character in the game's showcase. Pick one, then turn DISGUISE on. While it is on, picking another swaps to it. Playable ones are in PLAY AS.",
         new[] { ("", "OPEN IN GAME") }, saved: false)
     {
         Opening = Refresh,
@@ -109,25 +137,35 @@ static partial class Disguise
     public static readonly Choice Variant = new(
         "player.character.disguise_variant", "VARIANT",
         "Some looks are a group, like the militia or the police. This steps through the different people in it.",
-        new[] { ("0", "1") }, saved: false);
+        new[] { ("0", "1") }, saved: false)
+    {
+        Block = static () => !Option!.On ? "DISGUISE IS OFF" : Variant!.Count < 2 ? "ONLY ONE" : null,
+    };
 
     public static readonly Toggle Option = new(
         "player.character.disguise", "DISGUISE",
         "Wears the picked look. Your moves, fighting and gadgets stay your own. It comes off when you turn it off or start the game again.",
         saved: false)
     {
+        // Never locked while on, so it can always be turned off.
+        Block = static () => Option!.On ? null : Look.CurrentId.Length == 0 ? "NO LOOK PICKED" : Unfit.Contains(Look.CurrentId) ? NoFit : null,
         Tick = Keep,
         Restore = TakeOff,
     };
 
     public static readonly Toggle Props = new(
         "player.character.disguise_props", "PROPS",
-        "Also wears the hats, guns and other things the look has with it in the showcase. They sit where the character's rest pose holds them, so some are a little off.");
+        "Also wears the hats, guns and other things the look has with it. Showcase ones sit where the character's rest pose holds them, so some are a little off.");
 
     public static readonly Command WearAimed = new(
         "player.character.disguise_wear_aimed", "WEAR AIMED CHARACTER",
         "Wears the exact look of the person in the middle of the screen, their hat and colours included. It stays at the top of LOOK until you aim at someone else.",
         WearAimedLook);
+
+    public static readonly Command Shuffle = new(
+        "player.character.disguise_random", "RANDOM LOOK",
+        "Puts on a look picked at random from the list.",
+        WearRandom);
 
     // The worn body, while it is on the character being played.
     public static SkeletalMeshComponent? WornBody =>
@@ -149,6 +187,7 @@ static partial class Disguise
             Look.SetTo(index);
         }
 
+        _swapNow = true;
         Option.SetTo(true);
         return true;
     }
@@ -256,37 +295,51 @@ static partial class Disguise
             return;
         }
 
-        info.ShowcaseValidateSorting();
-        var list = new List<(string Id, string Label)>();
-        foreach (var item in info.ShowcaseItems)
+        var items = info.ShowcaseItems;
+        if (items.Count != _showcaseCount)
         {
-            var key = item.Item.ToString() ?? "";
-            if (key.Length == 0 || !"Characters".Equals(item.Page.ToString(), StringComparison.OrdinalIgnoreCase))
+            var count = items.Count;
+            info.ShowcaseValidateSorting();
+            var found = new List<(string Id, string Key)>();
+            foreach (var item in info.ShowcaseItems)
             {
-                continue;
-            }
-
-            var id = "";
-            foreach (var level in (item.Levels.ToString() ?? "").Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                if (!level.StartsWith(Ambient, StringComparison.OrdinalIgnoreCase) && GameFiles.HasPackage(level))
+                var key = item.Item.ToString() ?? "";
+                if (key.Length == 0 || !"Characters".Equals(item.Page.ToString(), StringComparison.OrdinalIgnoreCase))
                 {
-                    id = level;
+                    continue;
                 }
+
+                var id = "";
+                foreach (var level in (item.Levels.ToString() ?? "").Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (!level.StartsWith(Ambient, StringComparison.OrdinalIgnoreCase) && GameFiles.HasPackage(level))
+                    {
+                        id = level;
+                    }
+                }
+
+                // The mech's level only shows Riddler sat in it. The mech itself isn't shaped like
+                // a person, so the entry would just be Riddler again.
+                if (id.Equals(RiddlerMech, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (id.Length == 0 || found.Exists(entry => entry.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                found.Add((id, key));
             }
 
-            // The mech's level only shows Riddler sat in it. The mech itself isn't shaped like a
-            // person, so the entry would just be Riddler again.
-            if (id.Equals(RiddlerMech, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
+            _showcase = found.ToArray();
+            _showcaseCount = count;
+        }
 
-            if (id.Length == 0 || list.Exists(entry => entry.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
-            {
-                continue;
-            }
-
+        var list = new List<(string Id, string Label)>();
+        foreach (var (id, key) in _showcase)
+        {
             // A look that was tried and isn't shaped like a person stays in the list, marked, so
             // it is clear why it didn't go on.
             var label = Showcase.Label(key, key);
@@ -318,15 +371,31 @@ static partial class Disguise
 
     static void Keep()
     {
-        if (World.Player is not { } player || player.Mesh is not { IsValid: true } own)
+        if (World.Player is not { } player || player.Mesh is not { IsValid: true, SkeletalMesh: { IsValid: true } model } own)
         {
             return;
         }
 
-        // A new body, from a switch or a reload. The old one took its parts with it.
         if (_wearer is not null && (!_wearer.IsValid || _wearer.Ptr != player.Ptr))
         {
+            // A body the player left that is still in the world, like a partner in a team fight or a
+            // swapped sidekick, gets its own look back. One that was destroyed took its parts with it.
+            if (_wearer is { IsValid: true, bDeleteMe: false, bPendingDelete: false })
+            {
+                Strip();
+                Uncover();
+            }
+
             Drop();
+        }
+
+        // A suit change gives the player's mesh a new model. The parts that follow it keep the bone
+        // map they worked out for the old one, so the look is put on again from scratch.
+        if (_wearer is not null && (own.Ptr != _ownAt || model.Ptr != _ownModel))
+        {
+            Strip();
+            _wornLook = "";
+            _swapNow = true;
         }
 
         var look = Look.CurrentId;
@@ -334,6 +403,17 @@ static partial class Disguise
         {
             return;
         }
+
+        // Stepping through LOOK passes many looks, and each one is a package to load. The look that
+        // is on stays until the pick has rested.
+        if (_wearer is not null && !_swapNow && !look.Equals(_wornLook, StringComparison.OrdinalIgnoreCase)
+            && System.Diagnostics.Stopwatch.GetElapsedTime(Look.TouchedAt).TotalSeconds < SwapAfter)
+        {
+            Maintain(player, own);
+            return;
+        }
+
+        _swapNow = false;
 
         // A new look starts on its first person.
         if (!look.Equals(_variantsOf, StringComparison.OrdinalIgnoreCase))
@@ -372,12 +452,14 @@ static partial class Disguise
         if (!Wear(player, own, look, variant))
         {
             _failed = wanted;
+            Toasts.Show(Option.Plain, _why, OutcomeKind.Failed, Option, always: true);
             Option.Reset();
         }
     }
 
     static bool Wear(RPawnPlayer player, SkeletalMeshComponent own, string look, int variant)
     {
+        _why = NoLoad;
         var model = Character(look, variant);
         if (model is null || model.Parts.Count == 0)
         {
@@ -397,6 +479,13 @@ static partial class Disguise
             Variant.SetOptions(steps, variant);
         }
 
+        // The aimed look's meshes belong to the world they were copied in.
+        if (!model.Parts[0].Mesh.IsValid)
+        {
+            Log.Info($"The look {look} is no longer in memory.");
+            return false;
+        }
+
         Strip();
 
         // A look that has a cape of its own keeps the player's cape on show.
@@ -408,6 +497,11 @@ static partial class Disguise
 
         foreach (var part in model.Parts)
         {
+            if (!part.Mesh.IsValid)
+            {
+                continue;
+            }
+
             var piece = Made.Tracked(new SkeletalMeshComponent(player));
             piece.SetActorCollision(false, false);
             piece.SetSkeletalMesh(part.Mesh, false);
@@ -418,6 +512,7 @@ static partial class Disguise
             if (Worn.Count == 0 && !Person(piece))
             {
                 Log.Info($"The look {look} isn't shaped like a person, so it can't be worn.");
+                _why = NoFit;
                 Unfit.Add(look);
                 Catalog.MenuOpening();
                 return false;
@@ -530,6 +625,8 @@ static partial class Disguise
         }
 
         _wearer = player;
+        _ownAt = own.Ptr;
+        _ownModel = own.SkeletalMesh?.Ptr ?? 0;
         _wornLook = look;
         _wornVariant = variant;
         _failed = "";
@@ -552,9 +649,24 @@ static partial class Disguise
             return Suit(package[SuitLook.Length..]);
         }
 
+        // A villain puts its look on without asking the row's lock, so one known not to fit is
+        // turned down here before its package is loaded again.
+        if (Unfit.Contains(package))
+        {
+            _why = NoFit;
+            return null;
+        }
+
         var people = Find(package);
         if (people.Count == 0)
         {
+            if (!Packages.HasRoom(package))
+            {
+                _why = NoRoom;
+                Log.Info($"No room to load the look {package}.");
+                return null;
+            }
+
             if (!Packages.TryLoad(package, $"the look {package}", "disguise.load"))
             {
                 return null;
@@ -571,6 +683,10 @@ static partial class Disguise
 
         if (people.Count == 0)
         {
+            _why = NoFit;
+            Unfit.Add(package);
+            Catalog.MenuOpening();
+            Log.Info($"The look {package} has nobody shaped like a person in it.");
             return null;
         }
 
@@ -795,6 +911,46 @@ static partial class Disguise
         return sources;
     }
 
+    // What a person in the world has on that isn't part of the body, like a hat. Each one hangs
+    // from a bone of the body. A gun belongs to the weapon and not to them, so it is left.
+    static List<Prop> PawnProps(Pawn pawn, SkeletalMeshComponent body)
+    {
+        var props = new List<Prop>();
+        var attached = body.Attachments;
+        for (var i = 0; i < attached.Count; i++)
+        {
+            var entry = attached[i];
+            if (entry.Component is not MeshComponent { IsValid: true, HiddenGame: false } shown || shown.Outer is not { } owner || owner.Ptr != pawn.Ptr
+                || entry.BoneName.Index == 0 || shown is SkeletalMeshComponent { ParentAnimComponent: { IsValid: true } })
+            {
+                continue;
+            }
+
+            var solid = shown is StaticMeshComponent { StaticMesh: { IsValid: true } solidMesh } ? solidMesh : null;
+            var skinned = shown is SkeletalMeshComponent { SkeletalMesh: { IsValid: true } skinnedMesh } ? skinnedMesh : null;
+            if (solid is null && skinned is null)
+            {
+                continue;
+            }
+
+            var painted = shown.Materials;
+            var materials = new MaterialInterface?[painted.Count];
+            for (var m = 0; m < materials.Length; m++)
+            {
+                materials[m] = painted[m];
+            }
+
+            var size = entry.RelativeScale == Vector3.Zero ? Vector3.One : entry.RelativeScale;
+            props.Add(new Prop(
+                skinned?.Name.ToString() ?? solid?.Name.ToString() ?? "?",
+                solid, skinned, materials, 0, null,
+                entry.BoneName, entry.RelativeLocation, entry.RelativeRotation, size,
+                (shown.Translation, shown.Rotation, shown.Scale3D * shown.Scale)));
+        }
+
+        return props;
+    }
+
     // Copies the aimed person's parts as they are, so a random hat or colour comes too. What they
     // use is kept loaded, since the person can walk off and be cleaned up while it's worn.
     static Outcome WearAimedLook()
@@ -826,6 +982,7 @@ static partial class Disguise
             }
         }
 
+        var props = PawnProps(person, sources[body]);
         Borrowed.Let(AimedLender);
         foreach (var part in parts)
         {
@@ -837,14 +994,25 @@ static partial class Disguise
             }
         }
 
+        foreach (var prop in props)
+        {
+            KeepAsset(prop.Solid);
+            KeepAsset(prop.Skinned);
+            foreach (var material in prop.Materials)
+            {
+                KeepAsset(material);
+            }
+        }
+
         var name = Things.NameOf(person);
-        _aimed = new Model(parts, new List<Prop>(), false, 1);
+        _aimed = new Model(parts, props, false, 1);
         _aimedLabel = "AIMED: " + name;
         _looks = _looks.Where(entry => entry.Id != AimedLook).Prepend((AimedLook, _aimedLabel)).ToArray();
         Look.SetOptions(_looks, 0);
 
         // Worn again from scratch, even when the last aimed look is on.
         _wornLook = "";
+        _swapNow = true;
         _failed = "";
         if (!Option.On)
         {
@@ -854,18 +1022,57 @@ static partial class Disguise
         return Outcome.Done(name);
     }
 
+    // The aimed look and the suits villains add are left out, as they aren't what the list is for.
+    static Outcome WearRandom()
+    {
+        if (World.Player is null)
+        {
+            return Outcome.NoPlayer;
+        }
+
+        Refresh();
+        var picked = Look.CurrentId;
+        var open = new List<int>();
+        for (var i = 0; i < _looks.Length; i++)
+        {
+            var id = _looks[i].Id;
+            if (id.Length > 0 && !id.Equals(picked, StringComparison.OrdinalIgnoreCase) && !Unfit.Contains(id)
+                && !id.Equals(AimedLook, StringComparison.Ordinal) && !id.StartsWith(SuitLook, StringComparison.Ordinal))
+            {
+                open.Add(i);
+            }
+        }
+
+        if (open.Count == 0)
+        {
+            return Outcome.Failed("NO LOOKS YET");
+        }
+
+        var index = open[System.Random.Shared.Next(open.Count)];
+        Look.SetTo(index);
+        _swapNow = true;
+        if (!Option.On)
+        {
+            Option.SetTo(true);
+        }
+
+        return Outcome.Done(_looks[index].Label);
+    }
+
     // A suit is the game's own data for a playable character's look: the body, the meshes worn
     // with it and the body's physics. Each part keeps its mesh's own colours and follows the body
     // as the game's pawn has its extra meshes do.
     static Model? Suit(string suit)
     {
         RAddContentPlayerCharacterMesh data;
+        var room = ObjectTable.Headroom >= Packages.Cost<RAddContentPlayerCharacterMesh>(suit) + Packages.Spare;
         try
         {
             data = Packages.Main<RAddContentPlayerCharacterMesh>(suit);
         }
         catch (Exception error)
         {
+            _why = room ? NoLoad : NoRoom;
             Log.Info($"The suit {suit} could not be loaded: {error.Message}");
             return null;
         }
@@ -981,8 +1188,6 @@ static partial class Disguise
 
     static void Maintain(RPawnPlayer player, SkeletalMeshComponent own)
     {
-        Hidden.Hide(player, own, WornAt.Contains, _caped);
-
         // The hidden copy's pose goes to the body on show, which is placed where the player's
         // mesh is.
         if (_frame is { IsValid: true } frame && (frame.ParentAnimComponent is not { IsValid: true } followed || followed.Ptr != own.Ptr))
@@ -990,20 +1195,43 @@ static partial class Disguise
             frame.SetParentAnimComponent(own);
         }
 
-        if (_frame is { IsValid: true } && _pose is { IsValid: true } pose && _body is { IsValid: true } body)
+        var posed = _frame is { IsValid: true } && _pose is { IsValid: true } && _body is { IsValid: true };
+        if (posed)
         {
             ReadRest(player, own);
-            pose.Capture(_frame);
-            Shape(pose, own);
-            Repose?.Invoke(body, pose.SavedAtoms);
-            Place(body, own);
         }
 
+        // The camera hook hides the player's body and poses the worn one after every mesh has moved.
+        // This does both for a frame the hook didn't run in.
+        if (!_caught)
+        {
+            Hidden.Hide(player, own, Ours, _caped);
+            if (posed)
+            {
+                _pose!.Capture(_frame!);
+                var atoms = _pose.SavedAtoms;
+                Shape(atoms, own);
+                Repose?.Invoke(_body!, atoms);
+            }
+        }
+
+        _caught = false;
+        if (posed)
+        {
+            Place(_body!, own);
+        }
+
+        var unseen = Unseen();
         foreach (var (piece, _) in Worn)
         {
             if (!piece.IsValid)
             {
                 continue;
+            }
+
+            if (piece.HiddenGame != unseen)
+            {
+                piece.SetHidden(unseen);
             }
 
             if (piece.bOwnerNoSee != own.bOwnerNoSee)
@@ -1036,6 +1264,11 @@ static partial class Disguise
                 continue;
             }
 
+            if (shown.HiddenGame != unseen)
+            {
+                shown.SetHidden(unseen);
+            }
+
             if (shown.bOwnerNoSee != own.bOwnerNoSee)
             {
                 shown.SetOwnerNoSee(own.bOwnerNoSee);
@@ -1056,6 +1289,30 @@ static partial class Disguise
                 Place(follower, own);
             }
         }
+    }
+
+    const string FirstPersonState = "FirstPerson";
+    static int _cameraState = -1;
+    static bool _unseen;
+
+    // In its own first person views, like a wrist dart shot, the game hides the player's mesh in
+    // ways that don't reach the worn parts. The camera has a state for each of those views, and
+    // the name only changes with the state.
+    static bool Unseen()
+    {
+        if (World.Controller?.PlayerCamera is not R3rdPersonCamera { IsValid: true } camera)
+        {
+            return false;
+        }
+
+        var state = camera.GetStateName();
+        if (state.Index != _cameraState)
+        {
+            _cameraState = state.Index;
+            _unseen = (state.ToString() ?? "").StartsWith(FirstPersonState, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return _unseen;
     }
 
     // Gives a part the place of the player's mesh, which sits lower than the pawn.
@@ -1138,12 +1395,19 @@ static partial class Disguise
         _body = null;
         _frame = null;
         _pose = null;
+        _caught = false;
+        Stilled.Clear();
+        _cameraState = -1;
+        _unseen = false;
     }
 
     static void Drop()
     {
         Forget();
         _wearer = null;
+        _ownAt = 0;
+        _ownModel = 0;
+        _swapNow = false;
         _wornLook = "";
         _wornVariant = -1;
         _failed = "";
