@@ -47,6 +47,7 @@ static class CameraView
     static bool _aiming;
     static int _stateIndex = -1;
     static bool _stateAims;
+    static bool _stateHides;
     static float _bars;
     static long _barsAt;
     static float _lastShape = 2.39f;
@@ -66,7 +67,7 @@ static class CameraView
 
     public static readonly Slider Tilt = new(
         "camera.view.tilt", "CAMERA TILT",
-        "Leans the view to the right, or to the left below zero, on foot and in the Batmobile.",
+        "Leans the view to the right, or to the left below zero, on foot, in the Batmobile and in the free camera.",
         min: -30, max: 30, step: 2.5, value: 0, unit: " DEG", zero: "LEVEL");
 
     // How wide the picture is between the bars, in the same order as the choices.
@@ -153,12 +154,14 @@ static class CameraView
         "Raises or lowers the camera behind the Batmobile.",
         min: -1, max: 3, step: 0.1, value: 0, unit: " M", zero: "GAME");
 
+    static readonly Feature[] Rows = { FieldOfView, AimZoom, Tilt, Bars, Steady, NoShake, FirstPerson.OnFoot, FirstPerson.Eye, Distance, Height, Shoulder, LeftShoulder, GlideDistance, GlideFieldOfView, CarFieldOfView, CarDistance, CarHeight };
+
     public static readonly Command ResetAll = new(
         "camera.view.reset", "RESET CAMERA",
         "Puts every row on this tab back to the game's camera. FREE CAMERA is left alone.",
-        ResetView);
+        static () => Weather.Back(Rows));
 
-    // Each preset sets these rows. Rows it doesn't name go back to the game's.
+    // Each preset sets these rows, and the rest of Shaped go back to the game's.
     sealed record Preset(string Id, string Label, params (Feature Row, double Value)[] Values);
 
     // After every row it names, so they all exist when it's made.
@@ -176,18 +179,26 @@ static class CameraView
         "camera.view.preset", "PRESET",
         "A set of camera rows to start from. APPLY PRESET puts them on.",
         Presets.Select(preset => (preset.Id, preset.Label)).ToArray(),
-        saved: false);
+        saved: false)
+    {
+        Pressed = static () => ApplyPreset!.Press(),
+        PressName = "APPLY",
+    };
 
     public static readonly Command ApplyPreset = new(
         "camera.view.apply_preset", "APPLY PRESET",
         "Sets the camera rows to the picked PRESET. Change any of them after. RESET CAMERA puts them all back.",
         Apply);
 
-    static readonly Feature[] Rows = { FieldOfView, AimZoom, Tilt, Bars, Steady, NoShake, FirstPerson.OnFoot, FirstPerson.Eye, Distance, Height, Shoulder, LeftShoulder, GlideDistance, GlideFieldOfView, CarFieldOfView, CarDistance, CarHeight };
+    // What a preset shapes. NO CAMERA SHAKE, FIRST PERSON, FIRST PERSON EYE and LEFT SHOULDER are
+    // a matter of taste, so a preset leaves them as they are.
+    static readonly Feature[] Shaped = { FieldOfView, AimZoom, Tilt, Bars, Steady, Distance, Height, Shoulder, GlideDistance, GlideFieldOfView, CarFieldOfView, CarDistance, CarHeight };
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("VIEW", FieldOfView, AimZoom, Tilt, Bars, Steady, NoShake, FirstPerson.OnFoot, FirstPerson.Eye, PresetPick, ApplyPreset, ResetAll),
+        new("PRESET", PresetPick, ApplyPreset, ResetAll),
+        new("VIEW", FieldOfView, AimZoom, Tilt, Steady, NoShake, Bars),
+        new("FIRST PERSON", FirstPerson.OnFoot, FirstPerson.Eye),
         new("ON FOOT", Distance, Height, Shoulder, LeftShoulder),
         new("GLIDING", GlideDistance, GlideFieldOfView),
         new("BATMOBILE", CarFieldOfView, CarDistance, CarHeight),
@@ -224,7 +235,6 @@ static class CameraView
         _bobStoppedOn = 0;
     }
 
-    // FIRST PERSON and LEFT SHOULDER are left as they are, since no preset is about them.
     static Outcome Apply()
     {
         var preset = Array.Find(Presets, entry => entry.Id == PresetPick.CurrentId);
@@ -233,7 +243,7 @@ static class CameraView
             return Outcome.Failed("NO PRESET");
         }
 
-        foreach (var row in Presets.SelectMany(entry => entry.Values).Select(value => value.Row).Distinct())
+        foreach (var row in Shaped)
         {
             row.Reset();
         }
@@ -257,21 +267,6 @@ static class CameraView
         return Outcome.Done(preset.Label);
     }
 
-    static Outcome ResetView()
-    {
-        var count = 0;
-        foreach (var row in Rows)
-        {
-            if (!row.IsDefault)
-            {
-                row.Reset();
-                count++;
-            }
-        }
-
-        return count == 0 ? Outcome.Unchanged("ALREADY THE GAME'S") : Outcome.Done(count == 1 ? "1 ROW RESET" : $"{count} ROWS RESET");
-    }
-
     // Each shake the game adds is dropped before the camera can play it.
     public static void Before(R3rdPersonCamera camera)
     {
@@ -284,7 +279,8 @@ static class CameraView
     }
 
     // The game's camera has its own state for each gadget's aim and for zooming in. The name
-    // only changes with the state, so it's read once per change.
+    // only changes with the state, so it's read once per change. Aiming from a crouch or cover
+    // reuses the plain crouch and cover states, so there the aim button tells.
     static bool Aims(R3rdPersonCamera camera)
     {
         var state = camera.GetStateName();
@@ -294,12 +290,14 @@ static class CameraView
             var name = state.ToString() ?? "";
             _stateAims = name.Contains("Aim", StringComparison.OrdinalIgnoreCase) || name.Contains("Zoom", StringComparison.OrdinalIgnoreCase)
                 || name.Contains("Sniper", StringComparison.OrdinalIgnoreCase) || name.Equals("Batarang", StringComparison.OrdinalIgnoreCase);
+            _stateHides = name.Contains("Stealth", StringComparison.OrdinalIgnoreCase) || name.Contains("Cover", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("HideCam", StringComparison.OrdinalIgnoreCase);
         }
 
-        return _stateAims || camera.bZoomed;
+        return _stateAims || camera.bZoomed || (_stateHides && World.Controller is { bAimGadgetPressed: true });
     }
 
-    public static void Fit(ref View view, RPlayerController controller, float deltaTime)
+    public static void Fit(ref View view, RPlayerController controller, float deltaTime, bool replaced)
     {
         var pawn = Teleport.Mover;
         var car = pawn is RVehicleBatmobileBase;
@@ -343,10 +341,24 @@ static class CameraView
             return;
         }
 
-        view.FOV = Math.Clamp((view.FOV + widen * _weight) * (1f + (zoom - 1f) * _weight), Narrowest, Widest);
+        // A game zoom already outside the range is never pulled into it.
+        if (widen != 0f || zoom != 1f)
+        {
+            var game = view.FOV;
+            var wanted = (game + widen * _weight) * (1f + (zoom - 1f) * _weight);
+            view.FOV = Math.Clamp(wanted, MathF.Min(Narrowest, game), MathF.Max(Widest, game));
+        }
+
         if (lean != 0f)
         {
             view.Rotation = new Rotator(view.Rotation.Pitch, view.Rotation.Yaw, view.Rotation.Roll + lean * _weight);
+        }
+
+        // FIRST PERSON or the free camera puts the view somewhere else after this.
+        if (replaced)
+        {
+            _gameSideKnown = false;
+            return;
         }
 
         // Pulled in or out along the line the camera looks down, so what's in the middle of the

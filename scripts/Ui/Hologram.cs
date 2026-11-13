@@ -55,7 +55,7 @@ static unsafe class Hologram
         _canvas = canvas;
         _eye = eye;
 
-        // The camera's own axes, ignoring roll, which the game's cameras don't use.
+        // The camera's own axes, roll included, since CAMERA TILT and the free camera lean it.
         _forward = turn.ToDirection();
         var yaw = new Rotator(0f, turn.Yaw, 0f).ToDirection();
         _right = new Vector3(-yaw.Y, yaw.X, 0f);
@@ -63,6 +63,16 @@ static unsafe class Hologram
         if (Vector3.Dot(_up, Vector3.UnitZ) < 0f)
         {
             _up = -_up;
+        }
+
+        // The engine's rotation matrix turns right down and up toward right for a positive roll.
+        var roll = turn.Roll * MathF.PI / 180f;
+        if (roll != 0f)
+        {
+            var (sin, cos) = MathF.SinCos(roll);
+            var right = _right * cos - _up * sin;
+            _up = _up * cos + _right * sin;
+            _right = right;
         }
 
         var half = Math.Clamp(fieldOfView, 10f, 170f) * MathF.PI / 360f;

@@ -26,6 +26,9 @@ static class FirstPerson
     static readonly List<(SkeletalMeshComponent Mesh, int Bone)> Hidden = new();
     static Vector3 _eye;
     static bool _following;
+    static SkeletalMeshComponent? _askedMesh;
+    static SkeletalMesh? _askedModel;
+    static bool _meshHasHead;
 
     public static readonly Toggle OnFoot = new(
         "camera.view.first_person", "FIRST PERSON",
@@ -45,15 +48,34 @@ static class FirstPerson
 
     static bool Allowed(RPlayerController controller) => !controller.bCinematicMode && !Switcher.InScene(controller);
 
+    // True when the view will be put in the eyes, so the work on the place before it can be skipped.
+    public static bool Replaces => OnFoot.On && World.Driving is null && World.Player?.Mesh is { IsValid: true } mesh && HasHead(mesh);
+
+    // A mesh only has to be asked for its head bone once. A suit change can swap the model on
+    // the same mesh, so the model counts too.
+    static bool HasHead(SkeletalMeshComponent mesh)
+    {
+        var model = mesh.SkeletalMesh;
+        if (!ReferenceEquals(mesh, _askedMesh) || !ReferenceEquals(model, _askedModel))
+        {
+            _askedMesh = mesh;
+            _askedModel = model;
+            _meshHasHead = mesh.MatchRefBone(Head) >= 0;
+        }
+
+        return _meshHasHead;
+    }
+
     public static void Fit(ref View view, RPlayerController controller, float deltaTime)
     {
-        if (!Allowed(controller))
+        // The free camera replaces the view after this anyway.
+        if (!OnFoot.On || World.Driving is not null || FreeCamera.HasView || !Allowed(controller))
         {
             _following = false;
             return;
         }
 
-        if (World.Driving is not null || !OnFoot.On || World.Player?.Mesh is not { IsValid: true } mesh || mesh.MatchRefBone(Head) < 0)
+        if (World.Player?.Mesh is not { IsValid: true } mesh || !HasHead(mesh))
         {
             _following = false;
             return;
@@ -116,8 +138,13 @@ static class FirstPerson
             return;
         }
 
+        if (Hidden.Exists(entry => ReferenceEquals(entry.Mesh, mesh)))
+        {
+            return;
+        }
+
         var bone = mesh.MatchRefBone(Head);
-        if (bone < 0 || Hidden.Exists(entry => ReferenceEquals(entry.Mesh, mesh)))
+        if (bone < 0)
         {
             return;
         }

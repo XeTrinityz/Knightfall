@@ -160,9 +160,10 @@ CAMERA > VIEW
 
 CAMERA > FREE CAMERA
 
-- FREE CAMERA with FLY, STAY and WATCH modes, and FLY SPEED. Flying uses your own move and look controls, bindings and sensitivity.
+- FREE CAMERA with FLY, STAY, WATCH and FOLLOW modes, and FLY SPEED. Flying uses your own move and look controls, bindings and sensitivity. FOLLOW keeps the camera beside you as you walk, glide or drive.
 - LOOK SPEED, and SMOOTHING for slow, smooth shots.
-- HIDE HUD, for screenshots.
+- FREE CAMERA ZOOM and FREE CAMERA ROLL. While flying the arrow keys or the D-pad zoom and lean the shot, and Home puts it back.
+- HIDE HUD, for screenshots. FREEZE WORLD is here as well, and both work while the world is frozen.
 
 WORLD > CITY
 

@@ -70,7 +70,7 @@ static class CameraHook
         var game = cache.POV;
         var view = game;
         DisguiseFit.Fit(ref view, controller, deltaTime);
-        CameraView.Fit(ref view, controller, deltaTime);
+        CameraView.Fit(ref view, controller, deltaTime, FreeCamera.HasView || FirstPerson.Replaces);
         Villains.Fit(ref view, deltaTime);
         FirstPerson.Fit(ref view, controller, deltaTime);
         FreeCamera.Fit(ref view, controller);
