@@ -9,8 +9,8 @@ namespace Knightfall;
 
 // SETTINGS > GAME, BUILDING DETAIL. Far off, the city swaps whole buildings for rough stand-ins,
 // each at its own distance. Scaling those distances keeps the real buildings further out, where
-// their district is loaded. Districts stream in as you move, so the city is looked over again now
-// and then.
+// their district is loaded. Districts stream in as you move, so the city is looked over again
+// when the levels on show change, and now and then besides.
 static class Buildings
 {
     const double Settle = 0.4;
@@ -18,6 +18,12 @@ static class Buildings
 
     // Keeps rescans to about half a percent of the time.
     const double RescanShare = 200.0;
+
+    // How long the city can go without a look while no level comes or goes.
+    const double MostRescan = 60.0;
+
+    // How often the levels on show are counted while waiting.
+    const double LevelsLook = 1.0;
 
     sealed class Part
     {
@@ -29,13 +35,17 @@ static class Buildings
     static readonly Dictionary<nint, Part> Parts = new();
     static double _scaleSet = -1;
     static long _nextScan;
+    static long _lastScan;
+    static long _levels;
+    static bool _again;
     static RGameInfo? _world;
 
     public static readonly Slider Detail = new(
         "settings.game.building_detail", "BUILDING DETAIL",
-        "Keeps full detail buildings further out instead of the rough stand-ins, where the district is loaded. Costs frame rate, and stutters briefly when changed.",
+        "Keeps full detail buildings further out instead of the rough stand-ins, where the district is loaded. Costs frame rate, and stutters briefly when changed and as new districts load in.",
         min: 0, max: 8, step: 0.5, value: 0, unit: "X", zero: "GAME")
     {
+        Preference = true,
         Tick = Hold,
         Restore = Release,
     };
@@ -51,11 +61,37 @@ static class Buildings
         }
 
         var now = Stopwatch.GetTimestamp();
-        var settled = (now - Detail.TouchedAt) / (double)Stopwatch.Frequency >= Settle;
-        if ((_scaleSet != Detail.Value && settled) || (_scaleSet == Detail.Value && now >= _nextScan))
+        if (_scaleSet != Detail.Value)
         {
+            if ((now - Detail.TouchedAt) / (double)Stopwatch.Frequency >= Settle)
+            {
+                Scan((float)Detail.Value);
+                _scaleSet = Detail.Value;
+                _levels = Levels();
+                _again = false;
+            }
+
+            return;
+        }
+
+        if (now < _nextScan)
+        {
+            return;
+        }
+
+        // New buildings only come with a level. One that has just come on show may still be
+        // putting its parts in, so the city gets one more look after each change.
+        var levels = Levels();
+        var changed = levels != _levels;
+        if (changed || _again || (now - _lastScan) / (double)Stopwatch.Frequency >= MostRescan)
+        {
+            _levels = levels;
+            _again = changed;
             Scan((float)Detail.Value);
-            _scaleSet = Detail.Value;
+        }
+        else
+        {
+            _nextScan = now + (long)(LevelsLook * Stopwatch.Frequency);
         }
     }
 
@@ -64,10 +100,32 @@ static class Buildings
         Scan(0f);
         Parts.Clear();
         _scaleSet = -1;
+        _again = false;
+    }
+
+    // A number that changes when a streamed level comes on show or goes.
+    static long Levels()
+    {
+        if (!Game.TryGetWorldInfo(out var world) || !world.IsValid)
+        {
+            return 0;
+        }
+
+        long mark = 0;
+        foreach (var level in world.StreamingLevels)
+        {
+            if (level is { IsValid: true, bIsVisible: true })
+            {
+                mark += level.Ptr;
+            }
+        }
+
+        return mark;
     }
 
     // A known part with a distance we didn't set is new, or the game changed it, so that becomes
-    // its own distance to scale from.
+    // its own distance to scale from. BmSDK keeps one wrapper per live object, so another
+    // wrapper at a known address is a new part in the place of one that is gone.
     static void Scan(float scale)
     {
         var watch = Stopwatch.StartNew();
@@ -90,7 +148,7 @@ static class Buildings
                 continue;
             }
 
-            if (!Parts.TryGetValue(part.Ptr, out var known) || MathF.Abs(distance - known.Current) > 0.5f)
+            if (!Parts.TryGetValue(part.Ptr, out var known) || !ReferenceEquals(known.Component, part) || MathF.Abs(distance - known.Current) > 0.5f)
             {
                 known = new Part { Component = part, Original = distance, Current = distance };
                 Parts[part.Ptr] = known;
@@ -110,6 +168,7 @@ static class Buildings
             }
         }
 
-        _nextScan = Stopwatch.GetTimestamp() + (long)(Math.Max(LeastRescan, watch.Elapsed.TotalSeconds * RescanShare) * Stopwatch.Frequency);
+        _lastScan = Stopwatch.GetTimestamp();
+        _nextScan = _lastScan + (long)(Math.Max(LeastRescan, watch.Elapsed.TotalSeconds * RescanShare) * Stopwatch.Frequency);
     }
 }

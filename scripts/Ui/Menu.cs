@@ -67,13 +67,14 @@ static class Menu
         View.Now = now;
         View.Time = (float)(now / (double)Stopwatch.Frequency % LoopSeconds);
 
-        if (!World.Paused)
+        // While a row waits for its key, the menu's own keys belong to that row.
+        if (!World.Paused && Hotkeys.Listening is null)
         {
             if (Controls.Pressed(Act.Open))
             {
                 Want(!_wanted);
             }
-            else if (_wanted && Controls.Pressed(Act.Back) && Hotkeys.Listening is null)
+            else if (_wanted && Controls.Pressed(Act.Back))
             {
                 Want(false);
             }
@@ -89,6 +90,12 @@ static class Menu
             {
                 View.Glide = View.RowIndex;
                 Arrive();
+            }
+            else
+            {
+                // A row can only wait for a key while the menu is there to hear it. Left
+                // waiting, it would keep every hotkey and the radial switched off.
+                Hotkeys.StopListening();
             }
         }
 
@@ -306,6 +313,9 @@ static class Menu
 
     public static void Close() => Want(false);
 
+    // Whether this row is on the tab that is on screen.
+    public static bool Shows(Feature row) => Showing && View.Page.Tabs.Count > 0 && View.Rows.Contains(row);
+
     // For a live tab whose rows changed while it may be on screen. It only acts when the tab
     // showing is the one with this row on it. The selection follows its row to where that is now.
     public static void Reshow(Feature anchor)
@@ -393,12 +403,14 @@ static class Menu
 
         if (listening)
         {
-            View.Hints = new[]
+            var lines = new List<GuideLine>(3) { new(new[] { pad ? "BUTTONS" : "ANY KEY" }, "BIND IT") };
+            if (Hotkeys.Clearable)
             {
-                new GuideLine(new[] { pad ? "BUTTONS" : "ANY KEY" }, "BIND IT"),
-                new GuideLine(new[] { pad ? Controls.PadLabel(Act.Bind) : Controls.KeyLabel(Act.Bind) }, "CLEAR IT"),
-                new GuideLine(new[] { pad ? Controls.PadLabel(Act.Back) : Controls.KeyLabel(Act.Back) }, "CANCEL"),
-            };
+                lines.Add(new GuideLine(new[] { pad ? Controls.PadLabel(Act.Bind) : Controls.KeyLabel(Act.Bind) }, "CLEAR IT"));
+            }
+
+            lines.Add(new GuideLine(new[] { pad ? Controls.PadLabel(Act.Back) : Controls.KeyLabel(Act.Back) }, "CANCEL"));
+            View.Hints = lines;
             return;
         }
 

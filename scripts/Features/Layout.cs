@@ -114,13 +114,13 @@ static class Layout
 
         Catalog.Background("sounds.game_sounds", GameSounds.Tick, GameSounds.Release);
 
-        // Before SETTINGS, whose HOTKEYS tab lists every option that has a key.
+        // Before SETTINGS, whose CONTROLS tab lists every option that has a key.
         DefaultKeys();
 
         Catalog.AddPage("SETTINGS")
+            .Add("GENERAL", General.Sections)
             .Add("LOOK", Look.Rows)
-            .Add("GENERAL", General.Rows)
-            .Add("HOTKEYS", GameTweaks.HotkeySections)
+            .Add("CONTROLS", KeySetup.Sections)
             .Add("RADIAL", Radial.Sections)
             .Add("GAME", GameTweaks.Sections)
             .Add("SAVES", Saves.Sections);

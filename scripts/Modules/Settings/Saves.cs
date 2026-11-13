@@ -12,7 +12,6 @@ namespace Knightfall;
 // to SetupActiveSave and the game restarts from its active save, as the pause menu's restart does.
 static class Saves
 {
-    const double ConfirmSeconds = 4;
     const double KeepSeconds = 15;
     const double RescanSeconds = 3;
     const int PlaceLetters = 20;
@@ -31,8 +30,8 @@ static class Saves
     static long _keepBy;
     static Outcome _kept;
     static int _lastSlot = -1;
-    static string _armedFor = "";
-    static long _armedAt;
+    static bool _stale = true;
+    static bool _shown;
     static (SaveFile File, Command Row, bool Delete)? _asked;
     static (string Path, Outcome Outcome)? _flash;
 
@@ -57,7 +56,6 @@ static class Saves
         new[] { ("slot", "THIS SLOT"), ("all", "ALL SLOTS") })
     {
         Preference = true,
-        Opening = static () => _scanDue = true,
         Changed = static () => _buildDue = true,
     };
 
@@ -95,8 +93,19 @@ static class Saves
         if (_scanAt != 0 && now > _scanAt)
         {
             _scanAt = 0;
+            _stale = true;
+        }
+
+        // The folders are only read while the list is on screen. It is out of date each time
+        // the tab comes up, and after the game writes a save.
+        var shown = Menu.Shows(Show);
+        if (shown && (_stale || !_shown))
+        {
+            _stale = false;
             _scanDue = true;
         }
+
+        _shown = shown;
 
         if (_scanDue)
         {
@@ -209,7 +218,7 @@ static class Saves
             return Outcome.Unchanged("STILL SAVING");
         }
 
-        if (!Confirmed("restart"))
+        if (!Confirm.Second("restart"))
         {
             return Outcome.Unchanged("PRESS AGAIN");
         }
@@ -254,14 +263,21 @@ static class Saves
             return Outcome.Unchanged("STILL SAVING");
         }
 
-        if (!Confirmed("new game plus"))
+        if (!Confirm.Second("new game plus"))
         {
             return Outcome.Unchanged("PRESS AGAIN");
         }
 
+        // The run is only wiped once there is a copy of the save to go back to.
         _all = SaveFiles.List();
         _buildDue = true;
-        if (!KeepNewestOf(ActiveSlot(), "starting New Game + over"))
+        var slot = ActiveSlot();
+        if (!_all.Any(file => file.Kind == SaveKind.File && file.Readable && file.Slot == slot))
+        {
+            return Outcome.Failed("NO SAVE TO KEEP");
+        }
+
+        if (!KeepNewestOf(slot, "starting New Game + over"))
         {
             return Outcome.Failed("KEEP FAILED");
         }
@@ -332,7 +348,7 @@ static class Saves
             story = MainStory;
         }
 
-        if (!Confirmed("load " + file.Path))
+        if (!Confirm.Second("load " + file.Path))
         {
             return Outcome.Unchanged("PRESS AGAIN");
         }
@@ -363,16 +379,15 @@ static class Saves
         return Outcome.Done("LOADING");
     }
 
-    // The game writes over a slot's three files in turn. So loading an older save into the slot
-    // being played would soon push its newest save out, and that one is kept first. Loading the
-    // newest itself, or a save of another slot, puts nothing at risk.
+    // The game writes over a slot's three files in turn. So carrying on from an older save soon
+    // pushes that slot's newest one out, and that one is kept first, whichever slot was being
+    // played. Loading the newest itself puts nothing at risk.
     static bool KeepNewest(SaveFile loading)
     {
         _all = SaveFiles.List();
         _buildDue = true;
         var newest = _all.FirstOrDefault(file => file.Kind == SaveKind.File && file.Readable && file.Slot == loading.Slot);
-        return loading.Slot != ActiveSlot() || newest is null || newest.Stamp == loading.Stamp
-            || KeepNewestOf(loading.Slot, "loading an older one");
+        return newest is null || newest.Stamp == loading.Stamp || KeepNewestOf(loading.Slot, "loading an older one");
     }
 
     // Keeps a copy of a slot's newest file. False when it couldn't be kept, so the caller can
@@ -440,7 +455,7 @@ static class Saves
             return Outcome.Failed("NOT A KEPT COPY");
         }
 
-        if (!Confirmed("delete " + file.Path))
+        if (!Confirm.Second("delete " + file.Path))
         {
             return Outcome.Unchanged("PRESS AGAIN");
         }
@@ -448,21 +463,6 @@ static class Saves
         SaveFiles.Delete(file);
         _scanDue = true;
         return Outcome.Done("DELETED");
-    }
-
-    // True on the second press of the same thing, soon enough after the first.
-    static bool Confirmed(string what)
-    {
-        var now = Stopwatch.GetTimestamp();
-        if (_armedFor != what || Stopwatch.GetElapsedTime(_armedAt, now).TotalSeconds > ConfirmSeconds)
-        {
-            _armedFor = what;
-            _armedAt = now;
-            return false;
-        }
-
-        _armedFor = "";
-        return true;
     }
 
     static void Build()

@@ -60,7 +60,7 @@ static class Radial
 
     public static readonly Toggle On = new(
         "settings.radial.on", "FAVOURITES RADIAL",
-        "Hold the radial key (mouse button 4, or right stick click) for a wheel of your favourite rows. Mark favourites in the menu with the FAVOURITE key.",
+        "Hold the radial key for a wheel of your favourite rows. Mark favourites in the menu with the FAVOURITE key. RADIAL KEY on the CONTROLS tab sets the key.",
         on: true)
     {
         Preference = true,
@@ -108,17 +108,38 @@ static class Radial
         new[] { ("added", "AS ADDED"), ("name", "A TO Z"), ("menu", "MENU ORDER") })
     {
         Preference = true,
+        Changed = static () => Menu.Reshow(On),
     };
 
     public static readonly Command Clear = new(
         "settings.radial.clear", "CLEAR RADIAL",
-        "Takes every row off the radial.",
-        Favourites.Clear);
+        "Takes every row off the radial. Press it twice.",
+        static () => Confirm.Second("clear radial") ? Favourites.Clear() : Outcome.Unchanged("PRESS AGAIN"));
 
-    public static readonly Catalog.Section[] Sections =
+    static readonly Catalog.Section Fixed = new("RADIAL", On, Mode, SlowTime, Speed, Slots, Size, Order);
+    static readonly Catalog.Section Empty = new("NOTHING ON THE RADIAL YET");
+    static readonly Catalog.Section Every = new("EVERY FAVOURITE", Clear);
+
+    // The settings, then the favourites themselves in the order the wheel has them. A favourite
+    // works here as it does on its own tab, and the FAVOURITE key takes it off.
+    public static IReadOnlyList<Catalog.Section> Sections()
     {
-        new("RADIAL", On, Mode, SlowTime, Speed, Slots, Size, Order, Clear),
-    };
+        var marked = Favourites.Ordered(Order.Index);
+        var list = marked.Count > 0 ? new Catalog.Section("ON THE RADIAL", marked.ToArray()) { Borrowed = true } : Empty;
+        return new[] { Fixed, list, Every };
+    }
+
+    public static Keys Key => _key;
+
+    public static Pad.Button Button => _button;
+
+    // What the radial key shows as, on both devices.
+    public static string KeyText => $"{(_key == Keys.None ? "off" : Hotkeys.KeyName(_key))} / {Pad.Describe(_button)}";
+
+    // Whether the open wheel already uses this key for something.
+    public static bool Uses(Keys key) => Array.IndexOf(OpenKeys, key) >= 0;
+
+    public static bool Uses(Pad.Button buttons) => Array.IndexOf(OpenButtons, buttons) >= 0;
 
     public static void Bind()
     {
@@ -131,21 +152,52 @@ static class Radial
             Settings.Set("keys", "radial", keyText);
         }
 
-        if (!Controls.TryKey(keyText, out _key))
+        if (!Controls.TryKey(keyText, out var key))
         {
             Log.Warn("keys.radial", $"settings.toml: '{keyText}' is not a key name for keys.radial. Using XButton1.");
             Settings.Reset("keys", "radial", "XButton1");
-            Controls.TryKey("XButton1", out _key);
+            Controls.TryKey("XButton1", out key);
         }
 
         var padText = Settings.Text("pad", "radial", "RS");
-        if (!Pad.TryParse(padText, out _button))
+        if (!Pad.TryParse(padText, out var button))
         {
             Log.Warn("pad.radial", $"settings.toml: '{padText}' has a button name I don't know for pad.radial. Using RS.");
             Settings.Reset("pad", "radial", "RS");
-            Pad.TryParse("RS", out _button);
+            Pad.TryParse("RS", out button);
         }
 
+        Use(key, button);
+    }
+
+    // A new radial key, picked in the menu.
+    public static void SetKey(Keys key)
+    {
+        Use(key, _button);
+        Settings.Set("keys", "radial", key.ToString());
+    }
+
+    public static void SetButton(Pad.Button button)
+    {
+        Use(_key, button);
+        Settings.Set("pad", "radial", Pad.Stored(button));
+    }
+
+    // A key that is no longer the radial's goes straight back to the game.
+    static void Use(Keys key, Pad.Button button)
+    {
+        if (key != _key && KeysTaken.Remove(_key))
+        {
+            Swallowed.Give(_key);
+        }
+
+        if (button != _button && ButtonsTaken.Remove(_button))
+        {
+            Swallowed.Give(_button);
+        }
+
+        _key = key;
+        _button = button;
         _hintsFor = null;
     }
 

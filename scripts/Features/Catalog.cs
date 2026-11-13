@@ -6,7 +6,12 @@ namespace Knightfall;
 static class Catalog
 {
     // A group of rows under a heading, like SURVIVAL on PLAYER > STATUS.
-    public sealed record Section(string Heading, params Feature[] Rows);
+    public sealed record Section(string Heading, params Feature[] Rows)
+    {
+        // Rows that live on another tab and are only listed here as well, like every option
+        // with a hotkey.
+        public bool Borrowed { get; init; }
+    }
 
     // One line of a tab as the menu shows it. A heading has no row and can't be selected.
     public readonly record struct Line(string? Heading, Feature? Row, int RowIndex);
@@ -45,6 +50,7 @@ static class Catalog
         void Fill(IReadOnlyList<Section> sections)
         {
             var rows = new List<Feature>();
+            var own = new List<Feature>();
             var lines = new List<Line>();
             foreach (var section in sections)
             {
@@ -57,10 +63,15 @@ static class Catalog
                 {
                     lines.Add(new Line(null, row, rows.Count));
                     rows.Add(row);
+                    if (!section.Borrowed)
+                    {
+                        own.Add(row);
+                    }
                 }
             }
 
             Rows = rows;
+            Own = own;
             Lines = lines;
             _lineOfRow = new int[rows.Count];
             for (var i = 0; i < lines.Count; i++)
@@ -76,6 +87,9 @@ static class Catalog
 
         // What can be selected, in order. Navigation and settings only ever see these.
         public IReadOnlyList<Feature> Rows { get; private set; } = Array.Empty<Feature>();
+
+        // The rows that live on this tab, without the ones it only lists.
+        public IReadOnlyList<Feature> Own { get; private set; } = Array.Empty<Feature>();
 
         // The rows with their headings between them, for drawing.
         public IReadOnlyList<Line> Lines { get; private set; } = Array.Empty<Line>();

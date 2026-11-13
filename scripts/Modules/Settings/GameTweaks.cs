@@ -6,7 +6,8 @@ using BmSDK.Engine;
 
 namespace Knightfall;
 
-// SETTINGS > GAME. Engine switches and render settings the game's own options don't reach.
+// SETTINGS > GAME. Engine switches and render settings the game's own options don't reach. They
+// are how the game is set up, like the look of the menu, so TURN EVERYTHING OFF leaves them alone.
 static class GameTweaks
 {
     // A render change waits until the slider has stopped moving, since each one rewrites the
@@ -44,6 +45,7 @@ static class GameTweaks
         "settings.game.keep_running", "KEEP RUNNING IN BACKGROUND",
         "The game doesn't pause or open its pause menu when you click or alt-tab to another window.")
     {
+        Preference = true,
         Tick = () => Hold(FocusPause, false),
         Restore = FocusPause.Release,
     };
@@ -52,6 +54,7 @@ static class GameTweaks
         "settings.game.pad_background", "CONTROLLER IN BACKGROUND",
         "A controller keeps playing while another window is in front. Best with KEEP RUNNING IN BACKGROUND on.")
     {
+        Preference = true,
         Tick = () => Hold(PadUnfocused, true),
         Restore = PadUnfocused.Release,
     };
@@ -61,6 +64,7 @@ static class GameTweaks
         "Frame rate limits past the game's own 30, 60 and 90. GAME leaves the limit from the game's graphics menu.",
         new[] { ("game", "GAME"), ("120", "120"), ("144", "144"), ("165", "165"), ("240", "240"), ("uncapped", "UNCAPPED") })
     {
+        Preference = true,
         Tick = HoldCap,
         Restore = ReleaseCap,
     };
@@ -70,40 +74,10 @@ static class GameTweaks
         "Keeps people at their detailed models from further away. The game uses 0.8X. Higher costs frame rate in crowds.",
         min: 0, max: 4, step: 0.25, value: 0, unit: "X", zero: "GAME")
     {
+        Preference = true,
         Tick = HoldDetail,
         Restore = ReleaseDetail,
     };
-
-    public static readonly Command ClearHotkeys = new(
-        "settings.hotkeys.clear", "CLEAR ALL HOTKEYS",
-        "Takes every hotkey off. Rows with a hotkey are listed below. To add one, highlight a row, press the HOTKEY key shown at the bottom, then the keys you want.",
-        Hotkeys.ClearAll);
-
-    // SETTINGS > HOTKEYS. Every option with a hotkey, under the page and tab it lives on, so
-    // they can be changed in one place.
-    public static IReadOnlyList<Catalog.Section> HotkeySections()
-    {
-        var sections = new List<Catalog.Section> { new("", ClearHotkeys) };
-        var listed = new HashSet<Feature>();
-        foreach (var page in Catalog.Pages)
-        {
-            foreach (var tab in page.Tabs)
-            {
-                if (tab.Live)
-                {
-                    continue;
-                }
-
-                var bound = tab.Rows.Where(row => Hotkeys.Has(row) && listed.Add(row)).ToArray();
-                if (bound.Length > 0)
-                {
-                    sections.Add(new Catalog.Section($"{page.Name} > {tab.Name}", bound));
-                }
-            }
-        }
-
-        return sections;
-    }
 
     public static readonly Catalog.Section[] Sections =
     {

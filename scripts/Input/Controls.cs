@@ -77,7 +77,6 @@ static class Controls
 
         Settings.Describe("pad", "open is the controller buttons that open the menu when held together. Leave it empty to turn that off.\nradial is held for the favourites radial.\nXbox names: A, B, X, Y, LB, RB, LT, RT, LS, RS, Back, Start. PlayStation names: Cross, Circle, Square, Triangle, L1, R1, L2, R2, L3, R3, Share, Options.\nAlso DPadUp, DPadDown, DPadLeft, DPadRight.\nbuttons picks the names shown in hints: auto, xbox or playstation.\nIn the menu the D-pad moves, A or Cross accepts, B or Circle goes back, the bumpers switch tabs and the triggers switch pages.");
         _padOpen = Chord("open", "LS+RS");
-        Pad.Configure();
 
         Log.Info($"Menu key {KeyName(Act.Open)}, controller {Pad.Describe(_padOpen)}.");
     }
@@ -96,6 +95,45 @@ static class Controls
                 KeySwallowed[i] = false;
             }
         }
+    }
+
+    // Whether the menu already uses this key for something other than opening.
+    public static bool Uses(Keys key)
+    {
+        for (var i = 0; i < Count; i++)
+        {
+            if ((Act)i != Act.Open && KeyOf[i] == key)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static bool Uses(Pad.Button buttons) => Array.IndexOf(PadOf, buttons) >= 0;
+
+    // A new key to open the menu with, picked in the menu. The old one goes back to the game,
+    // and the new one is taken once it is up. It is still down from being picked, so it counts
+    // as held and doesn't shut the menu on the next frame.
+    public static void SetOpen(Keys key)
+    {
+        var open = (int)Act.Open;
+        if (KeySwallowed[open])
+        {
+            Swallowed.Give(KeyOf[open]);
+            KeySwallowed[open] = false;
+        }
+
+        KeyOf[open] = key;
+        Held[open] = true;
+        Settings.Set("keys", "open", key.ToString());
+    }
+
+    public static void SetOpen(Pad.Button buttons)
+    {
+        _padOpen = buttons;
+        Settings.Set("pad", "open", Pad.Stored(buttons));
     }
 
     // Short names for the hints at the bottom of the menu.

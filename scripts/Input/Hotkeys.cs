@@ -18,6 +18,8 @@ static class Hotkeys
         public required Feature Feature;
         public Keys Key;
         public Pad.Button Buttons;
+        public Keys DefaultKey;
+        public Pad.Button DefaultButtons;
         public bool Held;
 
         public bool Empty => Key == Keys.None && Buttons == Pad.Button.None;
@@ -33,14 +35,30 @@ static class Hotkeys
         .Where(key => key is not (Keys.LButton or Keys.RButton or Keys.MButton or Keys.XButton1 or Keys.XButton2 or Keys.Cancel))
         .Distinct().ToArray();
 
+    // The same with the mouse's two side buttons, which the menu's own keys can be.
+    static readonly Keys[] WithSideButtons = Candidates.Append(Keys.XButton1).Append(Keys.XButton2).ToArray();
+
+    // What a row for one of the menu's own keys shows after its name.
+    static readonly Dictionary<Feature, Func<string>> OwnKeys = new();
+
     static Feature? _listening;
     static string? _listeningLabel;
     static long _listenAt;
+
+    // Set while the row that waits is one of the menu's own keys. Each takes what was pressed
+    // and says how that went.
+    static Func<Keys, Outcome>? _takeKey;
+    static Func<Pad.Button, Outcome>? _takeButtons;
     static readonly HashSet<Keys> KeysAtStart = new();
     static Pad.Button _padAtStart;
     static Pad.Button _chord;
 
     public static Feature? Listening => _listening;
+
+    // One of the menu's own keys can be changed but not taken off.
+    public static bool Clearable => _takeKey is null;
+
+    public static void Shows(Feature row, Func<string> keys) => OwnKeys[row] = keys;
 
     public static bool Bindable(Feature? feature) => feature is (Toggle or Command or Choice) and { Passing: false };
 
@@ -63,7 +81,9 @@ static class Hotkeys
     // wins over it from then on.
     public static void Add(Feature feature, string key = "", string pad = "")
     {
-        var binding = new Binding { Feature = feature };
+        Controls.TryKey(key, out var defaultKey);
+        Pad.TryParse(pad, out var defaultButtons);
+        var binding = new Binding { Feature = feature, DefaultKey = defaultKey, DefaultButtons = defaultButtons };
 
         var keyName = feature.Key + "_key";
         var keyText = Settings.Text(feature.Section, keyName, key).Trim();
@@ -135,6 +155,10 @@ static class Hotkeys
         {
             label += $"  ({Describe(binding)})";
         }
+        else if (OwnKeys.TryGetValue(feature, out var keys))
+        {
+            label += $"  ({keys()})";
+        }
 
         if (Favourites.Has(feature))
         {
@@ -188,11 +212,13 @@ static class Hotkeys
     {
         _listening = feature;
         _listeningLabel = null;
+        _takeKey = null;
+        _takeButtons = null;
         _listenAt = Stopwatch.GetTimestamp();
         _chord = Pad.Button.None;
         _padAtStart = Pad.Held;
         KeysAtStart.Clear();
-        foreach (var key in Candidates)
+        foreach (var key in WithSideButtons)
         {
             if (Keyboard.IsDown(key))
             {
@@ -201,10 +227,47 @@ static class Hotkeys
         }
     }
 
-    static void StopListening()
+    // Waits for the next key or buttons for one of the menu's own keys. Only while the menu is
+    // up, since that is what hears them.
+    public static void Listen(Command row, Func<Keys, Outcome> key, Func<Pad.Button, Outcome> buttons)
+    {
+        if (!Menu.Showing)
+        {
+            return;
+        }
+
+        Listen(row);
+        _takeKey = key;
+        _takeButtons = buttons;
+    }
+
+    public static void StopListening()
     {
         _listening = null;
         _listeningLabel = null;
+        _takeKey = null;
+        _takeButtons = null;
+    }
+
+    // What came of a key offered to one of the menu's own keys. A refused one leaves the row
+    // waiting for another.
+    static void Took(Outcome outcome)
+    {
+        var row = _listening as Command;
+        if (outcome.Kind == OutcomeKind.Failed)
+        {
+            _listenAt = Stopwatch.GetTimestamp();
+        }
+        else
+        {
+            StopListening();
+        }
+
+        if (row is not null)
+        {
+            Labels.Remove(row);
+            row.Report(outcome);
+        }
     }
 
     // Every frame while waiting. The menu's back key cancels and its bind key clears the row. On
@@ -222,7 +285,7 @@ static class Hotkeys
             return;
         }
 
-        foreach (var key in Candidates)
+        foreach (var key in _takeKey is null ? Candidates : WithSideButtons)
         {
             var down = Keyboard.IsDown(key);
             if (!down)
@@ -241,11 +304,15 @@ static class Hotkeys
             {
                 StopListening();
             }
+            else if (_takeKey is { } take)
+            {
+                Took(take(key));
+            }
             else if (key == Controls.KeyFor(Act.Bind))
             {
                 Unbind(feature);
             }
-            else if (key != Controls.KeyFor(Act.Open))
+            else if (key != Controls.KeyFor(Act.Open) && !(Radial.On.On && key == Radial.Key))
             {
                 SetKey(feature, key);
             }
@@ -274,26 +341,44 @@ static class Hotkeys
         {
             StopListening();
         }
+        else if (_takeButtons is { } take)
+        {
+            Took(take(chord));
+        }
         else if (chord == Controls.ButtonFor(Act.Bind))
         {
             Unbind(feature);
         }
-        else if (chord != Controls.ButtonFor(Act.Open))
+        else if (chord != Controls.ButtonFor(Act.Open) && !(Radial.On.On && chord == Radial.Button))
         {
             SetPad(feature, chord);
         }
     }
 
-    // A key moves to its new row, so one key never works two options.
-    static void SetKey(Feature feature, Keys key)
+    // A key moves to its new row, so one key never works two things.
+    public static void Free(Keys key, Feature to)
     {
-        foreach (var other in Bindings.Values.Where(other => other.Key == key && !ReferenceEquals(other.Feature, feature)).ToArray())
+        foreach (var other in Bindings.Values.Where(other => other.Key == key && !ReferenceEquals(other.Feature, to)).ToArray())
         {
             other.Key = Keys.None;
             Save(other);
-            Moved(other.Feature, KeyName(key), feature);
+            Moved(other.Feature, KeyName(key), to);
         }
+    }
 
+    public static void Free(Pad.Button chord, Feature to)
+    {
+        foreach (var other in Bindings.Values.Where(other => other.Buttons == chord && !ReferenceEquals(other.Feature, to)).ToArray())
+        {
+            other.Buttons = Pad.Button.None;
+            Save(other);
+            Moved(other.Feature, Pad.Describe(chord), to);
+        }
+    }
+
+    static void SetKey(Feature feature, Keys key)
+    {
+        Free(key, feature);
         var binding = Find(feature);
         binding.Key = key;
         Save(binding);
@@ -302,13 +387,7 @@ static class Hotkeys
 
     static void SetPad(Feature feature, Pad.Button chord)
     {
-        foreach (var other in Bindings.Values.Where(other => other.Buttons == chord && !ReferenceEquals(other.Feature, feature)).ToArray())
-        {
-            other.Buttons = Pad.Button.None;
-            Save(other);
-            Moved(other.Feature, Pad.Describe(chord), feature);
-        }
-
+        Free(chord, feature);
         var binding = Find(feature);
         binding.Buttons = chord;
         Save(binding);
@@ -367,6 +446,27 @@ static class Hotkeys
         }
 
         return count > 0 ? Outcome.Done($"{count} CLEARED") : Outcome.Unchanged("NONE BOUND");
+    }
+
+    // Every hotkey the player added comes off, and the ones options come with go back on. One
+    // that the menu or the radial has taken since stays off.
+    public static Outcome ResetAll()
+    {
+        var count = 0;
+        foreach (var binding in Bindings.Values)
+        {
+            var key = binding.DefaultKey == Controls.KeyFor(Act.Open) || binding.DefaultKey == Radial.Key ? Keys.None : binding.DefaultKey;
+            var buttons = binding.DefaultButtons == Controls.ButtonFor(Act.Open) || binding.DefaultButtons == Radial.Button ? Pad.Button.None : binding.DefaultButtons;
+            if (binding.Key != key || binding.Buttons != buttons)
+            {
+                binding.Key = key;
+                binding.Buttons = buttons;
+                Save(binding);
+                count++;
+            }
+        }
+
+        return count > 0 ? Outcome.Done($"{count} RESET") : Outcome.Unchanged("ALREADY DEFAULT");
     }
 
     // Runs with the rest of the input. A key held while the menu shuts doesn't fire on its way up.

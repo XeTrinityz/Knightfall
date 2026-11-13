@@ -20,6 +20,10 @@ static class SystemValues
     // The settings a row is holding right now. Any other in Originals was left live by a crash.
     static readonly HashSet<string> Holding = new(StringComparer.OrdinalIgnoreCase);
 
+    // Settings the ini turned out not to have. A row asks every tick, and the file is only
+    // read for the first of them.
+    static readonly HashSet<string> Missing = new(StringComparer.OrdinalIgnoreCase);
+
     static string Ini => Path.Combine(GameFiles.Game, "Config", "BmSystemSettings.ini");
 
     static string Copy => Path.Combine(GameFiles.Mod, Kept);
@@ -79,8 +83,14 @@ static class SystemValues
 
         if (!Originals.ContainsKey(name))
         {
+            if (Missing.Contains(name))
+            {
+                return false;
+            }
+
             if (Read(name) is not { } original)
             {
+                Missing.Add(name);
                 Log.Warn("system_values." + name, $"{name} isn't in BmSystemSettings.ini, so it was left alone.");
                 return false;
             }

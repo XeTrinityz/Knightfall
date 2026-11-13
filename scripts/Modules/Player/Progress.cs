@@ -13,16 +13,12 @@ static class Progress
     const int Points = 10;
     const int Experience = 5000;
 
-    // A second press within this long confirms a permanent change.
-    const double ConfirmSeconds = 4;
-
     // The game's own unlock-all asks Steam about all of them in one go, which held the game still,
     // and asks about numbers that aren't achievements too. Only the ones the game lists as not
     // yet earned are asked for here, spaced out over a few ticks each.
     const int TicksApart = 4;
 
     static bool _granting;
-    static long _askedAt;
     static readonly Queue<int> Wanted = new();
     static int _unlocked;
     static int _had;
@@ -233,18 +229,14 @@ static class Progress
 
         if (missing.Count == 0)
         {
-            _askedAt = 0;
             return Outcome.Unchanged($"YOU HAVE ALL {list.Count}");
         }
 
-        var now = Stopwatch.GetTimestamp();
-        if (_askedAt == 0 || Stopwatch.GetElapsedTime(_askedAt, now).TotalSeconds > ConfirmSeconds)
+        if (!Confirm.Second("achievements"))
         {
-            _askedAt = now;
             return Outcome.Unchanged($"{missing.Count} TO GET, PRESS AGAIN");
         }
 
-        _askedAt = 0;
         _unlocked = 0;
         _wait = 0;
         foreach (var id in missing)

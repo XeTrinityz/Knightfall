@@ -51,6 +51,9 @@ static class Settings
         }
     }
 
+    // Reads the file again, as at the start, for after it was edited with the game open.
+    public static void Reload() => Load(_path);
+
     public static void Describe(string section, string comment)
     {
         Open(section).Comment = comment;
@@ -163,7 +166,8 @@ static class Settings
         _changed = false;
 
         var text = new StringBuilder();
-        text.AppendLine("# Knightfall settings. Close the game before you edit this file.");
+        text.AppendLine("# Knightfall settings. Close the game before you edit this file, or use RELOAD SETTINGS FILE");
+        text.AppendLine("# on SETTINGS > GENERAL straight after you save it.");
 
         foreach (var name in Order)
         {

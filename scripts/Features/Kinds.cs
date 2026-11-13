@@ -254,7 +254,7 @@ readonly record struct Outcome(OutcomeKind Kind, string Text)
 // moment instead.
 sealed class Command : Feature
 {
-    const double ShowSeconds = 2.5;
+    public const double ShowSeconds = 2.5;
 
     readonly Func<Outcome> _run;
     Outcome _last;

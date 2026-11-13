@@ -77,9 +77,11 @@ static class Favourites
         }
     }
 
+    // The RADIAL tab lists them, so it is built again if it is the one on screen.
     static void Save()
     {
         Settings.Set(Section, Key, string.Join(",", Marked.Select(feature => feature.Id)));
         Hotkeys.Relabel();
+        Menu.Reshow(Radial.On);
     }
 }

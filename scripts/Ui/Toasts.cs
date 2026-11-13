@@ -88,9 +88,11 @@ static class Toasts
         Preference = true,
     };
 
-    public static void Show(string title, string text, OutcomeKind kind = OutcomeKind.Done, Feature? from = null)
+    // A note marked always shows even with NOTIFICATIONS off, for a failure that would
+    // otherwise go unseen.
+    public static void Show(string title, string text, OutcomeKind kind = OutcomeKind.Done, Feature? from = null, bool always = false)
     {
-        if (!On.On)
+        if (!On.On && !always)
         {
             return;
         }
@@ -131,7 +133,7 @@ static class Toasts
         BrokeAt[key] = now;
         var feature = Catalog.Find(key);
         var title = feature?.Plain ?? key[(key.LastIndexOf('.') + 1)..].Replace('_', ' ').ToUpperInvariant();
-        Show(title, "FAILED, SEE KNIGHTFALL.LOG", OutcomeKind.Failed, feature);
+        Show(title, "FAILED, SEE KNIGHTFALL.LOG", OutcomeKind.Failed, feature, always: true);
     }
 
     // After an option was used from outside the menu. A toggle, choice or slider shows its new

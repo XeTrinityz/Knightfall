@@ -62,13 +62,27 @@ static class Pad
 
     static Button _held;
     static Style _lastUsed;
-    static Style? _forced;
     static bool _xinputOff;
     static bool _sonyOff;
 
+    // Kept as buttons under [pad] in settings.toml, next to the pad's other settings.
+    public static readonly Choice Prompts = new(
+        "pad.buttons", "BUTTON PROMPTS",
+        "The controller button names shown in hints. AUTO follows the controller you used last.",
+        new[] { ("auto", "AUTO"), ("xbox", "XBOX"), ("playstation", "PLAYSTATION") })
+    {
+        Preference = true,
+        Changed = Hotkeys.Relabel,
+    };
+
     public static bool Connected => XInputPad.Connected || SonyPad.Connected;
 
-    public static Style Look => _forced ?? _lastUsed;
+    public static Style Look => Prompts.Index switch
+    {
+        1 => Style.Xbox,
+        2 => Style.PlayStation,
+        _ => _lastUsed,
+    };
 
     // Every button down right now.
     public static Button Held => _held;
@@ -82,23 +96,6 @@ static class Pad
     public static bool IsDown(Button buttons)
     {
         return buttons != Button.None && (_held & buttons) == buttons;
-    }
-
-    public static void Configure()
-    {
-        var text = Settings.Text("pad", "buttons", "auto").Trim().ToLowerInvariant();
-        _forced = text switch
-        {
-            "xbox" => Style.Xbox,
-            "playstation" or "ps" => Style.PlayStation,
-            _ => null,
-        };
-
-        if (_forced is null && text != "auto")
-        {
-            Log.Warn("pad.buttons", $"settings.toml: pad.buttons is '{text}'. It can be auto, xbox or playstation. Using auto.");
-            Settings.Reset("pad", "buttons", "auto");
-        }
     }
 
     public static void Poll()
@@ -119,9 +116,10 @@ static class Pad
             _lastUsed = SonyPad.Connected ? Style.PlayStation : Style.Xbox;
         }
 
-        // Both readers report buttons even when another window is in front.
+        // Both readers report buttons even when another window is in front. They count there
+        // only when the game is taking the controller there too.
         var held = xbox | sony;
-        _held = held != Button.None && GameWindow.InFront ? held : Button.None;
+        _held = held != Button.None && (GameWindow.InFront || GameTweaks.PadInBackground.On) ? held : Button.None;
     }
 
     public static void Stop()
