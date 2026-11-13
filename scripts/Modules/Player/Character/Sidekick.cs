@@ -9,16 +9,22 @@ using Pace = BmSDK.Engine.RAutomaticTransitions.EMovementSpeed;
 
 namespace Knightfall;
 
-// PLAYER > CHARACTER, the SIDEKICK rows. A sidekick is a partner made the way the story makes
-// Robin and Nightwing. The game loads the character into a spare character slot in the
-// background and says when it is in. Then a body is spawned beside the player, given the story's
-// partner AI and named as the game's switch partner. From there the game's own swap, team
-// takedowns and team moves work with it.
+// PLAYER > SIDEKICK. A sidekick is a partner made the way the story makes Robin and Nightwing.
+// The game loads the character into a spare character slot in the background and says when it
+// is in. Then a body is spawned beside the player, given the story's partner AI and named as the
+// game's switch partner. From there the game's own swap, dual takedowns and team moves work
+// with it.
 static class Sidekick
 {
     const string Lender = "sidekick";
+    const float Metre = Teleport.UnitsPerMetre;
     const double LoadGiveUpSeconds = 20;
+
+    // The most one tick adds to the load wait, so time spent paused doesn't count.
+    const double LoadTickCap = 0.5;
+
     const float UpkeepSeconds = 0.25f;
+    const float LookEvery = 0.25f;
 
     // 40 m. Left further behind than this and out of sight, the sidekick rejoins behind you.
     const float CatchUpRange = 4000f;
@@ -28,12 +34,22 @@ static class Sidekick
     // Still that far behind after this long, the sidekick rejoins even on screen.
     const float CatchUpAnywaySeconds = 8f;
 
+    // Standing still this long, this much further off than they follow at, they have no way
+    // to you.
+    const float StuckAfter = 5f;
+    const float StuckShort = 450f;
+    const float StuckStep = 60f;
+
+    // How much further off than they stop the partner AI walks, and then runs flat out. The
+    // game's own gaps.
+    const float WalkPast = 250f;
+    const float RunPast = 1050f;
+
     const float ArriveBeside = 180f;
     const float LeaveRun = 2500f;
     const float GoneRange = 1500f;
     const float LeaveGiveUpSeconds = 8f;
     const float FloorReach = 200f;
-    const float WalkableSlope = 0.7f;
     const float ViewCone = 0.4f;
 
     // The story's partner versions, which the partner AI was made for.
@@ -45,12 +61,117 @@ static class Sidekick
         ("Playable_DLCBatgirl", "BATGIRL"),
     };
 
-    static readonly string[] FollowStates = { "WalkingMode", "RunningMode", "StealthMoveMode" };
+    static readonly FName StealthMove = new("StealthMoveMode");
+    static readonly FName[] FollowStates = { new("WalkingMode"), new("RunningMode"), StealthMove };
+    static readonly FName Crouching = new("Crouching");
+    static readonly FName StandingBot = new("StandingBot");
+    static readonly FName Relaxed = new("Relaxed");
+    static readonly float[] CatchUpTurns = { 180f, 150f, 210f, 120f, 240f };
+
+    public static readonly Choice Who = new(
+        "player.sidekick.who", "SIDEKICK",
+        "Who CALL SIDEKICK brings in. They arrive in the suit you have picked for them. Select calls them.",
+        Installed())
+    {
+        Preference = true,
+        Pressed = static () => Call!.Press(),
+        PressName = "CALL",
+    };
+
+    public static readonly Command Call = new(
+        "player.sidekick.call", "CALL SIDEKICK",
+        "Brings your sidekick in beside you. They follow you, join fights and do dual takedowns. Called while you are busy, they arrive once you are free.",
+        Summon)
+    {
+        Block = static () => Car.InCar() ?? CallLock(),
+    };
+
+    public static readonly Command Bring = new(
+        "player.sidekick.bring", "BRING SIDEKICK HERE",
+        "Puts your sidekick beside you at once, for when they are stuck or you left them waiting somewhere.",
+        Fetch)
+    {
+        Block = static () => Car.InCar() ?? Missing(),
+    };
+
+    public static readonly Command Dismiss = new(
+        "player.sidekick.dismiss", "DISMISS SIDEKICK",
+        "Your sidekick heads off and is gone once out of sight. If you are playing as them you are put back first. One still on the way is called off.",
+        SendAway)
+    {
+        Block = static () => OnTheWay ? null : Missing(),
+    };
+
+    public static readonly Command Swap = new(
+        "player.sidekick.swap", "SWAP WITH SIDEKICK",
+        "Takes control of your sidekick, or hands it back. Your save still records the story's character.",
+        Trade)
+    {
+        Block = static () => Car.InCar() ?? Missing() ?? _swapLock,
+    };
+
+    public static readonly Toggle ButtonSwaps = new(
+        "player.sidekick.button_swaps", "SWAP ON CALL BUTTON",
+        "With a sidekick out, the call Batmobile button swaps you with them, as in the story. Off, the button calls the Batmobile as usual and SWAP WITH SIDEKICK does the swap.",
+        on: true)
+    {
+        Preference = true,
+    };
+
+    public static readonly Toggle Follows = new(
+        "player.sidekick.follows", "SIDEKICK FOLLOWS YOU",
+        "Off makes your sidekick wait where they are until you turn it back on.", on: true)
+    {
+        Preference = true,
+    };
+
+    public static readonly Slider Distance = new(
+        "player.sidekick.distance", "SIDEKICK FOLLOW DISTANCE",
+        "How far behind you your sidekick stops.",
+        min: 2, max: 10, step: 0.5, value: 3.5, unit: " M")
+    {
+        Preference = true,
+        Block = static () => Follows.On ? null : "FOLLOWING IS OFF",
+    };
+
+    public static readonly Toggle CatchesUp = new(
+        "player.sidekick.catches_up", "SIDEKICK CATCHES UP",
+        "A sidekick left more than 40 m behind, or with no way up to you, rejoins you out of sight, as the story's partners do.", on: true)
+    {
+        Preference = true,
+        Block = static () => Follows.On ? null : "FOLLOWING IS OFF",
+    };
+
+    public static readonly Toggle Sneaks = new(
+        "player.sidekick.sneaks", "SIDEKICK SNEAKS WITH YOU",
+        "Your sidekick crouches when you do, and stays out of fights while crouched.", on: true)
+    {
+        Preference = true,
+        Block = static () => Follows.On ? null : "FOLLOWING IS OFF",
+    };
+
+    public static readonly Toggle Fights = new(
+        "player.sidekick.fights", "SIDEKICK FIGHTS",
+        "Your sidekick joins your fights and dual takedowns. Off, they stand back and leave the fight to you.", on: true)
+    {
+        Preference = true,
+    };
+
+    public static readonly Catalog.Section[] Sections =
+    {
+        new("CALL", Who, Call, Bring, Dismiss),
+        new("SWAP", Swap, ButtonSwaps),
+        new("FOLLOWING", Follows, Distance, CatchesUp, Sneaks),
+        new("FIGHTING", Fights),
+        new("DUAL TAKEDOWNS", Combat.DualTakedowns) { Borrowed = true },
+    };
 
     static RSeqAct_SwitchDualPlayerCharacter? _loader;
     static bool _loaded;
+    static bool _arriving;
     static bool _standardSuit;
-    static long _loadSince;
+    static double _loadWaited;
+    static long _loadTickAt;
 
     static RPawnPlayer? _body;
     static RPawnPlayer? _caller;
@@ -61,58 +182,25 @@ static class Sidekick
     static bool _ownsSlot;
 
     static bool _leaving;
+    static bool _trading;
     static float _leaveSince;
     static float _farSince = -1f;
     static float _upkeepAt;
+    static float _stoodSince;
+    static float _stuckSeenAt = -100f;
+    static Vector3 _stoodAt;
+    static float _poseSince;
     static bool _adopted;
 
-    public static readonly Choice Who = new(
-        "player.sidekick.who", "SIDEKICK",
-        "Who CALL SIDEKICK brings in. They arrive in the suit you have picked for them.",
-        Installed())
-    {
-        Preference = true,
-    };
+    // What the rows' locks show. Looked at a few times a second, since a lock is asked every frame.
+    static float _lookedAt = -100f;
+    static string? _busy;
+    static string? _swapLock;
+    static string _askedFor = "";
+    static FName _asked;
 
-    public static readonly Command Call = new(
-        "player.sidekick.call", "CALL SIDEKICK",
-        "Brings your sidekick in beside you. They follow you, join fights and do team takedowns. The call Batmobile button swaps between you, as in the story.",
-        Summon)
-    {
-        Block = static () => Car.InCar() ?? (Who.CurrentId.Length == 0 ? "NONE INSTALLED" : Present && !_leaving ? "ALREADY HERE" : null),
-    };
-
-    public static readonly Command Swap = new(
-        "player.sidekick.swap", "SWAP WITH SIDEKICK",
-        "Takes control of your sidekick, or hands it back. Your save still records the story's character.",
-        Trade)
-    {
-        Block = static () => Car.InCar() ?? (Present && !_leaving ? null : Loading ? "ON THE WAY" : "NO SIDEKICK"),
-    };
-
-    public static readonly Command Dismiss = new(
-        "player.sidekick.dismiss", "DISMISS SIDEKICK",
-        "Your sidekick heads off and is gone once out of sight. If you are playing as them you are put back first.",
-        SendAway)
-    {
-        Block = static () => Present || Loading ? null : "NO SIDEKICK",
-    };
-
-    public static readonly Toggle Follows = new(
-        "player.sidekick.follows", "SIDEKICK FOLLOWS YOU",
-        "Off makes your sidekick wait where they are until you turn it back on.", on: true)
-    {
-        Preference = true,
-    };
-
-    public static readonly Toggle CatchesUp = new(
-        "player.sidekick.catches_up", "SIDEKICK CATCHES UP",
-        "When you leave your sidekick more than 40 m behind, they rejoin you out of sight, as the story's partners do.", on: true)
-    {
-        Preference = true,
-    };
-
-    static bool Loading => _loader is not null;
+    // Loading, or loaded and waiting for the player to be free.
+    static bool OnTheWay => _loader is not null || _arriving;
 
     static bool Present => _body is { IsValid: true, bDeleteMe: false } && _bot is { IsValid: true, bDeleteMe: false };
 
@@ -141,6 +229,63 @@ static class Sidekick
         return list.Count > 0 ? list.ToArray() : new[] { ("", "NONE INSTALLED") };
     }
 
+    static string? CallLock() =>
+        Who.CurrentId.Length == 0 ? "NONE INSTALLED" : OnTheWay ? "ON THE WAY" : _body is not null ? _leaving ? "STILL LEAVING" : "ALREADY HERE" : _busy;
+
+    // Why a row that needs a sidekick out can't be used, or null when one is.
+    static string? Missing() => Present ? _leaving ? "LEAVING" : null : OnTheWay ? "ON THE WAY" : "NO SIDEKICK";
+
+    static void Look()
+    {
+        if (MathF.Abs(World.Now - _lookedAt) < LookEvery)
+        {
+            return;
+        }
+
+        _lookedAt = World.Now;
+        _busy = _body is null && !OnTheWay ? Busy(Who.CurrentId) : null;
+        _swapLock = _body is not null && World.Info is { bDualPlayerSwitchingDisabledBySeq: true } ? "LOCKED BY THE STORY" : null;
+    }
+
+    // Why nobody can be called in right now, or null.
+    static string? Busy(string name)
+    {
+        if (World.Player is not { } pawn || World.Controller is not { } controller || World.Info is not { } info || !Game.TryGetGameRI(out var game))
+        {
+            return "NO PLAYER";
+        }
+
+        if (info.IsChallengeMode())
+        {
+            return "NOT IN CHALLENGES";
+        }
+
+        if (Switcher.InScene(controller))
+        {
+            return "IN A SCENE";
+        }
+
+        if (controller.IsInCombat(false))
+        {
+            return "FINISH THE FIGHT";
+        }
+
+        // The story's own partner owns the switch. Taking it would break the mission.
+        if (info.PlayerSwitchPawn is { IsValid: true, bDeleteMe: false })
+        {
+            return "PARTNER IS HERE";
+        }
+
+        if (name != _askedFor)
+        {
+            _askedFor = name;
+            _asked = name.Length > 0 ? new FName(name) : default;
+        }
+
+        var index = Loaded.IndexOf(game, _asked);
+        return index >= 0 && (index == 0 || index == Loaded.IndexOf(game, pawn)) ? "THAT IS YOU" : null;
+    }
+
     static Outcome Summon()
     {
         Adopt();
@@ -150,7 +295,7 @@ static class Sidekick
             return Outcome.Failed("NONE INSTALLED");
         }
 
-        if (Loading)
+        if (OnTheWay)
         {
             return Outcome.Unchanged("ON THE WAY");
         }
@@ -160,8 +305,7 @@ static class Sidekick
             return Outcome.Unchanged(_leaving ? "STILL LEAVING" : "ALREADY HERE");
         }
 
-        if (World.Player is not { } pawn || World.Controller is not { } controller || !Game.TryGetGameInfo(out var info) || !Game.TryGetGameRI(out var game)
-            || !Game.TryGetWorldInfo(out var world))
+        if (World.Player is not { } pawn || World.Controller is not { } controller || !Game.TryGetGameRI(out var game) || !Game.TryGetWorldInfo(out var world))
         {
             return Outcome.NoPlayer;
         }
@@ -176,30 +320,9 @@ static class Sidekick
             return Outcome.Failed("NOT NOW");
         }
 
-        if (info.IsChallengeMode())
+        if (Busy(name) is { } busy)
         {
-            return Outcome.Failed("NOT IN CHALLENGES");
-        }
-
-        if (Switcher.InScene(controller))
-        {
-            return Outcome.Failed("IN A SCENE");
-        }
-
-        if (controller.IsInCombat(false))
-        {
-            return Outcome.Failed("FINISH THE FIGHT");
-        }
-
-        // The story's own partner owns the switch. Taking it would break the mission.
-        if (info.PlayerSwitchPawn is { IsValid: true, bDeleteMe: false })
-        {
-            return Outcome.Failed("PARTNER IS HERE");
-        }
-
-        if (game.PlayerCharacters_0.CharacterName.ToString().Equals(name, StringComparison.OrdinalIgnoreCase))
-        {
-            return Outcome.Failed("THAT IS YOU");
+            return Outcome.Failed(busy);
         }
 
         if (world.GetGameSequence() is not { IsValid: true } sequence)
@@ -211,6 +334,7 @@ static class Sidekick
         var index = Loaded.IndexOf(game, character);
         var already = index >= 0;
         _loaded = false;
+        _arriving = false;
         _standardSuit = false;
         _caller = pawn;
         _name = name;
@@ -248,7 +372,8 @@ static class Sidekick
         var loader = Made.Tracked(new RSeqAct_SwitchDualPlayerCharacter(sequence) { ParentSequence = sequence });
         Borrowed.Keep(loader, Lender);
         _loader = loader;
-        _loadSince = Stopwatch.GetTimestamp();
+        _loadWaited = 0;
+        _loadTickAt = Stopwatch.GetTimestamp();
 
         try
         {
@@ -268,21 +393,39 @@ static class Sidekick
     static Outcome Trade()
     {
         Adopt();
-        if (!Present || _leaving)
+        if (Missing() is { } missing)
         {
-            return Outcome.Failed(Loading ? "ON THE WAY" : "NO SIDEKICK");
+            return Outcome.Failed(missing);
         }
 
-        if (World.Controller is not { } controller || controller.Pawn is not RPawnPlayer)
+        if (World.Controller is not { } controller || controller.Pawn is not RPawnPlayer player)
         {
             return Outcome.Failed(World.Driving is not null ? "GET OUT FIRST" : "NOT NOW");
         }
 
+        // The game's swap tells the mission when it is tried while locked, so it isn't tried.
+        if (World.Info is { bDualPlayerSwitchingDisabledBySeq: true })
+        {
+            return Outcome.Failed("LOCKED BY THE STORY");
+        }
+
         // Not forced, so the game's own rules apply. It won't swap mid-move, while aiming or
         // when the story has locked it.
-        if (!controller.SwitchPlayer(false, false, false, false, true, false))
+        bool swapped;
+        _trading = true;
+        try
         {
-            return Outcome.Failed("NOT NOW");
+            swapped = controller.SwitchPlayer(false, false, false, false, true, false);
+        }
+        finally
+        {
+            _trading = false;
+        }
+
+        if (!swapped)
+        {
+            var aiming = controller.GetCurrentGadget() is { IsValid: true, bAiming: true };
+            return Outcome.Failed(aiming ? "STOP AIMING FIRST" : player.CurrentSpecialMove is not null || player.CombatMove is not null ? "FINISH THE MOVE" : "NOT NOW");
         }
 
         World.Tick();
@@ -290,13 +433,40 @@ static class Sidekick
         return Outcome.Done("SWAPPED");
     }
 
+    static Outcome Fetch()
+    {
+        Adopt();
+        if (Missing() is { } missing)
+        {
+            return Outcome.Failed(missing);
+        }
+
+        if (World.Controller is not { } controller || controller.Pawn is not RPawnPlayer player)
+        {
+            return Outcome.Failed(World.Driving is not null ? "GET OUT FIRST" : "NOT NOW");
+        }
+
+        if (_bot!.BotPawn is not { IsValid: true, bDeleteMe: false } follower || follower.CurrentSpecialMove is not null || follower.CombatMove is not null)
+        {
+            return Outcome.Failed("THEY ARE BUSY");
+        }
+
+        if (!Beside(player, out var floor))
+        {
+            return Outcome.Failed("NO ROOM HERE");
+        }
+
+        Place(follower, floor, player.Rotation.Yaw);
+        return Outcome.Done("HERE");
+    }
+
     static Outcome SendAway()
     {
         Adopt();
-        if (Loading)
+        if (OnTheWay)
         {
             CancelLoad();
-            return Outcome.Done("CANCELLED");
+            return Outcome.Done("CALLED OFF");
         }
 
         if (!Present)
@@ -323,13 +493,16 @@ static class Sidekick
         _leaving = true;
         _leaveSince = World.Now;
         _upkeepAt = 0f;
+        Arena(false);
+        Keep();
         return Outcome.Done("HEADING OFF");
     }
 
     public static void Tick()
     {
         Adopt();
-        if (Loading)
+        Look();
+        if (OnTheWay)
         {
             TickLoad();
             return;
@@ -350,6 +523,7 @@ static class Sidekick
         // A scene or a mission took the sidekick or the caller away.
         if (!Present || _caller is not { IsValid: true, bDeleteMe: false })
         {
+            Log.Info($"{_name} or the body that called them was taken away, so the sidekick is gone.");
             Remove();
             return;
         }
@@ -360,8 +534,18 @@ static class Sidekick
         }
 
         _upkeepAt = World.Now + UpkeepSeconds;
-        if (World.Controller is not { } controller || _bot!.BotPawn is not { IsValid: true, bDeleteMe: false } follower)
+        if (World.Controller is not { } controller || World.Info is not { } info || _bot!.BotPawn is not { IsValid: true, bDeleteMe: false } follower)
         {
+            return;
+        }
+
+        // The story named a partner of its own, or took the switch away. Ours steps aside, and
+        // the story's link is left as it is.
+        if (info.PlayerSwitchPawn is not { } linked || (linked.Ptr != _body.Ptr && linked.Ptr != _caller.Ptr))
+        {
+            Log.Info($"The story took the switch partner over, so {_name} is gone.");
+            Remove();
+            Toasts.Show(Who.Plain, "THE STORY TOOK OVER", OutcomeKind.Unchanged);
             return;
         }
 
@@ -371,17 +555,42 @@ static class Sidekick
             return;
         }
 
-        AllowFights(follower);
+        Tune(_bot);
+        Arena(Fights.On);
+        Sneak(controller, follower);
         if (Follows.On && CatchesUp.On)
         {
             CatchUp(controller, follower);
         }
     }
 
-    public static void Release() => Keep();
+    // A load that outlives this copy of the class would keep its slot for good.
+    public static void Release()
+    {
+        if (OnTheWay)
+        {
+            CancelLoad();
+        }
+
+        Keep();
+    }
 
     static void TickLoad()
     {
+        // The player went to another world or into another body. Nobody is left to arrive beside.
+        if (_caller is not { IsValid: true, bDeleteMe: false })
+        {
+            CancelLoad();
+            Call.Report(Outcome.Unchanged("CALLED OFF"));
+            return;
+        }
+
+        if (_arriving)
+        {
+            Arrive();
+            return;
+        }
+
         // The game's call to say it is done doesn't reach us when it comes from inside our own call
         // into the loader, as it does for packages already in memory. So the slot is checked too.
         if (_loaded || (_slot >= 0 && Game.TryGetGameRI(out var game) && Ready(game, _slot)))
@@ -389,9 +598,14 @@ static class Sidekick
             _loaded = false;
             Unhook();
             DropLoader();
-            Call.Report(Spawn());
+            _arriving = true;
+            Arrive();
             return;
         }
+
+        var now = Stopwatch.GetTimestamp();
+        _loadWaited += Math.Min((now - _loadTickAt) / (double)Stopwatch.Frequency, LoadTickCap);
+        _loadTickAt = now;
 
         // The game takes the character out of its slot when a package it needs is not installed,
         // usually the suit picked for them, and then never says it is done.
@@ -405,7 +619,7 @@ static class Sidekick
         }
 
         // Only a slot we loaded is retried. A slot the story loaded keeps the story's suit.
-        var stuck = (Stopwatch.GetTimestamp() - _loadSince) / (double)Stopwatch.Frequency > LoadGiveUpSeconds;
+        var stuck = _loadWaited > LoadGiveUpSeconds;
         if ((dropped || stuck) && !_standardSuit && _ownsSlot && LoadStandardSuit())
         {
             return;
@@ -427,6 +641,22 @@ static class Sidekick
         }
     }
 
+    // The character is in. They come in once the player is on foot and out of any scene.
+    static void Arrive()
+    {
+        if (World.Player is not { } pawn || World.Controller is not { } controller)
+        {
+            return;
+        }
+
+        if (controller.Pawn is not { } driven || driven.Ptr != pawn.Ptr || pawn.Health <= 0 || Remesh.Busy || Switcher.InScene(controller))
+        {
+            return;
+        }
+
+        Call.Report(Spawn());
+    }
+
     // The slot holds this character with their data and suit both in.
     static bool Ready(RGameRI game, int index)
     {
@@ -441,7 +671,7 @@ static class Sidekick
     // the picked one. It reloads every slot still waiting for data, so it waits until only ours is.
     static bool LoadStandardSuit()
     {
-        if (_loader is not { } loader || _slot < 0 || !Game.TryGetGameRI(out var game))
+        if (_loader is not { IsValid: true } loader || _slot < 0 || !Game.TryGetGameRI(out var game))
         {
             return false;
         }
@@ -468,7 +698,7 @@ static class Sidekick
         slot.MeshData = null!;
         slot.LoadingObject = loader;
         _standardSuit = true;
-        _loadSince = Stopwatch.GetTimestamp();
+        _loadWaited = 0;
         game.ReallyLoadPlayableCharacters(false, true);
         return true;
     }
@@ -500,7 +730,7 @@ static class Sidekick
     // A slot can still name our loader after the game gave up on it, and the loader is about to go.
     static void Unhook()
     {
-        if (_loader is { } loader && _slot >= 0 && Game.TryGetGameRI(out var game))
+        if (_loader is { IsValid: true } loader && _slot >= 0 && Game.TryGetGameRI(out var game))
         {
             ref var slot = ref Loaded.Slot(game, _slot);
             if (slot.LoadingObject is { } waiting && waiting.Ptr == loader.Ptr)
@@ -537,7 +767,9 @@ static class Sidekick
             return GiveUp("CAN'T LOAD");
         }
 
-        var at = Beside(pawn);
+        var right = Flat(pawn.Rotation.Yaw + 90f);
+        var at = (Beside(pawn, out var floor) ? floor : pawn.Location + right * (ArriveBeside * 0.66f) - Vector3.UnitZ * pawn.GetCollisionHeight())
+            + new Vector3(0f, 0f, pawn.GetCollisionHeight() + 5f);
         var facing = new Rotator(0f, pawn.Rotation.Yaw, 0f);
         if (Game.SpawnActor(kind, default, at, facing) is not RPawnPlayer body)
         {
@@ -559,7 +791,11 @@ static class Sidekick
 
         _body = body;
         _bot = bot;
+        _arriving = false;
         _upkeepAt = 0f;
+        _stuckSeenAt = -100f;
+        _poseSince = World.Now;
+        Tune(bot);
         Keep();
         Log.Info($"{_name} joined as a sidekick from slot {_slot}. {ObjectTable.Headroom} objects are free.");
         return Outcome.Done(_standardSuit ? "ARRIVED IN STANDARD SUIT" : "ARRIVED");
@@ -572,39 +808,28 @@ static class Sidekick
         return Outcome.Failed(why);
     }
 
-    // The first open spot at the player's side, then behind and in front.
-    static Vector3 Beside(RPawnPlayer pawn)
+    // The first open floor at the player's side, then behind and in front.
+    static bool Beside(RPawnPlayer pawn, out Vector3 floor)
     {
-        var forward = Facing(pawn.Rotation.Yaw);
-        var right = new Vector3(-forward.Y, forward.X, 0f);
-        foreach (var side in new[] { right, -right, -forward, forward })
+        foreach (var turn in new[] { 90f, -90f, 180f, 0f })
         {
-            if (Floor(pawn, pawn.Location + side * ArriveBeside, out var floor))
+            if (Standable(pawn, pawn.Location + Flat(pawn.Rotation.Yaw + turn) * ArriveBeside, out floor))
             {
-                return floor + new Vector3(0f, 0f, pawn.GetCollisionHeight() + 5f);
+                return true;
             }
         }
 
-        return pawn.Location + right * (ArriveBeside * 0.66f);
+        floor = default;
+        return false;
     }
 
-    static Vector3 Facing(float yaw)
-    {
-        var turn = yaw * MathF.PI / 180f;
-        return new Vector3(MathF.Cos(turn), MathF.Sin(turn), 0f);
-    }
+    static Vector3 Flat(float yaw) => new Rotator(0f, yaw, 0f).ToDirection();
 
-    // Ground the pawn could stand on, about level with it and with nothing in the way.
-    static bool Floor(RPawnPlayer from, Vector3 spot, out Vector3 floor)
+    // Dry ground the pawn could stand on, about level with it and with nothing in the way.
+    static bool Standable(RPawnPlayer from, Vector3 spot, out Vector3 floor)
     {
         floor = default;
-        if (!from.FastTrace(spot, from.Location, Vector3.Zero, false))
-        {
-            return false;
-        }
-
-        var hit = from.Trace(out floor, out var normal, spot - Vector3.UnitZ * 600f, spot + Vector3.UnitZ * 150f, Component.ECollisionFilter.COF_TraceWorld, Vector3.Zero, out _, 0);
-        if (hit is null || normal.Z < WalkableSlope)
+        if (!from.FastTrace(spot, from.Location, Vector3.Zero, false) || !Teleport.Floor(from, spot, spot.Z + 150f, spot.Z - 600f, out floor) || !Teleport.Dry(floor))
         {
             return false;
         }
@@ -613,35 +838,132 @@ static class Sidekick
         return MathF.Abs(floor.Z - feet) < FloorReach;
     }
 
-    // The partner AI only attacks inside one of the arenas the story's missions place. This one
-    // has no size and is simply handed to whichever body the AI is driving.
-    static void AllowFights(RPawnPlayer follower)
+    // Stands them on a floor point with nowhere left to walk to.
+    static void Place(RPawnPlayer follower, Vector3 floor, float yaw)
     {
-        if (follower.CombatBotVolume is { IsValid: true, bDeleteMe: false })
+        follower.SetLocationIgnoringCollision(floor + new Vector3(0f, 0f, follower.GetCollisionHeight() + 5f));
+        follower.SetRotation(new Rotator(0f, yaw, 0f));
+        follower.Velocity = Vector3.Zero;
+        follower.StopMoveTo();
+        _bot?.ClearNavigation();
+        _farSince = -1f;
+        _stuckSeenAt = -100f;
+    }
+
+    // How far back the partner AI stops, and from how far it walks and then runs.
+    static void Tune(RRobinBotController bot)
+    {
+        var stand = (float)Distance.Value * Metre;
+        if (bot.StandBehindDist == stand)
         {
             return;
         }
 
-        if (_arena is not { IsValid: true, bDeleteMe: false })
+        bot.StandBehindDist = stand;
+        bot.WalkBehindDist = stand + WalkPast;
+        bot.RunBehindDist = stand + RunPast;
+    }
+
+    // The partner AI only attacks inside one of the arenas the story's missions place, and the
+    // game only counts towards a dual takedown for a player standing in one. Ours has no size
+    // and is simply handed to both bodies. An arena the story placed is left on.
+    static void Arena(bool wanted)
+    {
+        Hand(_body);
+        Hand(_caller);
+
+        void Hand(RPawnPlayer? pawn)
         {
-            _arena = Game.SpawnActor(RCombatBotVolume.StaticClass(), default, follower.Location) as RCombatBotVolume;
-            if (_arena is null)
+            if (pawn is not { IsValid: true, bDeleteMe: false })
             {
                 return;
             }
 
-            _arena.SetHidden(true);
-            _arena.SetCollision(false, false, false);
-            Keep();
+            var has = pawn.CombatBotVolume is { IsValid: true, bDeleteMe: false } volume ? volume : null;
+            if (!wanted)
+            {
+                if (has is not null && _arena is { } mine && has.Ptr == mine.Ptr)
+                {
+                    pawn.CombatBotVolume = null!;
+                }
+
+                return;
+            }
+
+            if (has is not null)
+            {
+                return;
+            }
+
+            if (_arena is not { IsValid: true, bDeleteMe: false })
+            {
+                _arena = Game.SpawnActor(RCombatBotVolume.StaticClass(), default, pawn.Location) as RCombatBotVolume;
+                if (_arena is null)
+                {
+                    return;
+                }
+
+                _arena.SetHidden(true);
+                _arena.SetCollision(false, false, false);
+                Keep();
+            }
+
+            pawn.CombatBotVolume = _arena;
+        }
+    }
+
+    // Crouches and stands with the player, after the game's own short wait. The partner AI
+    // won't attack while crouched.
+    static void Sneak(RPlayerController controller, RPawnPlayer follower)
+    {
+        var bot = _bot!;
+        var low = Sneaks.On && Follows.On && Same(controller.GetStateName(), StealthMove);
+        if (low == bot.bCrouched || World.Now < _poseSince)
+        {
+            _poseSince = World.Now;
+            return;
         }
 
-        follower.CombatBotVolume = _arena;
+        if (World.Now - _poseSince < bot.TimeNeededForCrouchChange || follower.CurrentSpecialMove is not null || follower.CombatMove is not null)
+        {
+            return;
+        }
+
+        Stance(bot, follower, low);
+        _poseSince = World.Now;
+    }
+
+    static void Stance(RRobinBotController bot, RPawnPlayer follower, bool low)
+    {
+        if (low)
+        {
+            bot.StopAllLookAtPlayer();
+        }
+
+        bot.bCrouched = low;
+        bot.bInMovementStand = !low;
+        follower.ChangePose(low ? Crouching : StandingBot, Relaxed, default, false, default, default, default, 1f);
     }
 
     static void CatchUp(RPlayerController controller, RPawnPlayer follower)
     {
         if (controller.Pawn is not RPawnPlayer player || player.Physics != Actor.EPhysics.PHYS_Walking || follower.CurrentSpecialMove is not null
-            || Vector3.DistanceSquared(follower.Location, player.Location) < CatchUpRange * CatchUpRange)
+            || Switcher.InScene(controller))
+        {
+            _farSince = -1f;
+            return;
+        }
+
+        // The story keeps its partners out of some rooms. Ours waits outside them too.
+        if (_bot!.BotExclusionVolume is { IsValid: true, bDeleteMe: false } keptOut && keptOut.EncompassesPoint(player.Location))
+        {
+            _farSince = -1f;
+            return;
+        }
+
+        var gap = Vector3.DistanceSquared(follower.Location, player.Location);
+        var stuck = Stuck(controller, follower, gap);
+        if (gap < CatchUpRange * CatchUpRange && !stuck)
         {
             _farSince = -1f;
             return;
@@ -653,43 +975,52 @@ static class Sidekick
             _farSince = World.Now;
         }
 
+        controller.GetPlayerViewPoint(out var eye, out var view);
         var waited = World.Now - _farSince;
-        if (waited < CatchUpWaitSeconds || (InView(controller, player, follower.Location) && waited < CatchUpAnywaySeconds))
+        if (waited < CatchUpWaitSeconds || (InView(player, eye, view, follower.Location) && waited < CatchUpAnywaySeconds))
         {
             return;
         }
 
-        controller.GetPlayerViewPoint(out _, out var view);
-        foreach (var turn in new[] { 180f, 150f, 210f, 120f, 240f })
+        foreach (var turn in CatchUpTurns)
         {
-            if (!Floor(player, player.Location + Facing(view.Yaw + turn) * CatchUpBehind, out var floor) || InView(controller, player, floor + Vector3.UnitZ * 60f))
+            if (Standable(player, player.Location + Flat(view.Yaw + turn) * CatchUpBehind, out var floor) && !InView(player, eye, view, floor + Vector3.UnitZ * 60f))
             {
-                continue;
+                Place(follower, floor, player.Rotation.Yaw);
+                return;
             }
-
-            follower.SetLocationIgnoringCollision(floor + new Vector3(0f, 0f, follower.GetCollisionHeight() + 5f));
-            follower.SetRotation(new Rotator(0f, player.Rotation.Yaw, 0f));
-            follower.Velocity = Vector3.Zero;
-            follower.StopMoveTo();
-            _bot?.ClearNavigation();
-            _farSince = -1f;
-            return;
         }
     }
 
-    static bool InView(RPlayerController controller, RPawnPlayer player, Vector3 at)
+    // True once they have stood still for a while with the player out of reach. The partner AI
+    // has no grapple and climbs nothing, so a roof is enough. Asked every upkeep while they
+    // should be following, and a gap in the asking starts the count again.
+    static bool Stuck(RPlayerController controller, RPawnPlayer follower, float gapSquared)
     {
-        controller.GetPlayerViewPoint(out var eye, out var view);
+        var bot = _bot!;
+        var reach = bot.StandBehindDist + StuckShort;
+        var asked = World.Now >= _stuckSeenAt && World.Now - _stuckSeenAt <= UpkeepSeconds * 3f;
+        _stuckSeenAt = World.Now;
+        if (!asked || gapSquared <= reach * reach || bot.bWasInCombat || !Following(controller)
+            || Vector3.DistanceSquared(follower.Location, _stoodAt) > StuckStep * StuckStep)
+        {
+            _stoodAt = follower.Location;
+            _stoodSince = World.Now;
+            return false;
+        }
+
+        return World.Now - _stoodSince >= StuckAfter;
+    }
+
+    static bool InView(RPawnPlayer player, Vector3 eye, Rotator view, Vector3 at)
+    {
         var to = at - eye;
         if (to.LengthSquared() < 1f)
         {
             return false;
         }
 
-        var pitch = view.Pitch * MathF.PI / 180f;
-        var flat = Facing(view.Yaw);
-        var looking = new Vector3(flat.X * MathF.Cos(pitch), flat.Y * MathF.Cos(pitch), MathF.Sin(pitch));
-        return Vector3.Dot(Vector3.Normalize(to), looking) >= ViewCone && player.FastTrace(at, eye, Vector3.Zero, false);
+        return Vector3.Dot(Vector3.Normalize(to), view.ToDirection()) >= ViewCone && player.FastTrace(at, eye, Vector3.Zero, false);
     }
 
     // Runs off, and is gone once out of sight or far enough away.
@@ -701,8 +1032,9 @@ static class Sidekick
             _leaveSince = World.Now;
         }
 
+        controller.GetPlayerViewPoint(out var eye, out var view);
         var far = Vector3.DistanceSquared(follower.Location, caller.Location) > GoneRange * GoneRange;
-        if (far || World.Now - _leaveSince > LeaveGiveUpSeconds || !InView(controller, caller, follower.Location + Vector3.UnitZ * 60f))
+        if (far || World.Now - _leaveSince > LeaveGiveUpSeconds || !InView(caller, eye, view, follower.Location + Vector3.UnitZ * 60f))
         {
             Remove();
             Dismiss.Report(Outcome.Done("GONE"));
@@ -716,7 +1048,7 @@ static class Sidekick
 
         var away = follower.Location - caller.Location;
         away.Z = 0f;
-        away = away.LengthSquared() > 1f ? Vector3.Normalize(away) : Facing(follower.Rotation.Yaw);
+        away = away.LengthSquared() > 1f ? Vector3.Normalize(away) : Flat(follower.Rotation.Yaw);
         follower.SetMovementSpeed(Pace.MS_Run, 1f, default);
         follower.MoveTo(follower.Location + away * LeaveRun);
     }
@@ -765,7 +1097,8 @@ static class Sidekick
         Forget();
     }
 
-    // Empties the slot the sidekick was loaded into, unless the story had them loaded already.
+    // Empties the slot the sidekick was loaded into, unless the story had them loaded already
+    // or someone still in the world is that character.
     static void ClearSlot()
     {
         if (!_ownsSlot || _slot <= 0 || !Game.TryGetGameRI(out var game))
@@ -774,7 +1107,8 @@ static class Sidekick
         }
 
         ref var slot = ref Loaded.Slot(game, _slot);
-        if (!slot.CharacterName.ToString().Equals(_name, StringComparison.OrdinalIgnoreCase))
+        if (!slot.CharacterName.ToString().Equals(_name, StringComparison.OrdinalIgnoreCase) || Worn(game, World.Info?.PlayerSwitchPawn)
+            || Worn(game, World.Controller?.Pawn) || Worn(game, World.Controller?.OriginalPawn))
         {
             return;
         }
@@ -787,6 +1121,9 @@ static class Sidekick
         game.ReallyLoadPlayableCharacters(false, false);
     }
 
+    static bool Worn(RGameRI game, Pawn? pawn) =>
+        pawn is RPawnPlayer { IsValid: true, bDeleteMe: false } player && Loaded.IndexOf(game, player) == _slot;
+
     static void Forget()
     {
         _body = null;
@@ -796,8 +1133,10 @@ static class Sidekick
         _name = "";
         _slot = -1;
         _ownsSlot = false;
+        _arriving = false;
         _leaving = false;
         _farSince = -1f;
+        _lookedAt = -100f;
         Keep();
         Catalog.MenuOpening();
     }
@@ -808,6 +1147,7 @@ static class Sidekick
         Survive.Set(Survive.SidekickName, _name);
         Survive.Set(Survive.SidekickSlot, _slot);
         Survive.Set(Survive.SidekickOwnsSlot, _ownsSlot);
+        Survive.Set(Survive.SidekickLeaving, _leaving);
         Survive.Set(Survive.SidekickBody, (long)(_body?.Ptr ?? 0));
         Survive.Set(Survive.SidekickBot, (long)(_bot?.Ptr ?? 0));
         Survive.Set(Survive.SidekickArena, (long)(_arena?.Ptr ?? 0));
@@ -831,7 +1171,7 @@ static class Sidekick
 
         // The two bodies are the one being played and the game's switch partner.
         var bot = Game.FindObjects<RRobinBotController>().FirstOrDefault(found => found.IsValid && found.Ptr == botAt);
-        var played = controller.Pawn as RPawnPlayer;
+        var played = controller.Pawn as RPawnPlayer ?? controller.OriginalPawn;
         var partner = info.PlayerSwitchPawn as RPawnPlayer;
         if (bot is null || played is null || partner is null || (played.Ptr != bodyAt && partner.Ptr != bodyAt))
         {
@@ -845,9 +1185,33 @@ static class Sidekick
         _name = Survive.Get(Survive.SidekickName, "");
         _slot = Survive.Get(Survive.SidekickSlot, -1);
         _ownsSlot = Survive.Get(Survive.SidekickOwnsSlot, false);
+        _leaving = Survive.Get(Survive.SidekickLeaving, false);
+        _leaveSince = World.Now;
+        _poseSince = World.Now;
     }
 
-    static bool Ours(RRobinBotController bot) => _bot is { } mine && mine.Ptr == bot.Ptr;
+    static bool Same(FName one, FName other) => one.Index == other.Index && one.Number == other.Number;
+
+    // The states the story's partners follow in.
+    static bool Following(RPlayerController controller)
+    {
+        var state = controller.GetStateName();
+        foreach (var follow in FollowStates)
+        {
+            if (Same(state, follow))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static bool Ours(RRobinBotController bot)
+    {
+        Adopt();
+        return _bot is { } mine && mine.Ptr == bot.Ptr;
+    }
 
     // The story's partners only follow while a mission flag says so. Ours follows on its own
     // option, so no story flag is touched.
@@ -856,16 +1220,55 @@ static class Sidekick
     {
         try
         {
-            Adopt();
             if (Ours(self))
             {
-                return Follows.On && !_leaving && Game.TryGetPlayerController(out var controller)
-                    && Array.IndexOf(FollowStates, controller.GetStateName().ToString()) >= 0;
+                return Follows.On && !_leaving && Game.TryGetPlayerController(out var controller) && Following(controller);
             }
         }
         catch (Exception error)
         {
             Log.Error("sidekick.follow", "The sidekick's follow rule failed", error);
+        }
+
+        return Redirects.RunOriginal<bool>();
+    }
+
+    // The game's crouch rule reads the same mission flag and would stand ours straight back up.
+    // Ours crouches on its own option.
+    [Redirect(typeof(RRobinBotController), nameof(RRobinBotController.CheckForCrouching))]
+    static void CheckForCrouching(RRobinBotController self, float deltaTime)
+    {
+        try
+        {
+            if (Ours(self))
+            {
+                return;
+            }
+        }
+        catch (Exception error)
+        {
+            Log.Error("sidekick.crouch", "The sidekick's crouch rule failed", error);
+        }
+
+        Redirects.RunOriginal();
+    }
+
+    // The call Batmobile button asks for an unforced swap whenever there is a switch partner.
+    // The story's swaps and DISMISS are forced, and go through.
+    [Redirect(typeof(RPlayerController), nameof(RPlayerController.SwitchPlayer))]
+    static bool SwitchPlayer(RPlayerController self, bool force, bool reverseLook, bool lockCamera, bool tryDualplayCombatMove, bool slowMoSwitch, bool forSwitchPlayerAction)
+    {
+        try
+        {
+            Adopt();
+            if (!force && !_trading && Present && (_leaving || !ButtonSwaps.On))
+            {
+                return false;
+            }
+        }
+        catch (Exception error)
+        {
+            Log.Error("sidekick.swap", "The sidekick's swap rule failed", error);
         }
 
         return Redirects.RunOriginal<bool>();

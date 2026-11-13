@@ -23,9 +23,7 @@ static class Layout
                 new Catalog.Section("STYLE", MovementStyle.Style),
                 new Catalog.Section("DISGUISE", Disguise.Look, Disguise.Variant, Disguise.Option, Disguise.WearAimed, Disguise.Stance, Disguise.Props, DisguiseFit.Camera, DisguiseFit.Gadgets))
             .Add("VILLAINS", Villains.Sections)
-            .Add("SIDEKICK",
-                new Catalog.Section("CALL", Sidekick.Who, Sidekick.Call, Sidekick.Swap, Sidekick.Dismiss),
-                new Catalog.Section("FOLLOWING", Sidekick.Follows, Sidekick.CatchesUp))
+            .Add("SIDEKICK", Sidekick.Sections)
             .Add("PROGRESS", Progress.Sections);
 
         Catalog.Background("player.locks", PlayerLocks.Tick);

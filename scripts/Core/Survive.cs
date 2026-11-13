@@ -23,6 +23,7 @@ static class Survive
     public const string SidekickName = "Knightfall.SidekickName";
     public const string SidekickSlot = "Knightfall.SidekickSlot";
     public const string SidekickOwnsSlot = "Knightfall.SidekickOwnsSlot";
+    public const string SidekickLeaving = "Knightfall.SidekickLeaving";
     public const string SidekickBody = "Knightfall.SidekickBody";
     public const string SidekickBot = "Knightfall.SidekickBot";
     public const string SidekickArena = "Knightfall.SidekickArena";
