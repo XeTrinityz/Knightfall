@@ -38,17 +38,26 @@ static class Autopilot
     public static readonly Command ToWaypoint = new(
         "batmobile.driving.autopilot_waypoint", "AUTOPILOT TO WAYPOINT",
         "The Batmobile drives you to your map waypoint along the roads. Press again to take the wheel back.",
-        () => Toggle(ToWaypoint!, Markers.Waypoint));
+        () => Toggle(ToWaypoint!, Markers.Waypoint))
+    {
+        Block = Car.NotDriving,
+    };
 
     public static readonly Command ToObjective = new(
         "batmobile.driving.autopilot_objective", "AUTOPILOT TO OBJECTIVE",
         "The Batmobile drives you to the current mission marker along the roads. Press again to take the wheel back.",
-        () => Toggle(ToObjective!, Markers.Objective));
+        () => Toggle(ToObjective!, Markers.Objective))
+    {
+        Block = Car.NotDriving,
+    };
 
     public static readonly Command Stop = new(
         "batmobile.driving.autopilot_stop", "STOP AUTOPILOT",
         "Takes the wheel back from the autopilot.",
-        () => Active ? Halt(Outcome.Done("STOPPED")) : Outcome.Unchanged("NOT ON"));
+        () => Active ? Halt(Outcome.Done("STOPPED")) : Outcome.Unchanged("NOT ON"))
+    {
+        Block = static () => Active ? null : "AUTOPILOT IS OFF",
+    };
 
     public static readonly Toggle CanBoost = new(
         "batmobile.driving.autopilot_boost", "AUTOPILOT CAN BOOST",
@@ -108,11 +117,6 @@ static class Autopilot
         // The same mark the game's own scripted drives use, so the driving camera and the fire
         // button leave the car alone.
         car.bControlledBySeqAct = true;
-        if (CanBoost.On)
-        {
-            BoostFlag.Hold(car, true);
-        }
-
         _braking = null;
         _driving = car;
         _startedBy = command;
@@ -166,6 +170,15 @@ static class Autopilot
         {
             Halt(Outcome.Unchanged("STOPPED"));
             return;
+        }
+
+        if (CanBoost.On)
+        {
+            BoostFlag.Hold(car, true);
+        }
+        else
+        {
+            BoostFlag.Release();
         }
 
         if (car.SelfDriveMode == SelfDrive.SELFDRIVE_None && World.Now - _since > StartGraceSeconds)

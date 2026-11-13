@@ -53,7 +53,7 @@ static class EngineSound
         var options = new List<(string, string)> { ("own", "SKIN'S OWN") };
         foreach (var set in Sets)
         {
-            if (Installed(set.Package))
+            if (GameFiles.HasPackage(set.Package))
             {
                 options.Add((set.Id, set.Label));
             }
@@ -131,7 +131,12 @@ static class EngineSound
         var info = Game.FindObject<AkPlayerVehicleSoundInfo>(set.Path);
         if (info is not { IsValid: true })
         {
-            Game.LoadPackage(set.Package);
+            if (!Packages.TryLoad(set.Package, $"the {set.Label} engine sound", "engine_sound.load"))
+            {
+                Missing.Add(id);
+                return null;
+            }
+
             info = Game.FindObject<AkPlayerVehicleSoundInfo>(set.Path);
         }
 
@@ -229,32 +234,5 @@ static class EngineSound
 
         car.AudioStopAllWheels();
         car.AudioSquealing(0f);
-    }
-
-    static bool Installed(string package)
-    {
-        try
-        {
-            if (Environment.ProcessPath is not { } exe)
-            {
-                return true;
-            }
-
-            // The game runs from Binaries/Win64. Skins are in BmGame/CookedPCConsole or under DLC.
-            var root = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(exe)!, "..", ".."));
-            var file = package + ".upk";
-            if (File.Exists(Path.Combine(root, "BmGame", "CookedPCConsole", file)))
-            {
-                return true;
-            }
-
-            var dlc = Path.Combine(root, "DLC");
-            return Directory.Exists(dlc) && Directory.EnumerateFiles(dlc, file, SearchOption.AllDirectories).Any();
-        }
-        catch (Exception error)
-        {
-            Log.Warn("engine_sound.files", $"Could not check whether {package} is installed: {error.Message}");
-            return true;
-        }
     }
 }

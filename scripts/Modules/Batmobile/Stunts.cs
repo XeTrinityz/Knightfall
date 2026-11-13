@@ -7,7 +7,7 @@ using EjectType = BmSDK.BmGame.RVehicleBatmobileBase.EBatmobileEjectType;
 
 namespace Knightfall;
 
-// BATMOBILE > DRIVING, the STUNTS rows. The car's physics is native, so jumps and floating act on
+// BATMOBILE > TUNING, the STUNTS rows. The car's physics is native, so jumps and floating act on
 // its body directly, and air control and the eject only change the values the game reads.
 static class Stunts
 {
@@ -27,8 +27,11 @@ static class Stunts
 
     public static readonly Command Jump = new(
         "batmobile.driving.jump", "BATMOBILE JUMP",
-        "Launches the Batmobile into the air. It has its own key, J unless you change jump_key in settings.toml, and a controller combination you can set as jump_pad.",
-        Launch);
+        "Launches the Batmobile into the air. It comes with a hotkey, J, which you can change like any other.",
+        Launch)
+    {
+        Block = Car.NotDriving,
+    };
 
     public static readonly Slider JumpPower = new(
         "batmobile.driving.jump_power", "JUMP POWER",

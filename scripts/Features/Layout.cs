@@ -41,11 +41,14 @@ static class Layout
         Catalog.Background("player.character.disguise_fit", DisguiseFit.Tick, DisguiseFit.Release);
         Catalog.AddPage("BATMOBILE")
             .Add("DRIVING", Driving.Sections)
+            .Add("TUNING", Driving.Tuning)
             .Add("WEAPONS", Weapons.Sections)
+            .Add("DASHBOARD", Dashboard.Sections)
             .Add("SKIN",
                 new Catalog.Section("SKINS", Skins.Skin, Skins.Apply, Skins.Cancel),
                 new Catalog.Section("SOUND", EngineSound.Sound));
 
+        Catalog.Background("batmobile.car", Car.Tick);
         Catalog.Background("batmobile.driving.autopilot", Autopilot.Tick, Autopilot.Release);
         Catalog.Background("core.borrowed", Borrowed.Tick, Borrowed.Release);
         Catalog.Background("batmobile.skin", Skins.Tick, Skins.Release);

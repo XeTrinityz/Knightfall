@@ -22,6 +22,9 @@ static class Weapons
     static readonly Held<RBatmobileCannon, bool> Drift = new("cannon spread", cannon => cannon.bLoseAccuracyOverTime, (cannon, on) => cannon.bLoseAccuracyOverTime = on);
     static readonly Held<RBatmobileCannon, float> SpreadAngle = new("cannon spread angle", cannon => cannon.InaccuracyAngle, (cannon, angle) => cannon.InaccuracyAngle = angle);
     static readonly Held<RBatmobileCannon, float> Accuracy = new("cannon accuracy", cannon => cannon.CurrentAccuracyZeroToOne, (cannon, share) => cannon.CurrentAccuracyZeroToOne = share);
+    static readonly Held<RBatmobileCannon, int> GunDamage = new("gun damage", cannon => cannon.ChainGunDamage, (cannon, damage) => cannon.ChainGunDamage = damage);
+
+    static readonly Func<int, int> Harder = was => (int)MathF.Round(was * (float)GunDamageScale!.Value);
 
     static readonly List<RVehicleWeapon> Found = new();
     static nint _foundFor;
@@ -30,7 +33,10 @@ static class Weapons
     public static readonly Command ArmEverything = new(
         "batmobile.weapons.arm_everything", "ARM EVERY WEAPON",
         "Gives the Batmobile every battle mode and pursuit weapon, bought or not, with no cooldowns. Nothing is saved, so they last until a reload or skin change.",
-        Arm);
+        Arm)
+    {
+        Block = Car.Missing,
+    };
 
     public static readonly Toggle UnlimitedPower = new(
         "batmobile.weapons.unlimited_power", "UNLIMITED WEAPON POWER",
@@ -64,9 +70,18 @@ static class Weapons
         Restore = ReleaseCannonSteady,
     };
 
+    public static readonly Slider GunDamageScale = new(
+        "batmobile.weapons.gun_damage", "GUN DAMAGE",
+        "Multiplies how hard the Batmobile's main gun hits. 1X is the game's.",
+        min: 1, max: 10, step: 0.5, value: 1, unit: "X")
+    {
+        Tick = HoldGunDamage,
+        Restore = GunDamage.Release,
+    };
+
     public static readonly Catalog.Section[] Sections =
     {
-        new("ARSENAL", ArmEverything, UnlimitedPower, NoCooldowns, NoReload, NoSpread),
+        new("ARSENAL", ArmEverything, UnlimitedPower, NoCooldowns, NoReload, NoSpread, GunDamageScale),
         new("MISSILES", Missiles.BarrageSize, Missiles.InstantLock, Missiles.PursuitDamage),
         new("AUTO COMBAT", AutoCombat.Fight, AutoCombat.Range, AutoCombat.ShootDown),
         new("ON FOOT", Missiles.TakedownReady),
@@ -240,5 +255,13 @@ static class Weapons
         Drift.Release();
         SpreadAngle.Release();
         Accuracy.Release();
+    }
+
+    static void HoldGunDamage()
+    {
+        if (Car.Find() is { } car && First<RBatmobileCannon>(car) is { } cannon)
+        {
+            GunDamage.Hold(cannon, Harder);
+        }
     }
 }

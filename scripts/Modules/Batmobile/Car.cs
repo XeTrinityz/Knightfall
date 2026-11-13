@@ -12,6 +12,15 @@ static class Car
     static RVehicleBatmobileBase? _found;
     static float _searchedAt = -1f;
 
+    // Refreshed every game tick for rows that lock themselves, which are asked while drawing.
+    public static bool Here { get; private set; }
+
+    public static void Tick() => Here = Find() is not null;
+
+    public static string? Missing() => Here ? null : "NO BATMOBILE HERE";
+
+    public static string? NotDriving() => World.Driving is null ? "NOT IN THE BATMOBILE" : null;
+
     public static RVehicleBatmobileBase? Find()
     {
         if (World.Driving is { } driving)

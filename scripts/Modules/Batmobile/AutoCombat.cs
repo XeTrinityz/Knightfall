@@ -38,7 +38,10 @@ static class AutoCombat
     public static readonly Slider Range = new(
         "batmobile.weapons.auto_combat_range", "AUTO COMBAT RANGE",
         "How far away AUTO COMBAT picks its targets.",
-        min: 40, max: 300, step: 10, value: 120, unit: " M");
+        min: 40, max: 300, step: 10, value: 120, unit: " M")
+    {
+        Block = static () => Fight.On ? null : "AUTO COMBAT IS OFF",
+    };
 
     public static readonly Toggle ShootDown = new(
         "batmobile.weapons.shoot_down", "SHOOT DOWN MISSILES",

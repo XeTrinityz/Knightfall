@@ -105,24 +105,30 @@ BATMOBILE > DRIVING
 - REPAIR AND RECHARGE. Fixes the car and fills its weapon power.
 - AUTOPILOT TO WAYPOINT, AUTOPILOT TO OBJECTIVE and STOP AUTOPILOT. The car drives itself there along the roads. AUTOPILOT CAN BOOST lets it use the afterburner.
 - REMOTE CONTROL. Drives the car by remote without the gadget. REMOTE CONTROL IN FIGHTS keeps it going when enemies come for Batman.
+
+BATMOBILE > TUNING
+
 - INDESTRUCTIBLE, EMP-PROOF and SELF-RIGHTING.
-- UNLIMITED BOOST, ENGINE POWER and TYRE GRIP.
+- UNLIMITED BOOST, ENGINE POWER, TYRE GRIP and RAM DAMAGE.
 - BATTLE MODE ON ANY SKIN. Battle mode, with its weapons, winch and camera, on the skins the game won't let transform. The car keeps its shape.
 - BATTLE MODE SPEED and DOUBLE DODGE.
 - BATMOBILE JUMP and JUMP POWER. The jump has its own key, J by default.
 - AIR GRAVITY, AIR CONTROL and MAX SUPER EJECT.
-- SPEEDOMETER, SPEED UNITS, SPEEDOMETER POSITION, DRIVING STATS and RESET DRIVING STATS. A readout with your speed, armour, weapon power and boost or autopilot. It floats beside the Batmobile and moves with it, or stays in a corner of the screen. It takes the look of the menu theme.
-- VEHICLE RADAR ON FOOT. The minimap keeps showing drones and tanks after you get out.
 
 BATMOBILE > WEAPONS
 
 - ARM EVERY WEAPON. Fits the car with every battle mode and pursuit weapon, bought or not. They last until a reload or a skin change.
-- UNLIMITED WEAPON POWER, NO COOLDOWNS, NO RELOAD OR OVERHEAT and NO GUN SPREAD.
+- UNLIMITED WEAPON POWER, NO COOLDOWNS, NO RELOAD OR OVERHEAT and NO GUN SPREAD. GUN DAMAGE makes the main gun hit harder.
 - MISSILE BARRAGE SIZE. How many targets a full-power barrage locks on to and how many rockets it fires.
 - INSTANT MISSILE LOCK and PURSUIT MISSILE DAMAGE for the pursuit missile.
 - AUTO COMBAT and AUTO COMBAT RANGE. In battle mode the 60mm cannon fires at drones and a full generator fires a missile barrage at groups. In pursuit the missile fires at the car you have locked on to.
 - SHOOT DOWN MISSILES. Militia missiles homing in on you or the car are shot down.
 - BATMOBILE TAKEDOWN READY. The Batmobile takedown is always charged in fights on foot.
+
+BATMOBILE > DASHBOARD
+
+- SPEEDOMETER, SPEED UNITS, SPEEDOMETER POSITION, DRIVING STATS and RESET DRIVING STATS. A readout with your speed, armour, weapon power and boost or autopilot. It floats beside the Batmobile and moves with it, or stays in a corner of the screen. It takes the look of the menu theme.
+- VEHICLE RADAR ON FOOT. The minimap keeps showing drones and tanks after you get out.
 
 BATMOBILE > SKIN
 

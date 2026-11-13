@@ -13,8 +13,8 @@ static class Skins
     const string SkinPrefix = "Playable_Batmobile";
     const string JokerSkin = "Playable_BatmobileJoker";
 
-    // The car has to stay free this many ticks in a row, so a swap never lands mid-exit.
-    const int SettleTicks = 120;
+    // The car has to stay free this long, so a swap never lands mid-exit.
+    const float SettleSeconds = 2f;
     const double TimeoutSeconds = 20;
 
     enum Step
@@ -30,7 +30,7 @@ static class Skins
     static Step _step;
     static string _pending = "";
     static int _damage;
-    static int _settle;
+    static float _settle;
     static long _since;
 
     public static readonly Choice Skin = new(
@@ -44,12 +44,18 @@ static class Skins
     public static readonly Command Apply = new(
         "batmobile.skin.apply", "APPLY SKIN",
         "Puts the picked skin on the Batmobile once nobody is in it. Get out first if you are driving.",
-        Start);
+        Start)
+    {
+        Block = static () => Skin.CurrentId.Length == 0 ? "NO SKIN TO APPLY" : null,
+    };
 
     public static readonly Command Cancel = new(
         "batmobile.skin.cancel", "CANCEL SKIN CHANGE",
         "Stops a skin change that is still waiting for the Batmobile to be free.",
-        () => _step == Step.Idle ? Outcome.Unchanged("NOT WAITING") : Stop(Outcome.Done("CANCELLED")));
+        () => _step == Step.Idle ? Outcome.Unchanged("NOT WAITING") : Stop(Outcome.Done("CANCELLED")))
+    {
+        Block = static () => _step == Step.Idle ? "NOTHING WAITING" : null,
+    };
 
     static void Refresh()
     {
@@ -139,7 +145,7 @@ static class Skins
 
         _pending = resolved;
         _damage = current.DamageLevel;
-        _settle = 0;
+        _settle = 0f;
         _step = Step.WaitingForFree;
         _since = Stopwatch.GetTimestamp();
         return Outcome.Done(World.Driving is not null ? "GET OUT" : "APPLYING");
@@ -179,7 +185,7 @@ static class Skins
 
                 info.PersistentData.SetPlayableBatmobile(NameOf(_pending));
                 _step = Step.WaitingToSwap;
-                _settle = 0;
+                _settle = 0f;
                 _since = Stopwatch.GetTimestamp();
                 return;
 
@@ -217,8 +223,8 @@ static class Skins
     {
         var car = info.GetBatmobile();
         var free = car is not { IsValid: true } || (controller.Pawn != car && car.Driver is null);
-        _settle = free ? _settle + 1 : 0;
-        return _settle >= SettleTicks;
+        _settle = free ? _settle + World.Delta : 0f;
+        return _settle >= SettleSeconds;
     }
 
     static bool TimedOut() => (Stopwatch.GetTimestamp() - _since) / (double)Stopwatch.Frequency > TimeoutSeconds;
@@ -245,7 +251,7 @@ static class Skins
     {
         _step = Step.Idle;
         _pending = "";
-        _settle = 0;
+        _settle = 0f;
     }
 
     public static void Release() => Reset();

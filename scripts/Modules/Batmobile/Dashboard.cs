@@ -6,8 +6,7 @@ using BmSDK.BmGame;
 
 namespace Knightfall;
 
-// BATMOBILE > DRIVING, the DASHBOARD rows. The speedometer is drawn by the theme, from what Fill
-// puts in its view.
+// BATMOBILE > DASHBOARD. The speedometer is drawn by the theme, from what Fill puts in its view.
 static class Dashboard
 {
     // A unit is a centimetre.
@@ -61,6 +60,7 @@ static class Dashboard
         new[] { ("mph", "MPH"), ("kmh", "KM/H") })
     {
         Preference = true,
+        Block = static () => Speedometer.On ? null : "SPEEDOMETER IS OFF",
     };
 
     // In the same order as DashSpot.
@@ -70,6 +70,7 @@ static class Dashboard
         new[] { ("on_car", "ON THE CAR"), ("middle_right", "MIDDLE RIGHT"), ("middle_left", "MIDDLE LEFT"), ("bottom_left", "BOTTOM LEFT"), ("bottom_right", "BOTTOM RIGHT") })
     {
         Preference = true,
+        Block = static () => Speedometer.On ? null : "SPEEDOMETER IS OFF",
     };
 
     public static readonly Toggle Stats = new(
@@ -77,6 +78,7 @@ static class Dashboard
         "Adds your best speed and longest jump since the game started to the speedometer.")
     {
         Preference = true,
+        Block = static () => Speedometer.On ? null : "SPEEDOMETER IS OFF",
     };
 
     public static readonly Command ResetStats = new(
@@ -92,7 +94,11 @@ static class Dashboard
         Restore = ReleaseRadar,
     };
 
-    public static readonly Catalog.Section Section = new("DASHBOARD", Speedometer, Units, Position, Stats, ResetStats, RadarOnFoot);
+    public static readonly Catalog.Section[] Sections =
+    {
+        new("SPEEDOMETER", Speedometer, Units, Position, Stats, ResetStats),
+        new("RADAR", RadarOnFoot),
+    };
 
     // The car to show the speedometer for, or null when it shouldn't show.
     public static RVehicleBatmobileBase? Showing()

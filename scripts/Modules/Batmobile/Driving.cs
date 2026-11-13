@@ -3,12 +3,15 @@
 using System.Numerics;
 using BmSDK;
 using BmSDK.BmGame;
+using BmSDK.Engine;
+using PickupMode = BmSDK.BmGame.RVehicleBatmobileBase.EBatmobilePickupMode;
 using TyreType = BmSDK.Engine.SVehicleWheel.ETyreType;
 
 namespace Knightfall;
 
-// BATMOBILE > DRIVING. The car's physics is native, so speed acts on its body directly, the way
-// the game's own Batmobile cheats do, and the native tuning values are only scaled.
+// BATMOBILE > DRIVING and TUNING. The car's physics is native, so speed acts on its body
+// directly, the way the game's own Batmobile cheats do, and the native tuning values are only
+// scaled.
 static class Driving
 {
     const float GetInReach = 1400f;
@@ -24,16 +27,22 @@ static class Driving
     const float RightGapSeconds = 2f;
     const float RightLift = 150f;
 
+    // The game's own grip for each tyre, which TYRE GRIP multiplies.
+    const float RoadGrip = 0.8f;
+    const float BattleGrip = 1f;
+
     static readonly Held<RVehicleBatmobileBase, bool> EmpVulnerable = new("EMP", car => car.VulnerableToEMP, (car, on) => car.VulnerableToEMP = on);
     static readonly Held<RVehicleBatmobileBase, bool> CarBoost = new("unlimited boost", car => car.InfiniteBoost, (car, on) => car.InfiniteBoost = on);
     static readonly Held<RVehicleSimBatmobile, bool> SimBoost = new("unlimited boost", sim => sim.bInfiniteBoost, (sim, on) => sim.bInfiniteBoost = on);
     static readonly Held<RVehicleSimBatmobile, float> TopSpeed = new("top speed", sim => sim.ScaleTopSpeed, (sim, speed) => sim.ScaleTopSpeed = speed);
     static readonly Held<RVehicleSimBatmobile, float> BattleTopSpeed = new("battle mode speed", sim => sim.BattleModeMaxSpeed, (sim, speed) => sim.BattleModeMaxSpeed = speed);
     static readonly Held<RVehicleBatmobileBase, bool> DodgeUpgrade = new("double dodge", car => car.bDoubleDodgeUpgrade, (car, on) => car.bDoubleDodgeUpgrade = on);
+    static readonly Held<RVehicleBatmobileBase, float> RamMost = new("ram damage", car => car.ImpactMaxDamage, (car, damage) => car.ImpactMaxDamage = damage);
 
     // Zero means the game doesn't use the value, so it is left at zero.
     static readonly Func<float, float> RaisedTopSpeed = was => was > 0.01f ? was * (float)EnginePower!.Value : was;
     static readonly Func<float, float> RaisedBattleSpeed = was => was > 0.01f ? was * (float)BattleSpeed!.Value : was;
+    static readonly Func<float, float> RaisedRam = was => was * (float)RamDamage!.Value;
 
     static nint _wholeCar;
     static int _wholeHealth;
@@ -44,22 +53,34 @@ static class Driving
     public static readonly Command CallCar = new(
         "batmobile.driving.call", "CALL BATMOBILE",
         "Calls the Batmobile to you, or gets you in if it is parked close by.",
-        Call);
+        Call)
+    {
+        Block = static () => World.Driving is null ? null : "IN THE BATMOBILE",
+    };
 
     public static readonly Command Recover = new(
         "batmobile.driving.recover", "RECOVER BATMOBILE",
         "Puts a stuck or flipped Batmobile back on the road.",
-        RecoverCar);
+        RecoverCar)
+    {
+        Block = Car.Missing,
+    };
 
     public static readonly Command ForceExit = new(
         "batmobile.driving.force_exit", "FORCE EXIT",
         "Gets you out of the Batmobile when the game won't let you, like a mission that wants a prisoner delivered first.",
-        Exit);
+        Exit)
+    {
+        Block = Car.NotDriving,
+    };
 
     public static readonly Command Repair = new(
         "batmobile.driving.repair", "REPAIR AND RECHARGE",
         "Fixes all of the Batmobile's damage and fills its weapon power.",
-        RepairCar);
+        RepairCar)
+    {
+        Block = Car.Missing,
+    };
 
     public static readonly Toggle Indestructible = new(
         "batmobile.driving.indestructible", "INDESTRUCTIBLE",
@@ -102,11 +123,20 @@ static class Driving
 
     public static readonly Slider TyreGrip = new(
         "batmobile.driving.tyre_grip", "TYRE GRIP",
-        "How hard the tyres hold the road. Lower slides and drifts more, higher corners flat.",
+        "How hard the tyres hold the road. Lower slides and drifts more, higher corners flat. 1X is the game's own.",
         min: 0.25, max: 3, step: 0.25, value: 1, unit: "X")
     {
         Tick = ApplyGrip,
         Restore = ResetGrip,
+    };
+
+    public static readonly Slider RamDamage = new(
+        "batmobile.driving.ram_damage", "RAM DAMAGE",
+        "Multiplies the damage the Batmobile does when it rams militia vehicles and getaway cars. 1X is the game's.",
+        min: 1, max: 10, step: 0.5, value: 1, unit: "X")
+    {
+        Tick = HoldRam,
+        Restore = RamMost.Release,
     };
 
     public static readonly Slider BattleSpeed = new(
@@ -131,11 +161,14 @@ static class Driving
         new("ACCESS", CallCar, Recover, ForceExit, Repair),
         new("AUTOPILOT", Autopilot.ToWaypoint, Autopilot.ToObjective, Autopilot.Stop, Autopilot.CanBoost),
         new("REMOTE CONTROL", Remote.Drive, Remote.InFights),
+    };
+
+    public static readonly Catalog.Section[] Tuning =
+    {
         new("PROTECTION", Indestructible, EmpProof, SelfRighting),
-        new("PERFORMANCE", UnlimitedBoost, EnginePower, TyreGrip),
+        new("PERFORMANCE", UnlimitedBoost, EnginePower, TyreGrip, RamDamage),
         new("BATTLE MODE", BattleAnySkin.Option, BattleSpeed, DoubleDodge),
         new("STUNTS", Stunts.Jump, Stunts.JumpPower, Stunts.AirGravity, Stunts.AirControl, Stunts.MaxEject),
-        Dashboard.Section,
     };
 
     static Outcome Call()
@@ -150,26 +183,41 @@ static class Driving
             return Outcome.Unchanged("IN THE CAR");
         }
 
-        if (Car.Find() is { } car && car.Driver is null && Vector3.Distance(car.Location, player.Location) <= GetInReach && car.CanEnterVehicle(player))
+        var car = Car.Find();
+
+        // A car the story is holding or driving stays the story's.
+        if (car is not null && (car.IsStolen || car.bControlledBySeqAct))
+        {
+            return Outcome.Failed("BUSY");
+        }
+
+        if (car is not null && (car.BatmobileHitWater || car.BatmobileAboutToHitWater))
+        {
+            return Outcome.Failed("IN THE WATER");
+        }
+
+        if (car is not null && car.Driver is null && Vector3.Distance(car.Location, player.Location) <= GetInReach && car.CanEnterVehicle(player))
         {
             car.GetInBatmobile(player);
             return Outcome.Done("GETTING IN");
         }
 
-        return controller.CallBatmobile() != RVehicleBatmobileBase.EBatmobilePickupMode.BPM_None
-            ? Outcome.Done("ON ITS WAY")
-            : Outcome.Failed("CAN'T COME");
+        return controller.CallBatmobile() switch
+        {
+            PickupMode.BPM_None or PickupMode.BPM_Unavailable => Outcome.Failed("CAN'T COME"),
+            PickupMode.BPM_BlockedByHeavyTanks => Outcome.Failed("TANKS NEARBY"),
+            _ => Outcome.Done("ON ITS WAY"),
+        };
     }
 
     static Outcome RecoverCar()
     {
-        if (Car.Find() is null)
+        if (Car.Find() is not { } car)
         {
             return Outcome.Failed("NO CAR");
         }
 
-        Game.GetCheatManager().RescueBatmobile();
-        return Outcome.Done();
+        return car.RescueMe(false) ? Outcome.Done() : Outcome.Failed("REFUSED");
     }
 
     // The game's block on getting out is only checked when the exit button is pressed. A forced
@@ -194,6 +242,22 @@ static class Driving
         car.GiveMaxHealth();
         car.GiveMaxEnergy();
         return Outcome.Done();
+    }
+
+    // Every hit on the car comes through here. With INDESTRUCTIBLE on it is passed on with no
+    // damage, the way the game's own god mode does it, so one big hit can't destroy the car
+    // between two ticks.
+    [Redirect(typeof(RVehicleBatmobileBase), nameof(RVehicleBatmobileBase.TakeDamage))]
+    static void TakeDamage(RVehicleBatmobileBase self, int damage, Controller instigatedBy, Vector3 hitLocation, Vector3 momentum, Class damageType, Actor.FTraceHitInfo hitInfo, Actor damageCauser)
+    {
+        try
+        {
+            self.TakeDamage(Indestructible.On ? 0 : damage, instigatedBy, hitLocation, momentum, damageType, hitInfo, damageCauser);
+        }
+        catch (Exception error)
+        {
+            Log.Error("driving.hit", "A hit on the Batmobile failed part way", error);
+        }
     }
 
     // Armour upgrades add to the base health, one amount per level.
@@ -235,9 +299,11 @@ static class Driving
 
     static void RightWhenTipped()
     {
-        if (World.Driving is not { } car || Car.Sim(car) is { Abseiling: true })
+        if (World.Driving is not { } car || Car.Sim(car) is { Abseiling: true } || car.MatineeControlRefCount != 0 ||
+            (car.bControlledBySeqAct && !Autopilot.Active))
         {
-            // The winch can hold the car on a wall with no wheels down. That is left to the game.
+            // A scene poses the car itself, and the winch can hold it on a wall with no wheels
+            // down. Both are left to the game.
             _tippedFor = 0f;
             return;
         }
@@ -330,9 +396,17 @@ static class Driving
     static void SetGrip(double scale)
     {
         var mod = (float)scale;
-        RVehicleBatmobileBase.DebugSetTireFrictionMod(TyreType.ETyreType_Batmobile, mod);
-        RVehicleBatmobileBase.DebugSetTireFrictionMod(TyreType.ETyreType_BatmobileBattleMode, mod);
+        RVehicleBatmobileBase.DebugSetTireFrictionMod(TyreType.ETyreType_Batmobile, RoadGrip * mod);
+        RVehicleBatmobileBase.DebugSetTireFrictionMod(TyreType.ETyreType_BatmobileBattleMode, BattleGrip * mod);
         _gripApplied = scale;
+    }
+
+    static void HoldRam()
+    {
+        if (Car.Find() is { } car)
+        {
+            RamMost.Hold(car, RaisedRam);
+        }
     }
 
     static void HoldBattleSpeed()
