@@ -54,8 +54,17 @@ static class Riots
     static readonly Held<RRiotBrain, int> BreakAt = new(
         "rioter breaks at", brain => brain.MilitiaWillBreakThreshold, (brain, count) => brain.MilitiaWillBreakThreshold = count);
 
+    // The game's own two scales on how many rioters it lets out at once, one for on foot and one
+    // for in the Batmobile. Its code multiplies the most rioters by whichever fits.
+    static readonly Held<RPopulationManager, float> SizeOnFoot = new(
+        "riot size on foot", people => people.NonBatmobilePawnCountMultiplier, (people, scale) => people.NonBatmobilePawnCountMultiplier = scale);
+
+    static readonly Held<RPopulationManager, float> SizeDriving = new(
+        "riot size driving", people => people.BatmobilePawnCountMultiplier, (people, scale) => people.BatmobilePawnCountMultiplier = scale);
+
     static float _checkedAt = -1f;
     static float _fightCheckedAt = -1f;
+    static float _sizeCheckedAt = -1f;
 
     public static readonly Toggle Everywhere = new(
         "world.city.riots_everywhere", "RIOTS EVERYWHERE",
@@ -134,7 +143,24 @@ static class Riots
         },
     };
 
-    public static readonly Catalog.Section Section = new("RIOTS", Everywhere, FightYou);
+    public static readonly Slider Size = new(
+        "world.city.riot_size", "RIOT SIZE",
+        "How many rioters the city has out at once. Lower thins the riots out, higher fills them as far as the game has thugs to spare. Riots already going change as they come and go.",
+        min: 0.25, max: 2, step: 0.25, value: 1, unit: "X")
+    {
+        Tick = () => Each(ref _sizeCheckedAt, people =>
+        {
+            SizeOnFoot.Hold(people, was => was * (float)Size!.Value);
+            SizeDriving.Hold(people, was => was * (float)Size!.Value);
+        }),
+        Restore = () =>
+        {
+            SizeOnFoot.Release();
+            SizeDriving.Release();
+        },
+    };
+
+    public static readonly Catalog.Section Section = new("RIOTS", Everywhere, Size, FightYou);
 
     static void Each(ref float checkedAt, Action<RPopulationManager> hold)
     {

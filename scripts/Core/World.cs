@@ -31,6 +31,22 @@ static class World
     public static int Epoch { get; private set; }
 
     static WorldInfo? _seen;
+    static bool? _inCity;
+
+    // The open city's own map. A story pack or a challenge map is a world of its own, and things
+    // placed for the city don't belong in it. Asked once per world.
+    public static bool InCity
+    {
+        get
+        {
+            if (_inCity is null && _seen is { IsValid: true } world)
+            {
+                _inCity = world.GetPathName(null).StartsWith("BatEntry.", StringComparison.OrdinalIgnoreCase);
+            }
+
+            return _inCity ?? false;
+        }
+    }
 
     // Runs every drawn frame. A new world took the last one's player and controller with it, so
     // what was looked up in the last tick is dropped before anything drawn can ask for it.
@@ -57,6 +73,7 @@ static class World
             }
 
             _seen = world;
+            _inCity = null;
         }
     }
 

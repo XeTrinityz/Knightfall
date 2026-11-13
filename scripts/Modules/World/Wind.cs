@@ -23,7 +23,7 @@ static class Wind
 
     static readonly Dictionary<nint, Entry> Sources = new();
     static float _lookedAt = -1f;
-    static string _applied = "";
+    static int? _applied;
 
     public static readonly Slider Strength = new(
         "world.weather.wind_strength", "WIND STRENGTH",
@@ -55,7 +55,7 @@ static class Wind
             return;
         }
 
-        var wanted = $"{Strength.ValueText},{Direction.ValueText},{Gusts.ValueText}";
+        var wanted = HashCode.Combine(Strength.Value, Direction.Value, Gusts.Value);
         if (wanted == _applied && MathF.Abs(World.Now - _lookedAt) < LookEvery)
         {
             return;
@@ -83,7 +83,7 @@ static class Wind
         }
 
         Sources.Clear();
-        _applied = "";
+        _applied = null;
     }
 
     static void Apply(WindDirectionalSourceComponent source)

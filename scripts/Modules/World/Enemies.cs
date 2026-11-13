@@ -43,7 +43,7 @@ static class Enemies
 
     public static readonly Command KnockOut = new(
         "world.enemies.knock_out_all", "KNOCK OUT ALL ENEMIES",
-        "Takes down every enemy at once. One you can interrogate is always left standing, so the story can't get stuck.",
+        "Takes down every enemy at once. One you can interrogate is left standing while there are others to take down, so the story can't get stuck.",
         KnockOutAll);
 
     public static readonly Command KnockOutAllButOne = new(
@@ -53,12 +53,12 @@ static class Enemies
 
     public static readonly Command RemoveWeapons = new(
         "world.enemies.remove_weapons", "REMOVE ALL WEAPONS",
-        "Clears every gun and melee weapon off the area, in hands or on the ground.",
+        "Clears every gun and melee weapon off the area, in hands or on the ground. Armed thugs in a stealth room keep theirs.",
         Unarm);
 
     public static readonly Command Disarm = new(
         "world.enemies.disarm", "DISARM ENEMIES",
-        "Enemies near you drop what they're holding.",
+        "Enemies near you drop what they're holding, and can pick it up again. REMOVE ALL WEAPONS takes them away for good.",
         () => DisarmNear(Crowd.IsEnemy));
 
     public static readonly Command Revive = new(
@@ -90,20 +90,22 @@ static class Enemies
         "Destroys every militia drone, tank and APC there is.",
         DestroyAll);
 
+    // CONTROL and BEHAVIOUR hold while they're on. INSTANT is everything that happens once.
     public static readonly Catalog.Section[] Sections =
     {
-        new("CONTROL", Freezer.Enemies.Option, NoAttacks, EnemyHolds.BodySize, EnemyHolds.Healthy, Disarm, Revive),
+        new("CONTROL", Freezer.Enemies.Option, NoAttacks, EnemyHolds.BodySize, EnemyHolds.Healthy),
         Crowd.EnemySection,
         new("BEHAVIOUR", EnemyHolds.NewHealth, EnemyHolds.Aggressive, EnemyHolds.NoRevives, EnemyHolds.NoElectrifying, EnemyHolds.NoDynamicDifficulty),
         new("MILITIA", Patrols, DestroyVehicles, Militia.HackTanks, Militia.HackTime, Militia.ReleaseTanks, Militia.DisableTurrets, Militia.DestroySentries),
-        new("INSTANT", KnockOut, KnockOutAllButOne, RemoveWeapons),
+        new("INSTANT", KnockOut, KnockOutAllButOne, Disarm, RemoveWeapons, Revive),
     };
 
     // WORLD > FRIENDLIES, the same rows for police, fire crews and anyone else not against you.
     public static readonly Catalog.Section[] FriendlySections =
     {
-        new("CONTROL", Freezer.Friendlies.Option, EnemyHolds.FriendlyBodySize, EnemyHolds.FriendliesHealthy, DisarmFriendlies, ReviveFriendlies),
+        new("CONTROL", Freezer.Friendlies.Option, EnemyHolds.FriendlyBodySize, EnemyHolds.FriendliesHealthy),
         new("MOVE", Crowd.ToNearestFriendly, Crowd.PullFriendlies, Crowd.LaunchFriendlies, Crowd.Range, Crowd.Count),
+        new("INSTANT", DisarmFriendlies, ReviveFriendlies),
     };
 
     static void HoldNoAttacks()
@@ -142,7 +144,8 @@ static class Enemies
             return Outcome.NoPlayer;
         }
 
-        if (game.AIManager is not { IsValid: true } brains)
+        // The game's own cheat holds off while it is saving start points.
+        if (game.bSavingStartPoints || game.AIManager is not { IsValid: true } brains)
         {
             return Outcome.Failed("NOT NOW");
         }

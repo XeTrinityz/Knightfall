@@ -35,6 +35,7 @@ static class Joker
     static readonly Held<RGameInfo, float> Chance5 = new("joker chance 5", game => game.jokerSwappableChance_Ch5, (game, chance) => game.jokerSwappableChance_Ch5 = chance);
     static readonly Held<RGameInfo, float> Chance7 = new("joker chance 7", game => game.jokerSwappableChance_Ch7, (game, chance) => game.jokerSwappableChance_Ch7 = chance);
     static readonly Held<RGameInfo, float> Chance9 = new("joker chance 9", game => game.jokerSwappableChance_Ch9, (game, chance) => game.jokerSwappableChance_Ch9 = chance);
+    static readonly Held<RGameInfo, float>[] Chances = { Chance3, Chance5, Chance7, Chance9 };
     static readonly Held<RGameInfo, float> Cooldown = new("joker cooldown", game => game.jokerSwappableCooldownTime, (game, seconds) => game.jokerSwappableCooldownTime = seconds);
     static readonly Held<RGameInfo, float> Interval = new("joker reveal interval", game => game.onScreenJokerfy_MinInterval, (game, seconds) => game.onScreenJokerfy_MinInterval = seconds);
 
@@ -240,7 +241,7 @@ static class Joker
         }
 
         var times = (float)Sightings.Value;
-        foreach (var chance in new[] { Chance3, Chance5, Chance7, Chance9 })
+        foreach (var chance in Chances)
         {
             chance.Hold(game, was => Math.Clamp(was * times, 0f, 1f));
         }
@@ -251,10 +252,11 @@ static class Joker
 
     static void LetSightings()
     {
-        Chance3.Release();
-        Chance5.Release();
-        Chance7.Release();
-        Chance9.Release();
+        foreach (var chance in Chances)
+        {
+            chance.Release();
+        }
+
         Cooldown.Release();
         Interval.Release();
     }

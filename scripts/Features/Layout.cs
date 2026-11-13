@@ -72,7 +72,7 @@ static class Layout
             .Add("FRIENDLIES", Enemies.FriendlySections)
             .Add("MARKERS", Markings.Sections.Append(Threats.Section).ToArray())
             .Add("ATMOSPHERE", Atmosphere.Sections)
-            .Add("WEATHER", Rain.Section, Snow.Section, Lightning.Section, Wind.Section);
+            .Add("WEATHER", Weather.Section, Rain.Section, Snow.Section, Lightning.Section, Wind.Section);
 
         Catalog.Background("world.city.game_speed", WorldTime.HoldSpeed, WorldTime.ReleaseSpeed);
         Catalog.Background("world.city.spawns", Spawns.Watch, Spawns.Forget);

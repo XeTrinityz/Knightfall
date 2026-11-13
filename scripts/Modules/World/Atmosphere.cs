@@ -10,9 +10,10 @@ using PostSettings = BmSDK.Engine.PostProcessVolume.FPostProcessSettings;
 namespace Knightfall;
 
 // WORLD > ATMOSPHERE. Every row but SKY changes the post-process volumes, the boxes that set the
-// look of each part of the city, plus the world's own default look. CitySky puts up the skies. This is the only place that writes
-// them: it keeps each one's own values once and works every row out from those in one pass, so
-// the rows can't undo each other. Each gets back exactly what it had.
+// look of each part of the city, plus the world's own default look. CitySky puts up the skies.
+// This is the only place that writes them: it keeps each one's own values once and works every
+// row out from those in one pass, so the rows can't undo each other. Each gets back exactly what
+// it had.
 static class Atmosphere
 {
     const float Metre = Teleport.UnitsPerMetre;
@@ -122,7 +123,28 @@ static class Atmosphere
         Rgba(Highs, 1.2f, 1.2f, 1f, 1f), Rgba(Mids, 0.42f, 0.4f, 0.4f, 1f), Rgba(Lows, 0f, 0f, 0f, 1f), Set(LutOn, 1f));
 
     // Per volume, and one for the world's default: what the game had, and what was last written.
-    sealed record Entry(GameObject Owner, float[] Was, float[] Wrote, Texture? WasLut, Texture? WroteLut);
+    // The two lists are written over in place, so a pass makes nothing new for a volume it knows.
+    sealed class Entry
+    {
+        public Entry(GameObject owner, float[] now, Texture? lut)
+        {
+            Owner = owner;
+            Was = (float[])now.Clone();
+            Wrote = (float[])now.Clone();
+            WasLut = lut;
+            WroteLut = lut;
+        }
+
+        public GameObject Owner { get; }
+
+        public float[] Was { get; }
+
+        public float[] Wrote { get; }
+
+        public Texture? WasLut { get; set; }
+
+        public Texture? WroteLut { get; set; }
+    }
 
     // The game's own colour grades, all cooked into the always loaded BmGame package: its photo
     // mode filters, and two grades from story areas.
@@ -146,9 +168,18 @@ static class Atmosphere
     static readonly Texture?[] GradeTextures = new Texture?[Grades.Length];
     static Texture? _eraGrade;
 
+    // The two grades a pass may hand out, looked up once at its start.
+    static Texture? _era;
+    static Texture? _picked;
+
     static readonly Dictionary<nint, Entry> Held = new();
     static float _lookedAt = -1f;
-    static string _applied = "";
+    static int? _applied;
+
+    // One volume's values while a pass works on it: as read, with the era under them, and as wanted.
+    static float[] _now = Array.Empty<float>();
+    static float[] _from = Array.Empty<float>();
+    static float[] _want = Array.Empty<float>();
 
     public static readonly Toggle Era = new(
         "world.atmosphere.pre_scarecrow_era", "PRE-SCARECROW ERA",
@@ -176,7 +207,10 @@ static class Atmosphere
     public static readonly Slider TintStrength = new(
         "world.atmosphere.tint_strength", "TINT STRENGTH",
         "How strongly TINT colours the picture.",
-        min: 5, max: 100, step: 5, value: 50, unit: "%");
+        min: 5, max: 100, step: 5, value: 50, unit: "%")
+    {
+        Block = static () => Tint.Value > 0 ? null : "TINT IS OFF",
+    };
 
     public static readonly Slider Saturation = new(
         "world.atmosphere.saturation", "SATURATION",
@@ -218,11 +252,18 @@ static class Atmosphere
         "Adds film grain to the picture. GAME leaves it as the game has it.",
         min: 0, max: 100, step: 5, value: 0, unit: "%", zero: "GAME");
 
+    // TINT STRENGTH does nothing by itself, so it only counts towards a change.
     static readonly Feature[] All = { Era, Grade, Tint, Saturation, Exposure, Bloom, FogThickness, FogDistance, FogHeight, MotionBlur, Grain };
+    static readonly Feature[] Stamped = All.Append(TintStrength).ToArray();
+
+    public static readonly Command Reset = new(
+        "world.atmosphere.reset", "RESET ATMOSPHERE",
+        "Puts every row on this tab back to the game's look.",
+        static () => Weather.Back(Stamped.Append(CitySky.Sky).ToArray()));
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("SCENE", Era, CitySky.Sky),
+        new("SCENE", Era, CitySky.Sky, Reset),
         new("GRADE", Grade, Tint, TintStrength, Saturation),
         new("LIGHT", Exposure, Bloom),
         new("FOG", FogThickness, FogDistance, FogHeight),
@@ -233,8 +274,13 @@ static class Atmosphere
     // volumes and for values the game wrote itself.
     public static void Tick()
     {
-        var wanted = Wanted();
-        if (wanted.Length == 0)
+        var any = false;
+        foreach (var row in All)
+        {
+            any |= !row.IsDefault;
+        }
+
+        if (!any)
         {
             if (Held.Count > 0)
             {
@@ -244,14 +290,24 @@ static class Atmosphere
             return;
         }
 
-        var changed = wanted != _applied;
-        if (!changed && MathF.Abs(World.Now - _lookedAt) < LookEvery)
+        var wanted = Feature.Stamp(Stamped);
+        if (wanted == _applied && MathF.Abs(World.Now - _lookedAt) < LookEvery)
         {
             return;
         }
 
         _lookedAt = World.Now;
         _applied = wanted;
+        if (_now.Length != Fields.Count)
+        {
+            _now = new float[Fields.Count];
+            _from = new float[Fields.Count];
+            _want = new float[Fields.Count];
+        }
+
+        // The era's grade comes with the package its sky loads, so it can turn up a pass late.
+        _era = EraTexture();
+        _picked = PickedGrade();
         foreach (var volume in Game.FindObjects<PostProcessVolume>())
         {
             if (volume.IsValid && !volume.IsClassDefaultObject)
@@ -286,56 +342,43 @@ static class Atmosphere
         }
 
         Held.Clear();
-        _applied = "";
+        _applied = null;
         _eraGrade = null;
-    }
-
-    // The rows' values as text, empty when every row is back to normal. The era's grade only
-    // loads with its sky, so it's part of the text too.
-    static string Wanted()
-    {
-        var any = false;
-        foreach (var row in All)
-        {
-            any |= !row.IsDefault;
-        }
-
-        if (!any)
-        {
-            return "";
-        }
-
-        return string.Join(",", Array.ConvertAll(All, row => row.ValueText)) + "," + TintStrength.ValueText + "," + (EraTexture() is null ? "-" : "+");
+        _era = null;
+        _picked = null;
     }
 
     static void Apply(GameObject owner, ref PostSettings settings)
     {
-        var now = Read(ref settings);
+        Read(ref settings, _now);
         var nowLut = Usable(settings.ColorGrading_LookupTable);
         if (!Held.TryGetValue(owner.Ptr, out var entry) || !ReferenceEquals(entry.Owner, owner))
         {
-            entry = new Entry(owner, now, now, nowLut, nowLut);
+            entry = new Entry(owner, _now, nowLut);
+            Held[owner.Ptr] = entry;
         }
-        else if (!Same(now, entry.Wrote) || !ReferenceEquals(nowLut, entry.WroteLut))
+        else if (!Same(_now, entry.Wrote) || !ReferenceEquals(nowLut, entry.WroteLut))
         {
             // The game set its own look on this one, so that's the new one to go back to.
-            entry = entry with { Was = now, WasLut = nowLut };
+            _now.CopyTo(entry.Was, 0);
+            entry.WasLut = nowLut;
         }
 
-        var want = Compose(entry.Was);
-        var wantLut = GradeFor(entry.WasLut, want);
-        if (!Same(now, want) || !ReferenceEquals(nowLut, wantLut))
+        Compose(entry.Was, _from, _want);
+        var wantLut = GradeFor(entry.WasLut, _want);
+        if (!Same(_now, _want) || !ReferenceEquals(nowLut, wantLut))
         {
-            Write(ref settings, want, wantLut);
+            Write(ref settings, _want, wantLut);
         }
 
-        Held[owner.Ptr] = entry with { Wrote = want, WroteLut = wantLut };
+        _want.CopyTo(entry.Wrote, 0);
+        entry.WroteLut = wantLut;
     }
 
     // The era's look replaces the volume's own as the base, and every other row works on top.
-    static float[] Compose(float[] was)
+    static void Compose(float[] was, float[] from, float[] to)
     {
-        var from = (float[])was.Clone();
+        was.CopyTo(from, 0);
         if (Era.On)
         {
             foreach (var (at, value) in EraLook)
@@ -344,7 +387,7 @@ static class Atmosphere
             }
         }
 
-        var to = (float[])from.Clone();
+        from.CopyTo(to, 0);
 
         to[Exposure_] = from[Exposure_] + (float)Exposure.Value;
 
@@ -404,8 +447,6 @@ static class Atmosphere
             to[TintColour + 2] = (plain ? 1f : from[TintColour + 2]) * (1f + (b - 1f) * k);
             to[TintOn] = 1f;
         }
-
-        return to;
     }
 
     // The grade texture to use. GAME keeps the volume's own, or the era's during the era, and
@@ -415,16 +456,23 @@ static class Atmosphere
         var pick = Grade.Index;
         if (pick == 0)
         {
-            return Era.On && EraTexture() is { } era ? era : was;
+            return _era ?? was;
         }
 
         want[LutOn] = 1f;
-        if (pick < FirstGrade)
+        return pick < FirstGrade ? null : _picked ?? was;
+    }
+
+    // The texture of the grade COLOUR GRADE is on, or null for GAME, NONE and one that isn't
+    // loaded.
+    static Texture? PickedGrade()
+    {
+        var index = Grade.Index - FirstGrade;
+        if (index < 0)
         {
             return null;
         }
 
-        var index = pick - FirstGrade;
         if (GradeTextures[index] is not { IsValid: true })
         {
             GradeTextures[index] = Game.FindObject<Texture>(Grades[index].Path);
@@ -434,7 +482,7 @@ static class Atmosphere
             }
         }
 
-        return GradeTextures[index] is { IsValid: true } grade ? grade : was;
+        return GradeTextures[index] is { IsValid: true } grade ? grade : null;
     }
 
     // The era's grade comes with the chapter package its sky loads.
@@ -455,15 +503,12 @@ static class Atmosphere
 
     static Texture? Usable(Texture? texture) => texture is { IsValid: true } ? texture : null;
 
-    static float[] Read(ref PostSettings settings)
+    static void Read(ref PostSettings settings, float[] at)
     {
-        var at = new float[Fields.Count];
         for (var i = 0; i < at.Length; i++)
         {
             at[i] = Fields[i].Get(ref settings);
         }
-
-        return at;
     }
 
     static void Write(ref PostSettings settings, float[] at, Texture? lut)

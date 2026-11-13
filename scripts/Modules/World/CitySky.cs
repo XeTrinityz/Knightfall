@@ -11,7 +11,8 @@ namespace Knightfall;
 // sky is cooked into a package of its own. That package is loaded into memory without joining the
 // world, so none of its scripts or people start, and copies of the sky's pieces are placed in the
 // city. The night dome is hidden with the same event the Gordon chapter fires, once the new sky
-// is up. Lightning and rain are held off for the era by their own owners.
+// is up. Both skies are placed for the city, so they only go up in the city's own map. Lightning
+// and rain are held off for the era by their own owners.
 static class CitySky
 {
     sealed record Dome(string Package, string Mesh, string Name, string Needs);
@@ -32,6 +33,7 @@ static class CitySky
         "Puts a different sky over the city. OVERCAST is the GCPD Lockdown sky and needs that DLC. Turning on PRE-SCARECROW ERA puts this back to GAME.",
         new[] { ("game", "GAME"), ("overcast", "OVERCAST") })
     {
+        Block = static () => HasOvercast ? null : "NEEDS GCPD LOCKDOWN",
         Changed = static () =>
         {
             if (Sky!.Index > 0)
@@ -43,6 +45,11 @@ static class CitySky
 
     static readonly List<Actor> Spawned = new();
 
+    // The row asks every frame it is on screen, so the files are only looked for once.
+    static bool? _hasOvercast;
+
+    static bool HasOvercast => _hasOvercast ??= GameFiles.HasPackage(Overcast.Package);
+
     // The world the sky was set up in, and which sky. A new world or a new pick needs it again.
     static WorldInfo? _world;
     static Dome? _up;
@@ -50,7 +57,7 @@ static class CitySky
 
     public static void Tick()
     {
-        var want = Atmosphere.Era.On ? Dusk : Sky.Index == 1 ? Overcast : null;
+        var want = !World.InCity ? null : Atmosphere.Era.On ? Dusk : Sky.Index == 1 && HasOvercast ? Overcast : null;
         if (want is null)
         {
             if (_world is not null)

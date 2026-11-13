@@ -7,7 +7,8 @@ using BmSDK.Engine;
 namespace Knightfall;
 
 // WORLD > ENEMIES, the rows that hold something on every enemy or friendly. One pass over
-// everyone does them all, and each gets back exactly what they had.
+// everyone does them all, and each gets back exactly what they had. Who counts as which is
+// Crowd's call, so a bodyguard is a friendly on every row of both tabs.
 static class EnemyHolds
 {
     // New enemies are picked up this quickly.
@@ -158,7 +159,7 @@ static class EnemyHolds
                 continue;
             }
 
-            if (body is not RPawnVillain thug)
+            if (body is not RPawnVillain thug || Bodyguards.Is(thug))
             {
                 if (friendSize)
                 {

@@ -82,7 +82,7 @@ static class Rain
         "distant rain", far => far.HiddenGame, (far, hidden) => far.SetHidden(hidden));
 
     static float _lookedAt = -1f;
-    static string _applied = "";
+    static int? _applied;
     static bool _silent;
     static float _soundBackAt = -1f;
     static AkParameterName? _rainLevel;
@@ -90,17 +90,26 @@ static class Rain
     public static readonly Slider Amount = new(
         "world.weather.rain_amount", "RAIN AMOUNT",
         "How hard it rains. OFF stops the rain, dries the streets and silences it.",
-        min: 0, max: 4, step: 0.25, value: 1, unit: "X", zero: "OFF");
+        min: 0, max: 4, step: 0.25, value: 1, unit: "X", zero: "OFF")
+    {
+        Block = HeldOff,
+    };
 
     public static readonly Slider Wetness = new(
         "world.weather.street_wetness", "STREET WETNESS",
         "How wet and shiny the streets, roofs and suits look, puddles too. 0X is completely dry.",
-        min: 0, max: 2, step: 0.1, value: 1, unit: "X");
+        min: 0, max: 2, step: 0.1, value: 1, unit: "X")
+    {
+        Block = HeldOff,
+    };
 
     public static readonly Slider Spread = new(
         "world.weather.rain_spread", "RAIN SPREAD",
         "How far round you the rain falls. Smaller packs the drops close round the camera, bigger spreads them out thinner.",
-        min: 0.25, max: 3, step: 0.25, value: 1, unit: "X");
+        min: 0.25, max: 3, step: 0.25, value: 1, unit: "X")
+    {
+        Block = HeldOff,
+    };
 
     public static readonly Toggle NoMist = new(
         "world.weather.no_rain_mist", "NO RAIN MIST",
@@ -115,14 +124,24 @@ static class Rain
     public static readonly Catalog.Section Section = new("RAIN", Amount, Wetness, Spread, NoMist, NoFarRain);
 
     // Rain off, from RAIN AMOUNT, the era or snow.
-    static bool Dry => Amount.Value <= 0 || Atmosphere.Era.On || Snow.Snowing.On;
+    static bool Dry => Amount.Value <= 0 || Atmosphere.Era.On || Snow.Falling;
+
+    // Why the rain rows do nothing right now, for the rows to say.
+    static string? HeldOff() => Snow.Falling ? "IT'S SNOWING" : Atmosphere.Era.On ? "THE ERA IS DRY" : null;
 
     public static void Tick()
     {
         SoundBack();
 
-        var wanted = Wanted();
-        if (wanted.Length == 0)
+        var era = Atmosphere.Era.On;
+        var snow = Snow.Falling;
+        var any = era || snow;
+        foreach (var row in All)
+        {
+            any |= !row.IsDefault;
+        }
+
+        if (!any)
         {
             if (Volumes.Count > 0 || _silent)
             {
@@ -132,6 +151,7 @@ static class Rain
             return;
         }
 
+        var wanted = HashCode.Combine(Feature.Stamp(All), era, snow);
         if (wanted == _applied && MathF.Abs(World.Now - _lookedAt) < LookEvery)
         {
             return;
@@ -189,18 +209,7 @@ static class Rain
             Unsilence();
         }
 
-        _applied = "";
-    }
-
-    static string Wanted()
-    {
-        var any = Atmosphere.Era.On || Snow.Snowing.On;
-        foreach (var row in All)
-        {
-            any |= !row.IsDefault;
-        }
-
-        return any ? string.Join(",", Array.ConvertAll(All, row => row.ValueText)) + (Atmosphere.Era.On ? ",era" : "") + (Snow.Snowing.On ? ",snow" : "") : "";
+        _applied = null;
     }
 
     static void Apply(RainVolume volume)

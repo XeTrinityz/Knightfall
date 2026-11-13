@@ -39,7 +39,7 @@ static class Lightning
         "lightning strength", sky => sky.MaxLightningStrength, (sky, strong) => sky.MaxLightningStrength = strong);
 
     static float _checkedAt = -1f;
-    static string _applied = "";
+    static int? _applied;
 
     public static readonly Command Strike = new(
         "world.weather.lightning_strike", "LIGHTNING STRIKE",
@@ -54,7 +54,10 @@ static class Lightning
     public static readonly Slider Frequency = new(
         "world.weather.lightning_frequency", "LIGHTNING FREQUENCY",
         "How often lightning strikes by itself. 1X is the story's storm. OFF stops it, and the strike rows still work.",
-        min: 0, max: 10, step: 0.5, value: 1, unit: "X", zero: "OFF");
+        min: 0, max: 10, step: 0.5, value: 1, unit: "X", zero: "OFF")
+    {
+        Block = static () => Atmosphere.Era.On ? "NONE IN THE ERA" : null,
+    };
 
     public static readonly Slider Bright = new(
         "world.weather.lightning_brightness", "LIGHTNING BRIGHTNESS",
@@ -68,7 +71,7 @@ static class Lightning
         var era = Atmosphere.Era.On;
         if (!era && Frequency.IsDefault && Bright.IsDefault)
         {
-            if (_applied.Length > 0)
+            if (_applied is not null)
             {
                 Release();
             }
@@ -76,7 +79,7 @@ static class Lightning
             return;
         }
 
-        var wanted = $"{era},{Frequency.ValueText},{Bright.ValueText}";
+        var wanted = HashCode.Combine(era, Frequency.Value, Bright.Value);
         if (wanted == _applied && MathF.Abs(World.Now - _checkedAt) < CheckEvery)
         {
             return;
@@ -131,7 +134,7 @@ static class Lightning
         Wait.Release();
         Brightness.Release();
         Strength.Release();
-        _applied = "";
+        _applied = null;
     }
 
     static RLightningActor? Sky()

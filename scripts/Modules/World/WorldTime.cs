@@ -32,7 +32,7 @@ static class WorldTime
 
     public static readonly Toggle Freeze = new(
         "world.city.freeze_world", "FREEZE WORLD",
-        "Everything but you stops where it is: enemies, bullets, vehicles and the rest of the city. You can still move and fight. Switch it off to let it all go again.",
+        "Everything but you stops where it is: enemies, bullets, vehicles and the rest of the city. You can still move and fight. Switch it off to let it all go again. A load or a restart ends it.",
         saved: false);
 
     // A SLOW TIME row. It is a look setting, so TURN EVERYTHING OFF leaves it alone.
@@ -50,6 +50,15 @@ static class WorldTime
     {
         if (Freeze.On && Game.TryGetWorldInfo(out var world) && world.IsValid)
         {
+            // A world frozen from its first frame can't run what finishes its own load, so the
+            // freeze ends with the world it was set in.
+            if (_frozen is not null && !ReferenceEquals(_frozen, world))
+            {
+                _frozen = null;
+                Freeze.Show(false);
+                return;
+            }
+
             if (!world.bPlayersOnly)
             {
                 world.bPlayersOnly = true;

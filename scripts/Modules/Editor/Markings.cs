@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Globalization;
 using System.Numerics;
 using BmSDK;
 using BmSDK.BmGame;
@@ -45,6 +46,10 @@ static class Markings
 
     static List<Mark> _marks = new();
     static float _lookedAt = -1f;
+
+    // Distances drawn as text, in whole metres. Each is made once, since a card is drawn every
+    // frame.
+    static readonly string?[] Notes = new string?[512];
 
     public static readonly Toggle On = new(
         "world.markers.on", "MARKERS",
@@ -143,7 +148,7 @@ static class Markings
         _lookedAt = World.Now;
         controller.GetPlayerViewPoint(out var eye, out _);
         var marks = new List<Mark>();
-        foreach (var item in Things.Near(eye, (float)Range.Value * Metre, null, kind => Show[(int)kind].On))
+        foreach (var item in Things.Near(eye, (float)Range.Value * Metre, null, Looked))
         {
             if (marks.Count >= (int)Most.Value)
             {
@@ -151,17 +156,26 @@ static class Markings
             }
 
             // Riders show with their vehicle.
-            if (!Show[(int)item.Kind].On || item.Actor.Base is Vehicle)
+            var kind = SideOf(item.Actor, item.Kind);
+            if (!Show[(int)kind].On || item.Actor.Base is Vehicle)
             {
                 continue;
             }
 
             var middle = Things.ShapeOf(item.Actor).Middle;
-            marks.Add(new Mark(item.Actor, item.Kind, mover.FastTrace(middle, eye, Vector3.Zero, false), IsOut(item.Actor)));
+            marks.Add(new Mark(item.Actor, kind, mover.FastTrace(middle, eye, Vector3.Zero, false), IsOut(item.Actor)));
         }
 
         _marks = marks;
     }
+
+    // A bodyguard is a thug to the editor and a friendly here, as on the ENEMIES and FRIENDLIES
+    // tabs. So thugs are looked through for SHOW FRIENDLIES too.
+    static Things.Kind SideOf(Actor actor, Things.Kind kind) =>
+        kind == Things.Kind.Enemy && Bodyguards.Is(actor) ? Things.Kind.Friendly : kind;
+
+    static bool Looked(Things.Kind kind) =>
+        Show[(int)kind].On || (kind == Things.Kind.Enemy && Show[(int)Things.Kind.Friendly].On);
 
     static bool IsOut(Actor actor) => actor switch
     {
@@ -242,7 +256,7 @@ static class Markings
         }
 
         var name = Things.NameOf(mark.Actor);
-        var note = Details.On ? $"{distance / Metre:0} M" : "";
+        var note = Details.On ? Note(distance) : "";
         var health = Details.On && distance <= Near ? HealthOf(mark.Actor) : null;
         var width = MathF.Max(Draw.TextWidth(name, NameSize), Draw.TextWidth(note, NoteSize)) + 12f;
         var height = note.Length > 0 || health is not null ? CardHeight + (health is not null ? 4f : 0f) : CardHeight - 6f;
@@ -271,6 +285,12 @@ static class Markings
             Draw.Rect(6f, height - 3f, width - 12f, 2f, Ink with { A = fade });
             Draw.Rect(6f, height - 3f, (width - 12f) * fill, 2f, color with { A = fade });
         }
+    }
+
+    static string Note(float units)
+    {
+        var metres = Math.Clamp((int)MathF.Round(units / Metre, MidpointRounding.AwayFromZero), 0, Notes.Length - 1);
+        return Notes[metres] ??= metres.ToString(CultureInfo.InvariantCulture) + " M";
     }
 
     // How much health is left, 0 to 1, for people and vehicles.

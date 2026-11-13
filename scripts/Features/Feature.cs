@@ -89,6 +89,20 @@ abstract class Feature
         return age >= seconds ? 0f : (float)(1.0 - age / seconds);
     }
 
+    // A number that changes when any of these rows' values do, for work that is only done again
+    // on a change. Two sets of values can share a number once in a blue moon, so whoever uses it
+    // also has to look again on a timer.
+    public static int Stamp(Feature[] rows)
+    {
+        var stamp = new HashCode();
+        foreach (var row in rows)
+        {
+            stamp.Add(row.ValueText);
+        }
+
+        return stamp.ToHashCode();
+    }
+
     public abstract bool IsDefault { get; }
 
     public abstract string ValueText { get; }
