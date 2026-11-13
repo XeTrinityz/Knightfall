@@ -15,11 +15,21 @@ static class Car
     // Refreshed every game tick for rows that lock themselves, which are asked while drawing.
     public static bool Here { get; private set; }
 
-    public static void Tick() => Here = Find() is not null;
+    public static bool ByRemote { get; private set; }
+
+    public static void Tick()
+    {
+        Here = Find() is not null;
+        ByRemote = World.Driving is { bRemoteDrive: true };
+    }
 
     public static string? Missing() => Here ? null : "NO BATMOBILE HERE";
 
-    public static string? NotDriving() => World.Driving is null ? "NOT IN THE BATMOBILE" : null;
+    // For rows that only work in the car, driven or by remote.
+    public static string? NotDriving() => World.Driving is null ? "NOT IN THE CAR" : null;
+
+    // For rows that only work on foot.
+    public static string? InCar() => World.Driving is null ? null : "GET OUT FIRST";
 
     public static RVehicleBatmobileBase? Find()
     {

@@ -34,12 +34,18 @@ static class Characters
     public static readonly Command Switch = new(
         "player.character.switch", "SWITCH CHARACTER",
         "Turns you into the picked character right where you stand, with the same health and speed. Your save still records the story's character, so it loads as normal.",
-        () => Switcher.To(PlayAs.CurrentId, Switch!));
+        () => Switcher.To(PlayAs.CurrentId, Switch!))
+    {
+        Block = Car.InCar,
+    };
 
     public static readonly Command Back = new(
         "player.character.back", "BACK TO STORY CHARACTER",
         "Turns you back into whoever the story has you playing. A reload does the same.",
-        () => Switcher.Back(Back!));
+        () => Switcher.Back(Back!))
+    {
+        Block = Car.InCar,
+    };
 
     // Batman's data ships inside the game's own packages, so he has no file to look for.
     public static (string Id, string Label)[] Installed()

@@ -77,12 +77,18 @@ static class Sidekick
     public static readonly Command Call = new(
         "player.sidekick.call", "CALL SIDEKICK",
         "Brings your sidekick in beside you. They follow you, join fights and do team takedowns. The call Batmobile button swaps between you, as in the story.",
-        Summon);
+        Summon)
+    {
+        Block = Car.InCar,
+    };
 
     public static readonly Command Swap = new(
         "player.sidekick.swap", "SWAP WITH SIDEKICK",
         "Takes control of your sidekick, or hands it back. Your save still records the story's character.",
-        Trade);
+        Trade)
+    {
+        Block = Car.InCar,
+    };
 
     public static readonly Command Dismiss = new(
         "player.sidekick.dismiss", "DISMISS SIDEKICK",

@@ -63,7 +63,7 @@ static class Blink
         "Lifts you straight up so you can glide away. Not in the Batmobile.",
         Up)
     {
-        Block = static () => World.Driving is not null ? "NOT IN THE CAR" : null,
+        Block = Car.InCar,
     };
 
     public static readonly Slider DropHeight = new(

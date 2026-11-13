@@ -18,7 +18,11 @@ static class Remote
     public static readonly Command Drive = new(
         "batmobile.driving.remote_control", "REMOTE CONTROL",
         "Drives the Batmobile by remote without the gadget, even where the game won't let you call it. Press again to stop.",
-        Toggle);
+        Toggle)
+    {
+        // Pressed again during a remote drive it ends it, so only sitting in the car locks it.
+        Block = static () => Car.ByRemote ? null : Car.InCar(),
+    };
 
     public static readonly Toggle InFights = new(
         "batmobile.driving.remote_in_fights", "REMOTE CONTROL IN FIGHTS",

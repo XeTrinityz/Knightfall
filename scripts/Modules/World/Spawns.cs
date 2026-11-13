@@ -38,7 +38,7 @@ static class Spawns
         "A gang of thugs comes out of the streets around the parked Batmobile and goes for it, as they do when you leave it alone. Use its thug zapper or fight them off.",
         SendMob)
     {
-        Block = Emptied,
+        Block = static () => Emptied() ?? Car.InCar() ?? Car.Missing(),
     };
 
     public static readonly Command Getaway = new(

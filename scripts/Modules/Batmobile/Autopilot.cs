@@ -35,12 +35,14 @@ static class Autopilot
     static RVehicleBatmobileBase? _braking;
     static float _brakeSince;
 
+    // While it drives, pressing either row again takes the wheel back, so neither locks then. The
+    // marker checks are the TELEPORT page's, so both pages agree on whether there is one.
     public static readonly Command ToWaypoint = new(
         "batmobile.driving.autopilot_waypoint", "AUTOPILOT TO WAYPOINT",
         "The Batmobile drives you to your map waypoint along the roads. Press again to take the wheel back.",
-        () => Toggle(ToWaypoint!, Markers.Waypoint))
+        () => Toggle(ToWaypoint!, Teleport.Waypoint))
     {
-        Block = Car.NotDriving,
+        Block = static () => Active ? null : Car.NotDriving() ?? (Teleport.HasPin ? null : "NO WAYPOINT"),
     };
 
     public static readonly Command ToObjective = new(
@@ -48,7 +50,7 @@ static class Autopilot
         "The Batmobile drives you to the current mission marker along the roads. Press again to take the wheel back.",
         () => Toggle(ToObjective!, Markers.Objective))
     {
-        Block = Car.NotDriving,
+        Block = static () => Active ? null : Car.NotDriving() ?? (Teleport.HasObjective ? null : "NO MARKER"),
     };
 
     public static readonly Command Stop = new(

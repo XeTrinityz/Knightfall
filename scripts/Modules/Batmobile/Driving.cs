@@ -55,7 +55,7 @@ static class Driving
         "Calls the Batmobile to you, or gets you in if it is parked close by.",
         Call)
     {
-        Block = static () => World.Driving is null ? null : "IN THE BATMOBILE",
+        Block = Car.InCar,
     };
 
     public static readonly Command Recover = new(
