@@ -14,6 +14,7 @@ static class Appearance
 
     static readonly Held<RCapeComponent, bool> CapeHidden = new("cape hidden", cape => cape.IsCapeHiddenGame, (cape, hidden) => cape.CapeSetHiddenGame(hidden));
     static readonly Held<RPawnPlayer, float> BodyScale = new("body size", pawn => pawn.DrawScale, (pawn, scale) => pawn.SetDrawScale(scale));
+    static readonly Func<float, float> BodyScaled = static was => was * (float)BodySize!.Value;
 
     static readonly Dictionary<string, int> LevelCounts = new(StringComparer.OrdinalIgnoreCase);
 
@@ -59,8 +60,7 @@ static class Appearance
     {
         if (World.Player is { } pawn)
         {
-            var scale = (float)BodySize.Value;
-            BodyScale.Hold(pawn, was => was * scale);
+            BodyScale.Hold(pawn, BodyScaled);
         }
     }
 

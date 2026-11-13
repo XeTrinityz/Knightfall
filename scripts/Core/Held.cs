@@ -59,22 +59,37 @@ sealed class Held<TTarget, TValue> where TTarget : GameObject
     {
         foreach (var (target, was, _) in _held.Values)
         {
-            if (!target.IsValid)
-            {
-                continue;
-            }
-
-            try
-            {
-                _write(target, was);
-            }
-            catch (Exception error)
-            {
-                Log.Error("held." + _name, $"Could not put back {_name}", error);
-            }
+            PutBack(target, was);
         }
 
         _held.Clear();
+    }
+
+    // Puts one object back and stops holding it, for one that is no longer ours to change.
+    public void Release(TTarget target)
+    {
+        if (_held.TryGetValue(target.Ptr, out var entry) && ReferenceEquals(entry.Target, target))
+        {
+            _held.Remove(target.Ptr);
+            PutBack(target, entry.Was);
+        }
+    }
+
+    void PutBack(TTarget target, TValue was)
+    {
+        if (!target.IsValid)
+        {
+            return;
+        }
+
+        try
+        {
+            _write(target, was);
+        }
+        catch (Exception error)
+        {
+            Log.Error("held." + _name, $"Could not put back {_name}", error);
+        }
     }
 
     // Only runs when a new object is held, which is rare, so the list is only walked then.

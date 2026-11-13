@@ -148,6 +148,7 @@ static partial class Firefly
         TakeOff)
     {
         Quiet = true,
+        Block = static () => Option.On ? null : "FIREFLY IS OFF",
     };
 
     public static readonly Command FlyKey = new(
@@ -156,6 +157,7 @@ static partial class Firefly
         static () => Outcome.Done("FLY"))
     {
         Quiet = true,
+        Block = static () => Option.On ? null : "FIREFLY IS OFF",
     };
 
     public static readonly Command DescendKey = new(
@@ -164,6 +166,7 @@ static partial class Firefly
         static () => Outcome.Done("DESCEND"))
     {
         Quiet = true,
+        Block = static () => Option.On ? null : "FIREFLY IS OFF",
     };
 
     public static readonly Slider FlySpeed = new(

@@ -57,6 +57,16 @@ static class Stealth
                 continue;
             }
 
+            // A thug recruited as a bodyguard gets his sight back.
+            if (Bodyguards.Is(villain))
+            {
+                InstantSight.Release(villain);
+                FocusedSight.Release(villain);
+                PeripheralSight.Release(villain);
+                ExtendedSight.Release(villain);
+                continue;
+            }
+
             InstantSight.Hold(villain, BlindRange);
             FocusedSight.Hold(villain, BlindRange);
             PeripheralSight.Hold(villain, BlindRange);

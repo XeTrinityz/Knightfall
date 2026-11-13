@@ -26,7 +26,10 @@ static class Combat
     // Shared with AUTO FIGHT, which keeps special takedowns ready during a fight.
     static readonly Held<RPersistentDebugData, bool> TakedownFlag = new("special takedowns", data => data.Debug_Combat_CanAlwaysTakedown, (data, on) => data.Debug_Combat_CanAlwaysTakedown = on);
 
+    const float FearCheckSeconds = 0.25f;
+
     static RPersistentDebugData? _debugData;
+    static float _fearCheckIn;
 
     public static readonly Toggle DodgeGunfire = new(
         "player.combat.dodge_gunfire", "AUTO DODGE GUNFIRE",
@@ -110,6 +113,14 @@ static class Combat
         Restore = TakedownFlag.Release,
     };
 
+    public static readonly Toggle FearTakedownsAnytime = new(
+        "player.combat.fear_takedowns_anytime", "FEAR TAKEDOWNS ANYTIME",
+        "Fear takedowns are charged again as soon as you use them, with no silent takedown needed. Needs the V8.04 batsuit.")
+    {
+        Tick = KeepFearReady,
+        Block = static () => PlayerLocks.NewBatsuit ? null : "NEEDS BATSUIT V8.04",
+    };
+
     public static readonly Toggle QuickStealthTakedowns = DebugFlag(
         "quick_stealth_takedowns", "QUICK STEALTH TAKEDOWNS",
         "Sneaking up on a thug always gives the fast knockout the game uses on armoured thugs, never the slow choke hold.",
@@ -130,7 +141,7 @@ static class Combat
         new("AUTOMATIC", AutoFight.Option, AutoDefence.AutoCounter, AutoDefence.AutoDodgeRed, DodgeGunfire),
         new("FIGHTING", ComboNeverResets, ComboMultiplier, Batsuit, FreeflowFocus, HeavyCounters, SlowMoGroupAttacks, CounterIcons),
         new("YOUR HITS", OneHitKo, SuperPunch.Mode, SuperPunch.Force, LastEnemyFightsOn, RagdollOnEveryHit, KnockOffHelmets, DropWeaponsWhenHit, HideStunStars),
-        new("TAKEDOWNS", SpecialTakedownsAnytime, QuickStealthTakedowns, ForceEnvironmentTakedowns, DualTakedowns),
+        new("TAKEDOWNS", SpecialTakedownsAnytime, FearTakedownsAnytime, QuickStealthTakedowns, ForceEnvironmentTakedowns, DualTakedowns),
     };
 
     // A flag on the game's debug settings, the same switches its own debug menu flips.
@@ -173,6 +184,30 @@ static class Combat
         }
     }
 
+    // The game's own recharge, the call a silent takedown ends with. Never in the middle of a
+    // chain, which counts its targets down from the same number.
+    static void KeepFearReady()
+    {
+        _fearCheckIn -= World.Delta;
+        if (_fearCheckIn > 0f)
+        {
+            return;
+        }
+
+        _fearCheckIn = FearCheckSeconds;
+        if (World.Controller is not { bPerformingFearTakedown: false } controller
+            || controller.OriginalPawn is not { IsValid: true, bUpgradedBatsuit: true })
+        {
+            return;
+        }
+
+        if (controller.iNumberOfRemainingFearTakedowns < controller.GetMaximumNumberOfFearTakedowns()
+            || !controller.DoesPlayerHaveEnoughEnergyForAFearTakedown())
+        {
+            controller.ResetNumberOfRemainingFearTakedownsToFull();
+        }
+    }
+
     // AUTO FIGHT's fight is over. The player's own switch keeps them ready if it is on.
     public static void ReleaseTakedowns()
     {
@@ -210,6 +245,20 @@ static class Combat
         {
             if (!villain.IsValid || villain.bDeleteMe)
             {
+                continue;
+            }
+
+            // A thug recruited as a bodyguard is on the player's side from then on.
+            if (Bodyguards.Is(villain))
+            {
+                HeavyFlag.Release(villain);
+                QuickKoFlag.Release(villain);
+                RagdollFlag.Release(villain);
+                if (villain.CurrWeapon is { IsValid: true } carried)
+                {
+                    DropFlag.Release(carried);
+                }
+
                 continue;
             }
 

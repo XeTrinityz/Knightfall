@@ -48,6 +48,7 @@ static partial class RiddlerMech
         () => Start(Move.Smash))
     {
         Quiet = true,
+        Block = static () => Option.On ? null : "THE MECH IS OFF",
     };
 
     public static readonly Command HopKey = new(
@@ -56,6 +57,7 @@ static partial class RiddlerMech
         Hop)
     {
         Quiet = true,
+        Block = static () => Option.On ? null : "THE MECH IS OFF",
     };
 
     public static readonly Command BeamKey = new(
@@ -64,6 +66,7 @@ static partial class RiddlerMech
         () => Start(Move.Charge))
     {
         Quiet = true,
+        Block = static () => Option.On ? null : "THE MECH IS OFF",
     };
 
     public static readonly Command SurgeKey = new(
@@ -72,6 +75,7 @@ static partial class RiddlerMech
         () => Start(Move.Surge))
     {
         Quiet = true,
+        Block = static () => Option.On ? null : "THE MECH IS OFF",
     };
 
     public static readonly Toggle Hud = new(

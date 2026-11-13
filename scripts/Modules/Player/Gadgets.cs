@@ -25,6 +25,8 @@ static class Gadgets
     static readonly Held<RInventoryGadget, bool> CoverFlag = new("gadget cover", gadget => gadget.bUsableFromCornerCover, (gadget, on) => gadget.bUsableFromCornerCover = on);
     static readonly Held<RInventoryGadget, bool> VantageFlag = new("gadget vantage", gadget => gadget.bUsableFromVantagePoints, (gadget, on) => gadget.bUsableFromVantagePoints = on);
     static readonly Held<RInventoryGadget, bool> PredatorFlag = new("gadget predator", gadget => gadget.bCanUseFromSilentPredator, (gadget, on) => gadget.bCanUseFromSilentPredator = on);
+    static readonly Held<RInventoryGadget, bool>[] RechargeFlags = { RechargeFlag };
+    static readonly Held<RInventoryGadget, bool>[] PlaceFlags = { VentFlag, CoverFlag, VantageFlag, PredatorFlag };
 
     static readonly Held<RExplosiveGooMine, bool> MineLethal = new("gel mine lethal", mine => mine.bLethalUpgrade, (mine, on) => mine.bLethalUpgrade = on);
     static readonly Held<RExplosiveGooMine, int> MineDamage = new("gel mine damage", mine => mine.GelDamage, (mine, damage) => mine.GelDamage = damage);
@@ -34,6 +36,11 @@ static class Gadgets
     static readonly Held<RHarpoonGun, float> ClawDefault = new("batclaw range", gun => gun.HarpoonRange, (gun, range) => gun.HarpoonRange = range);
     static readonly Held<RLevelVolume, float> ClawOverride = new("batclaw area range", volume => volume.OverrideBatclawRange, (volume, range) => volume.OverrideBatclawRange = range);
     static readonly Held<RBMWeaponRanged, ParticleSystem> JammedBlast = new("jammed gun blast", weapon => weapon.JammedExplosionVFX, (weapon, blast) => weapon.JammedExplosionVFX = blast);
+
+    static readonly Func<float, float> GelScaled = static was => was * (float)GelRadius!.Value;
+    static readonly Func<float, float> ClusterScaled = static was => was * (float)FreezeClusterRadius!.Value;
+    static readonly Func<float, float> ClawScaled = static was => was * (float)BatclawRange!.Value;
+    static readonly Func<float, float> ClawAreaScaled = static was => was > 0f ? was * (float)BatclawRange!.Value : was;
 
     static ParticleSystem? _tankBlast;
     static float _tankBlastLookedAt = float.MinValue;
@@ -49,7 +56,7 @@ static class Gadgets
         "player.gadgets.use_while_recharging", "USE WHILE RECHARGING",
         "Gadgets can be picked and used again while they are still recharging.")
     {
-        Tick = () => HoldGadgets(RechargeFlag),
+        Tick = () => HoldGadgets(RechargeFlags),
         Restore = RechargeFlag.Release,
     };
 
@@ -57,7 +64,7 @@ static class Gadgets
         "player.gadgets.vents_and_cover", "GADGETS IN VENTS AND COVER",
         "Use every gadget from vents, corner cover, vantage points and silent predator.")
     {
-        Tick = () => HoldGadgets(VentFlag, CoverFlag, VantageFlag, PredatorFlag),
+        Tick = () => HoldGadgets(PlaceFlags),
         Restore = () =>
         {
             VentFlag.Release();
@@ -187,7 +194,7 @@ static class Gadgets
         return Outcome.Done();
     }
 
-    static void HoldGadgets(params Held<RInventoryGadget, bool>[] flags)
+    static void HoldGadgets(Held<RInventoryGadget, bool>[] flags)
     {
         foreach (var gadget in Game.FindObjects<RInventoryGadget>())
         {
@@ -318,12 +325,11 @@ static class Gadgets
 
     static void ScaleGelRadius()
     {
-        var scale = (float)GelRadius.Value;
         foreach (var bomb in Game.FindObjects<RExplosiveGelBomb>())
         {
             if (bomb.IsValid && !bomb.bDeleteMe)
             {
-                BombRadius.Hold(bomb, was => was * scale);
+                BombRadius.Hold(bomb, GelScaled);
             }
         }
 
@@ -331,7 +337,7 @@ static class Gadgets
         {
             if (mine.IsValid && !mine.bDeleteMe)
             {
-                MineRadius.Hold(mine, was => was * scale);
+                MineRadius.Hold(mine, GelScaled);
             }
         }
     }
@@ -430,10 +436,9 @@ static class Gadgets
 
     static void ScaleFreezeCluster()
     {
-        var scale = (float)FreezeClusterRadius.Value;
         foreach (var spray in FreezeSprays())
         {
-            ClusterRadius.Hold(spray, was => was * scale);
+            ClusterRadius.Hold(spray, ClusterScaled);
         }
     }
 
@@ -441,18 +446,17 @@ static class Gadgets
     // area's own range if it has one. So those are scaled and the game works out the rest.
     static void ScaleBatclaw()
     {
-        var scale = (float)BatclawRange.Value;
         foreach (var gun in Game.FindObjects<RHarpoonGun>())
         {
             if (gun.IsValid && gun.Class.DefaultObject is RHarpoonGun { IsValid: true } defaults)
             {
-                ClawDefault.Hold(defaults, was => was * scale);
+                ClawDefault.Hold(defaults, ClawScaled);
             }
         }
 
         if (Game.TryGetWorldInfo(out var world) && world.GRI is RGameRI { CurrentLevelVolume: { IsValid: true } area })
         {
-            ClawOverride.Hold(area, was => was > 0f ? was * scale : was);
+            ClawOverride.Hold(area, ClawAreaScaled);
         }
     }
 

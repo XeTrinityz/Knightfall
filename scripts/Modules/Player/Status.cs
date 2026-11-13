@@ -68,7 +68,10 @@ static class Status
     public static readonly Command RefillArmour = new(
         "player.status.refill_armour", "REFILL ARMOUR",
         "Tops up the armour you have bought.",
-        TopUpArmour);
+        TopUpArmour)
+    {
+        Block = static () => PlayerLocks.OwnsArmour ? null : "NO ARMOUR",
+    };
 
     public static readonly Toggle NoStagger = new(
         "player.status.no_stagger", "NO STAGGER",

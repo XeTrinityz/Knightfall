@@ -23,12 +23,18 @@ static class Suits
     public static readonly Command Apply = new(
         "player.character.apply_suit", "APPLY SUIT",
         "Puts the picked suit on right where you stand. In the Batmobile it waits until you get out. The game remembers the pick, as it does from the showcase.",
-        Start);
+        Start)
+    {
+        Block = static () => Suit.CurrentId.Length == 0 ? "NO SUIT TO APPLY" : null,
+    };
 
     public static readonly Command Cancel = new(
         "player.character.cancel_suit", "CANCEL SUIT CHANGE",
         "Stops a suit or battle damage change that is still waiting to go on.",
-        Remesh.Cancel);
+        Remesh.Cancel)
+    {
+        Block = static () => Remesh.Busy ? null : "NOTHING WAITING",
+    };
 
     static void Refresh()
     {

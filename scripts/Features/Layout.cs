@@ -28,6 +28,7 @@ static class Layout
                 new Catalog.Section("FOLLOWING", Sidekick.Follows, Sidekick.CatchesUp))
             .Add("PROGRESS", Progress.Sections);
 
+        Catalog.Background("player.locks", PlayerLocks.Tick);
         Catalog.Background("player.villains", Villains.Watch);
         Catalog.Background("player.combat.enemies", Combat.HoldEnemies);
         // Defence runs first, so AUTO FIGHT can see that it acted this tick.

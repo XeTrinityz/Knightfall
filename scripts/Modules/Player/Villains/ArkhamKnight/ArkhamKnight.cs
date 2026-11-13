@@ -49,6 +49,7 @@ static partial class ArkhamKnight
         UseRifle)
     {
         Quiet = true,
+        Block = static () => Option.On ? null : "ARKHAM KNIGHT IS OFF",
     };
 
     public static readonly Command PistolsKey = new(
@@ -57,6 +58,7 @@ static partial class ArkhamKnight
         UsePistols)
     {
         Quiet = true,
+        Block = static () => Option.On ? null : "ARKHAM KNIGHT IS OFF",
     };
 
     public static readonly Command MilitiaKey = new(
@@ -65,6 +67,7 @@ static partial class ArkhamKnight
         CallMilitia)
     {
         Quiet = true,
+        Block = static () => Option.On ? null : "ARKHAM KNIGHT IS OFF",
     };
 
     public static readonly Toggle Hud = new(

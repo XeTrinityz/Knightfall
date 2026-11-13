@@ -23,9 +23,6 @@ static partial class MrFreeze
     static readonly Held<RPlayerController, bool> NoGlide = new("mr freeze glide", controller => controller.bCapeGlideDisabled, (controller, off) => controller.bCapeGlideDisabled = off);
     static readonly Held<RPawnPlayer, bool> NoPawnGlide = new("mr freeze pawn glide", pawn => pawn.bCanCapeGlide, (pawn, can) => pawn.bCanCapeGlide = can);
 
-    // One share of the game's own speed covers his walk, run and sprint alike.
-    static readonly Held<RPawn, float> Pace = new("mr freeze pace", pawn => pawn.MovementSpeedModifier, (pawn, pace) => pawn.MovementSpeedModifier = pace);
-
     static readonly VillainAim Aim = new();
 
     static bool _dressed;
@@ -83,8 +80,7 @@ static partial class MrFreeze
         Villains.Keep(player, controller, "DLG_Voices.MrFreeze");
         NoGlide.Hold(controller, true);
         NoPawnGlide.Hold(player, false);
-        var share = (float)Speed.Value / 100f;
-        Pace.Hold(player, normal => normal * share);
+        Movement.Pace((float)Speed.Value / 100f);
 
         // A grapple boost or a fall off a ledge can still go into a glide before the switches
         // above are read.
@@ -134,7 +130,7 @@ static partial class MrFreeze
         Villains.Release();
         NoGlide.Release();
         NoPawnGlide.Release();
-        Pace.Release();
+        Movement.Pace(1f);
     }
 
     static void Stop()

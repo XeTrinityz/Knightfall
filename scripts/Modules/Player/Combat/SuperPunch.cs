@@ -58,6 +58,7 @@ static class SuperPunch
         min: 0.25, max: 3, step: 0.25, value: 1, unit: "X")
     {
         Preference = true,
+        Block = static () => Mode.Index == 0 ? "SUPER PUNCH IS OFF" : null,
     };
 
     // Makes the hit a launch when it should be one. The way to throw them is handed back, or

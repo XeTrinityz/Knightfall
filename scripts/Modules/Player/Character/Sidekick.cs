@@ -79,7 +79,7 @@ static class Sidekick
         "Brings your sidekick in beside you. They follow you, join fights and do team takedowns. The call Batmobile button swaps between you, as in the story.",
         Summon)
     {
-        Block = Car.InCar,
+        Block = static () => Car.InCar() ?? (Who.CurrentId.Length == 0 ? "NONE INSTALLED" : Present && !_leaving ? "ALREADY HERE" : null),
     };
 
     public static readonly Command Swap = new(
@@ -87,13 +87,16 @@ static class Sidekick
         "Takes control of your sidekick, or hands it back. Your save still records the story's character.",
         Trade)
     {
-        Block = Car.InCar,
+        Block = static () => Car.InCar() ?? (Present && !_leaving ? null : Loading ? "ON THE WAY" : "NO SIDEKICK"),
     };
 
     public static readonly Command Dismiss = new(
         "player.sidekick.dismiss", "DISMISS SIDEKICK",
         "Your sidekick heads off and is gone once out of sight. If you are playing as them you are put back first.",
-        SendAway);
+        SendAway)
+    {
+        Block = static () => Present || Loading ? null : "NO SIDEKICK",
+    };
 
     public static readonly Toggle Follows = new(
         "player.sidekick.follows", "SIDEKICK FOLLOWS YOU",

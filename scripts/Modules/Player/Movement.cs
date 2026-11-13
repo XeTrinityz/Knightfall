@@ -9,31 +9,18 @@ namespace Knightfall;
 // If the game changes one of them itself, like a scripted slow walk, ours is worked out from that.
 static class Movement
 {
-    // Rotator units, 65536 to a full turn.
-    const float UnitsPerDegree = 65536f / 360f;
-
-    // How far above Batman the glide ceiling is kept. The game starts each glide with at least this.
-    const float CeilingHeadroom = 600f;
-
-    static readonly Held<RPlayerController, int> GlidePitch = new("glide climb", controller => controller.CapeGlideMaxPitch, (controller, pitch) => controller.CapeGlideMaxPitch = pitch);
     static readonly Held<RPawnPlayer, float> FallGravityHeld = new("fall gravity", pawn => pawn.OverrideFallingGravity, (pawn, gravity) => pawn.OverrideFallingGravity = gravity);
+    static readonly Held<RPersistentDebugData, bool> FlightFlag = new("free flight", data => data.Debug_PowerGlide, (data, on) => data.Debug_PowerGlide = on);
 
     static float _wantedGravity;
+    static float _pace = 1f;
 
-    public static readonly Toggle InfiniteGlide = new(
-        "player.movement.infinite_glide", "INFINITE GLIDE",
-        "Glide for as long as you like. Look up to climb, ahead to stay level and down to dive.")
+    public static readonly Toggle FreeFlight = new(
+        "player.movement.free_flight", "FREE FLIGHT",
+        "Turns a glide into flight for as long as you like. Nothing pulls you down and you keep full glide speed. Look straight up to climb or straight down to dive. GLIDE SPEED still scales it.")
     {
-        Tick = KeepGliding,
-        Restore = GlidePitch.Release,
-    };
-
-    public static readonly Slider GlideClimbAngle = new(
-        "player.movement.glide_climb_angle", "GLIDE CLIMB ANGLE",
-        "How steeply you can climb with INFINITE GLIDE on.",
-        min: 8, max: 40, step: 1, value: 22, unit: " DEG")
-    {
-        Preference = true,
+        Tick = KeepFlying,
+        Restore = FlightFlag.Release,
     };
 
     public static readonly Slider FallGravity = new(
@@ -55,7 +42,10 @@ static class Movement
             Restore = restore,
         },
         () => World.Player,
-        Field<RPawnPlayer>(pawn => pawn.MovementSpeedModifier, (pawn, value) => pawn.MovementSpeedModifier = value));
+        Field<RPawnPlayer>(pawn => pawn.MovementSpeedModifier, (pawn, value) => pawn.MovementSpeedModifier = value))
+    {
+        Extra = static () => _pace,
+    };
 
     static readonly Scale<RPawnPlayer> Tunnel = new("tunnel speed",
         (tick, restore) => new Slider(
@@ -144,30 +134,42 @@ static class Movement
     public static readonly Catalog.Section[] Sections =
     {
         new("ON FOOT", Walk.Slider, Tunnel.Slider),
-        new("GLIDING", Glide.Slider, InfiniteGlide, GlideClimbAngle),
+        new("GLIDING", Glide.Slider, FreeFlight),
         new("GRAPPLE", Grapple.Slider, Boost.Slider, Reach.Slider, Zip.Slider),
         new("FALLING", FallGravity),
     };
 
-    // The game lowers the glide ceiling all through a glide, and above it the glide slows hard.
-    // That is what brings every glide down. Kept above Batman, he can fly level or climb for as
-    // long as he likes. Each glide sets its own ceiling, so there is nothing to put back.
-    static void KeepGliding()
+    // A villain that walks at a share of the player's pace. It goes through the same hold as
+    // MOVE SPEED, since two holds on one value each take the other's for the game's own.
+    public static void Pace(float share)
     {
-        if (World.Controller is not { } controller)
+        if (share == 1f && _pace == 1f)
         {
             return;
         }
 
-        GlidePitch.Hold(controller, (int)MathF.Round((float)GlideClimbAngle.Value * UnitsPerDegree));
-
-        if (World.Player is { bGliding: true } pawn)
+        _pace = share;
+        if (share != 1f)
         {
-            var ceiling = pawn.Location.Z + CeilingHeadroom;
-            if (controller.CapeGlideCeiling < ceiling)
-            {
-                controller.CapeGlideCeiling = ceiling;
-            }
+            Walk.Apply();
+            return;
+        }
+
+        // While MOVE SPEED is on its own tick holds the value. Holding it from here could take it
+        // again after MOVE SPEED has put it back on unload.
+        if (Walk.Slider.IsDefault)
+        {
+            Walk.Release();
+        }
+    }
+
+    // The game's own debug glide. Its glide code reads this flag every tick. With it set the glide
+    // has no gravity, no ceiling that slows it and no limit on how steeply it climbs or dives.
+    static void KeepFlying()
+    {
+        if (Combat.DebugData() is { } data)
+        {
+            FlightFlag.Hold(data, true);
         }
     }
 
@@ -226,10 +228,12 @@ static class Movement
             _fields = Array.ConvertAll(fields, field => new Held<T, float>(name, field.Read, field.Write));
             _find = find;
             Slider = slider(Apply, Release);
-            _scaled = was => was * (float)Slider.Value;
+            _scaled = was => was * (float)Slider.Value * (Extra?.Invoke() ?? 1f);
         }
 
         public Slider Slider { get; }
+
+        public Func<float>? Extra { get; init; }
 
         public void Apply()
         {

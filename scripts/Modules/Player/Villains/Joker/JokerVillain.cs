@@ -42,6 +42,7 @@ static partial class JokerVillain
         CallGoons)
     {
         Quiet = true,
+        Block = static () => Option.On ? null : "JOKER IS OFF",
     };
 
     public static readonly Toggle Brutal = new(

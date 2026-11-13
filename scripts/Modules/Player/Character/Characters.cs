@@ -44,7 +44,7 @@ static class Characters
         "Turns you back into whoever the story has you playing. A reload does the same.",
         () => Switcher.Back(Back!))
     {
-        Block = Car.InCar,
+        Block = static () => Car.InCar() ?? (Switcher.Away ? null : "ALREADY THEM"),
     };
 
     // Batman's data ships inside the game's own packages, so he has no file to look for.

@@ -30,11 +30,17 @@ static class AutoDefence
 
     public static readonly Toggle AutoCounter = new(
         "player.combat.auto_counter", "AUTO COUNTER",
-        "Counters every attack aimed at you the moment it can be countered. Group attacks and knife combos too.");
+        "Counters every attack aimed at you the moment it can be countered. Group attacks and knife combos too.")
+    {
+        Block = static () => AutoFight.Option.On ? "AUTO FIGHT DOES THIS" : null,
+    };
 
     public static readonly Toggle AutoDodgeRed = new(
         "player.combat.auto_dodge_red", "AUTO DODGE RED ATTACKS",
-        "Vaults over red attacks and charging thugs. A charge that can't be vaulted is stopped in its tracks.");
+        "Vaults over red attacks and charging thugs. A charge that can't be vaulted is stopped in its tracks.")
+    {
+        Block = static () => AutoFight.Option.On ? "AUTO FIGHT DOES THIS" : null,
+    };
 
     // AUTO FIGHT defends with both, whatever their own rows say.
     static bool Countering => AutoCounter.On || AutoFight.Option.On;

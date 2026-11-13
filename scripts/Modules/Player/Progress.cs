@@ -27,12 +27,18 @@ static class Progress
     public static readonly Command AddPoints = new(
         "player.progress.add_points", "ADD UPGRADE POINTS",
         $"Adds {Points} points to spend in the upgrade menu. Kept in your save.",
-        GivePoints);
+        GivePoints)
+    {
+        Block = static () => PlayerLocks.InChallenge(),
+    };
 
     public static readonly Command AddExperience = new(
         "player.progress.add_xp", "ADD 5000 XP",
         "Adds 5000 experience, as a fight would. Enough of it levels you up and earns upgrade points.",
-        GiveExperience);
+        GiveExperience)
+    {
+        Block = static () => PlayerLocks.InChallenge(),
+    };
 
     public static readonly Slider ExperienceScale = new(
         "player.progress.xp_multiplier", "XP MULTIPLIER",
@@ -42,17 +48,26 @@ static class Progress
     public static readonly Command AllUpgrades = new(
         "player.progress.all_upgrades", "GET ALL UPGRADES",
         "Buys every Batman and Batmobile upgrade the story has opened and keeps your unspent points. Kept in your save. Run it again as the story opens more.",
-        BuyUpgrades);
+        BuyUpgrades)
+    {
+        Block = static () => PlayerLocks.InChallenge(),
+    };
 
     public static readonly Command RiddlerItems = new(
         "player.progress.riddler_items", "SHOW RIDDLER ITEMS",
         "Marks every Riddler trophy and puzzle on the map. Kept in your save.",
-        ShowRiddler);
+        ShowRiddler)
+    {
+        Block = static () => PlayerLocks.InChallenge(),
+    };
 
     public static readonly Command AllExtras = new(
         "player.progress.all_extras", "UNLOCK ALL EXTRAS",
         "The game's own unlock-all. Challenge maps, the showcase, concept art, bios, tapes, Riddler puzzles, WayneTech and story episodes. Kept in your save.",
-        UnlockExtras);
+        UnlockExtras)
+    {
+        Block = static () => PlayerLocks.InChallenge(),
+    };
 
     public static readonly Command Achievements = new(
         "player.progress.achievements", "UNLOCK ALL ACHIEVEMENTS",
