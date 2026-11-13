@@ -79,6 +79,7 @@ static class Teleport
     static bool _exact;
     static FName _level;
     static FName _leftLevel;
+    static RLevelVolume? _leftVolume;
     static Vector3 _from;
     static Vector3? _back;
 
@@ -224,6 +225,7 @@ static class Teleport
         _exact = goal.Exact;
         _level = district.LevelName;
         _leftLevel = ri.CurrentLevel;
+        _leftVolume = ri.CurrentLevelVolume;
         _from = mover.Location;
 
         var flat = new Vector2(_target.X - _from.X, _target.Y - _from.Y).Length();
@@ -359,6 +361,7 @@ static class Teleport
                 _held = false;
                 _mover = null;
                 _by = null;
+                _leftVolume = null;
             }
         }
 
@@ -469,15 +472,27 @@ static class Teleport
         _visibleAt = 0;
     }
 
-    // A trip that can't end where it was going puts back the level the player left.
+    // A trip that can't end where it was going puts back the level the player left. Changing the
+    // level empties the current level volume. The player never left that volume, so the game
+    // doesn't fill it again, and without it every district lookup fails.
     static void Fail(RGameRI ri, Outcome outcome)
     {
-        if (World.Controller is { } owner)
+        PutBack(ri);
+        Finish(outcome);
+    }
+
+    static void PutBack(RGameRI ri)
+    {
+        if (World.Controller is not { } owner)
         {
-            ri.SetCurrentLevel(_leftLevel, owner, true);
+            return;
         }
 
-        Finish(outcome);
+        ri.SetCurrentLevel(_leftLevel, owner, true);
+        if (_leftVolume is { IsValid: true } volume && ri.CurrentLevelVolume is null)
+        {
+            ri.CurrentLevelVolume = volume;
+        }
     }
 
     static void Finish(Outcome outcome)
@@ -487,6 +502,7 @@ static class Teleport
         Enter(Stage.Brightening);
         _by?.Report(outcome);
         _mover = null;
+        _leftVolume = null;
     }
 
     // Held still while the ground under them may be unloading, so they can't fall out of the world.
@@ -672,12 +688,18 @@ static class Teleport
     {
         if (_stage != Stage.Idle)
         {
+            if (_stage == Stage.Loading && Ri is { } ri)
+            {
+                PutBack(ri);
+            }
+
             Let();
             Ri?.SetFadeType(true, FadeBack, false, false, 0f, 0f, 0f, 0f);
             _stage = Stage.Idle;
         }
 
         _mover = null;
+        _leftVolume = null;
         _action = null;
         Borrowed.Let(Lender);
     }

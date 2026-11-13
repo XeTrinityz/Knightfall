@@ -510,6 +510,7 @@ static class FreeCamera
                 new(new[] { "SHIFT" }, "FASTER"),
                 new(new[] { "LEFT", "RIGHT" }, "ROLL"),
                 new(new[] { "UP", "DOWN" }, "ZOOM"),
+                new(new[] { "HOME" }, "RESET ZOOM AND ROLL"),
                 new(new[] { "H" }, "HIDE CONTROLS"),
             };
             _keyboardShow ??= new GuideLine[] { new(new[] { "H" }, "SHOW CONTROLS") };
