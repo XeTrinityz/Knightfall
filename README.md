@@ -86,9 +86,10 @@ Hold aim, then fire or secondary fire. Each villain's own rows list the rest of 
 
 PLAYER > SIDEKICK
 
-- SIDEKICK and CALL SIDEKICK. Brings Robin, Nightwing, Catwoman or Batgirl in beside you. They follow you, crouch when you do, join your fights and do dual takedowns.
+- SIDEKICK and CALL SIDEKICK. Calls Robin, Nightwing, Catwoman or Batgirl to you. They turn up close by where you aren't looking, keep up with your pace, go through doors with you, crouch when you do, join your fights and do dual takedowns.
 - SWAP WITH SIDEKICK, BRING SIDEKICK HERE and DISMISS SIDEKICK. SWAP ON CALL BUTTON picks whether the call Batmobile button swaps you with them or calls the car.
-- SIDEKICK FOLLOWS YOU, SIDEKICK FOLLOW DISTANCE, SIDEKICK CATCHES UP and SIDEKICK SNEAKS WITH YOU set how they keep up. SIDEKICK FIGHTS keeps them in or out of your fights.
+- SIDEKICK REJOINS. A sidekick the game takes away comes back once you are free. That covers scenes, restarts, loading a save and the story bringing in a partner of its own.
+- SIDEKICK FOLLOWS YOU, SIDEKICK FOLLOW DISTANCE, SIDEKICK CATCHES UP and SIDEKICK SNEAKS WITH YOU set how they keep up. SIDEKICK FIGHTS keeps them in or out of your fights. A fight that starts while they are far off brings them over.
 
 PLAYER > PROGRESS
 

@@ -21,6 +21,10 @@ static class Survive
     public const string SwitchDamage = "Knightfall.SwitchDamage";
     public const string SwitchMesh = "Knightfall.SwitchMesh";
     public const string SidekickName = "Knightfall.SidekickName";
+    public const string SidekickWanted = "Knightfall.SidekickWanted";
+    public const string SidekickLeftName = "Knightfall.SidekickLeftName";
+    public const string SidekickLeftSlot = "Knightfall.SidekickLeftSlot";
+    public const string SidekickLeftGame = "Knightfall.SidekickLeftGame";
     public const string SidekickSlot = "Knightfall.SidekickSlot";
     public const string SidekickOwnsSlot = "Knightfall.SidekickOwnsSlot";
     public const string SidekickLeaving = "Knightfall.SidekickLeaving";
