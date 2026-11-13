@@ -22,6 +22,9 @@ static class Marks
     static readonly Rgba White = new(255, 255, 255);
     static readonly Rgba Ink = new(8, 10, 14);
 
+    // The line under the name on the card, one for each kind and mix of states.
+    static readonly Dictionary<int, string> Notes = new();
+
     public static void Render(Canvas canvas)
     {
         var selected = Editor.Selected;
@@ -270,6 +273,43 @@ static class Marks
 
     static byte Alpha(float value) => (byte)Math.Clamp(value, 0f, 255f);
 
+    // What kind of thing it is and what the editor has done to it.
+    static string NoteOf(BmSDK.Engine.Actor actor)
+    {
+        var kind = Things.KindOf(actor) is { } found ? (int)found : Things.Labels.Length;
+        var edit = Edits.Find(actor);
+        var states = edit is null ? 0 : 1 | (edit.Frozen ? 2 : 0) | (edit.Removed ? 4 : 0) | (edit.Ghost ? 8 : 0);
+        var key = kind * 16 + states;
+        if (Notes.TryGetValue(key, out var note))
+        {
+            return note;
+        }
+
+        note = kind < Things.Labels.Length ? Things.Labels[kind] : "OBJECT";
+        if (states == 1)
+        {
+            note += "  CHANGED";
+        }
+
+        if (edit is { Frozen: true })
+        {
+            note += "  FROZEN";
+        }
+
+        if (edit is { Removed: true })
+        {
+            note += "  REMOVED";
+        }
+
+        if (edit is { Ghost: true })
+        {
+            note += "  NO COLLISION";
+        }
+
+        Notes[key] = note;
+        return note;
+    }
+
     // The name card floats just above the box, the same size on screen at any distance.
     static void Card(BmSDK.Engine.Actor actor, Things.Shape shape, Rgba color)
     {
@@ -284,8 +324,7 @@ static class Marks
         var toward = Teleport.Flat(top - Hologram.Eye);
         var across = new Vector3(-toward.Y, toward.X, 0f);
         var name = Things.NameOf(actor);
-        var kind = Things.KindOf(actor) is { } found ? Things.Labels[(int)found] : "OBJECT";
-        var note = Edits.Changed(actor) ? kind + "  CHANGED" : kind;
+        var note = NoteOf(actor);
         var width = MathF.Max(Draw.TextWidth(name, TitleSize), Draw.TextWidth(note, NoteSize)) + 16f;
         var lift = top + Vector3.UnitZ * (CardGap + CardHeight / 2f) * unit;
         var card = new Hologram.Panel(lift - across * width / 2f * unit, across * unit, -Vector3.UnitZ * unit);

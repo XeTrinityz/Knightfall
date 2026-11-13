@@ -533,6 +533,14 @@ sealed class ProtocolTheme : Theme
             Draw.Frame(Inset, nodeTop, NodeSize, NodeSize, 1f, Ghost);
         }
 
+        // A row that can't be used right now steps back, with the reason where its value goes.
+        if (feature.Blocked is { } why)
+        {
+            Draw.Text(feature.Label, LabelLeft, y + 7f, 15f, selected ? Dim : Ghost);
+            Kit.Locked(why, right, y + 10f, 10f, Ghost, selected ? Pale : Dim, LabelLeft + Draw.TextWidth(feature.Label, 15f) + 16f);
+            return;
+        }
+
         Draw.Text(feature.Label, LabelLeft, y + 7f, 15f, selected ? White : Pale);
 
         // A value flashes white for a moment when it changes.

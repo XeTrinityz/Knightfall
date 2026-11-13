@@ -25,10 +25,14 @@ static class Editor
     const float PreviewEvery = 0.2f;
     const float PruneEvery = 5f;
 
+    // A selected person the game has hidden for this long is back in its pool.
+    const float GoneAfter = 3f;
+
     static Actor? _selected;
     static Actor? _preview;
     static float _previewAt = -1f;
     static float _prunedAt = -1f;
+    static float _hiddenAt = -1f;
     static string _pickSeen = "";
     static bool _relistDue;
     static readonly Dictionary<string, Actor> Listed = new();
@@ -69,7 +73,7 @@ static class Editor
 
     public static readonly Command Clear = new(
         "editor.select.clear", "CLEAR SELECTION",
-        "Lets go of the selected object. Its changes stay, RESTORE undoes them.",
+        "Lets go of the selected object. Its changes stay, UNDO and RESTORE take them back.",
         () =>
         {
             if (Selected is null)
@@ -79,11 +83,29 @@ static class Editor
 
             Select(null);
             return Outcome.Done("CLEARED");
-        });
+        })
+    {
+        Block = static () => Selected is null ? "NOTHING SELECTED" : null,
+    };
+
+    public static readonly Command Undo = new(
+        "editor.restore.undo", "UNDO",
+        "Takes back the last change the editor made, on whichever object it was. Press again to go further back, up to 40 changes.",
+        () =>
+        {
+            Moving.LetGo();
+            var outcome = Edits.StepBack();
+            Moving.Selected(Selected);
+            _relistDue = true;
+            return outcome;
+        })
+    {
+        Block = static () => Edits.CanStepBack ? null : "NOTHING TO UNDO",
+    };
 
     public static readonly Command RestoreSelected = new(
         "editor.restore.selected", "RESTORE SELECTED",
-        "Puts the selected object back where and how it was before you changed it.",
+        "Puts the selected object back where and how it was before you changed it. UNDO brings the changes back.",
         () =>
         {
             if (Selected is not { } actor)
@@ -96,19 +118,35 @@ static class Editor
             Moving.Selected(actor);
             _relistDue = true;
             return outcome;
-        });
+        })
+    {
+        Block = static () => Selected is not { } actor ? "NOTHING SELECTED" : Edits.Changed(actor) ? null : "NOTHING CHANGED",
+    };
 
     public static readonly Command RestoreAll = new(
         "editor.restore.all", "RESTORE EVERYTHING",
-        "Puts every object you've changed back the way it was.",
+        "Puts every object you've changed back the way it was. UNDO can't bring them back, so press it twice.",
         () =>
         {
+            if (!Edits.All.Any())
+            {
+                return Outcome.Unchanged("NOTHING CHANGED");
+            }
+
+            if (!Confirm.Second("restore everything"))
+            {
+                return Outcome.Unchanged("PRESS AGAIN");
+            }
+
             Moving.LetGo();
             var count = Edits.RestoreAll();
             Moving.Selected(Selected);
             _relistDue = true;
             return count > 0 ? Outcome.Done($"{count} RESTORED") : Outcome.Unchanged("NOTHING CHANGED");
-        });
+        })
+    {
+        Block = static () => Edits.Any ? null : "NOTHING CHANGED",
+    };
 
     public static readonly Toggle SelectSpawns = new(
         "spawner.spawned.select_spawns", "SELECT WHAT YOU SPAWN",
@@ -125,7 +163,7 @@ static class Editor
     public static readonly Catalog.Section[] Sections =
     {
         new("PICK", SelectAimed, Pick, From, Range, Clear),
-        new("RESTORE", RestoreSelected, RestoreAll),
+        new("UNDO", Undo, RestoreSelected, RestoreAll),
     };
 
     // The rows SPAWNER > SPAWNED shows for the editor.
@@ -139,6 +177,7 @@ static class Editor
         }
 
         _selected = actor;
+        _hiddenAt = -1f;
         Moving.Selected(actor);
         _relistDue = true;
     }
@@ -165,6 +204,24 @@ static class Editor
         if (_selected is not null && !Things.Alive(_selected))
         {
             Select(null);
+        }
+
+        // The game hides a person when it takes them back into its pool, where they may come out
+        // again as somebody else. REMOVE hides them too, and those stay selected.
+        if (_selected is RBMPawnAI { bHidden: true } && Edits.Find(_selected) is not { Removed: true })
+        {
+            if (_hiddenAt < 0f || World.Now < _hiddenAt)
+            {
+                _hiddenAt = World.Now;
+            }
+            else if (World.Now - _hiddenAt >= GoneAfter)
+            {
+                Select(null);
+            }
+        }
+        else
+        {
+            _hiddenAt = -1f;
         }
 
         // The player stepped through SELECTED.

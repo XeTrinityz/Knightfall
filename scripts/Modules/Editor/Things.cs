@@ -30,7 +30,8 @@ static class Things
     const float DefaultHalf = 50f;
     const float Largest = 3000f;
 
-    static readonly Dictionary<nint, string> Names = new();
+    static readonly ConditionalWeakTable<GameObject, string> Names = new();
+    static int _lastFound;
 
     public readonly record struct Found(Actor Actor, Kind Kind, float Distance);
 
@@ -50,68 +51,80 @@ static class Things
     };
 
     // Everything of the wanted kinds within range, nearest first. Null kind means all of them, and
-    // wanted narrows it further. A class is only looked through when one of its kinds is wanted.
+    // wanted narrows it further. Each kind is asked about once, and a class is only looked through
+    // when one of its kinds is wanted.
     public static List<Found> Near(Vector3 from, float range, Kind? only, Func<Kind, bool>? wanted = null)
     {
-        bool Wants(params Kind[] kinds) => kinds.Any(kind => (only is null || only == kind) && (wanted?.Invoke(kind) ?? true));
+        Span<bool> wants = stackalloc bool[Labels.Length];
+        for (var i = 0; i < wants.Length; i++)
+        {
+            var kind = (Kind)i;
+            wants[i] = (only is null || only == kind) && (wanted?.Invoke(kind) ?? true);
+        }
 
-        var found = new List<Found>();
+        // Sized by the last look, which is close to what this one finds.
+        var found = new List<Found>(_lastFound + 16);
         var you = World.Player;
         var car = World.Driving;
-        void Take<T>() where T : Actor
+        if (wants[(int)Kind.Enemy] || wants[(int)Kind.Friendly])
         {
-            foreach (var actor in Game.FindObjects<T>())
-            {
-                if (!actor.IsValid || actor.bDeleteMe || actor.bPendingDelete || actor.bHidden || actor.Outer is not Level
-                    || ReferenceEquals(actor, you) || ReferenceEquals(actor, car))
-                {
-                    continue;
-                }
-
-                var distance = Vector3.Distance(actor.Location, from);
-                if (distance > range || KindOf(actor) is not { } kind || !Wants(kind))
-                {
-                    continue;
-                }
-
-                found.Add(new Found(actor, kind, distance));
-            }
+            Take<RBMPawnAI>(found, wants, from, range, you, car);
+            Take<RPawnPlayer>(found, wants, from, range, you, car);
         }
 
-        if (Wants(Kind.Enemy, Kind.Friendly))
+        if (wants[(int)Kind.Vehicle])
         {
-            Take<RBMPawnAI>();
-            Take<RPawnPlayer>();
+            Take<RVehicle>(found, wants, from, range, you, car);
+            Take<RAbandonedVehicle>(found, wants, from, range, you, car);
+            Take<RDeadVehicle>(found, wants, from, range, you, car);
         }
 
-        if (Wants(Kind.Vehicle))
+        if (wants[(int)Kind.Turret])
         {
-            Take<RVehicle>();
-            Take<RAbandonedVehicle>();
-            Take<RDeadVehicle>();
+            Take<RSentryGunBase>(found, wants, from, range, you, car);
+            Take<RTurretBase>(found, wants, from, range, you, car);
         }
 
-        if (Wants(Kind.Turret))
+        if (wants[(int)Kind.Prop] || wants[(int)Kind.Scenery])
         {
-            Take<RSentryGunBase>();
-            Take<RTurretBase>();
+            Take<DynamicSMActor>(found, wants, from, range, you, car);
+            Take<ApexDestructibleActor>(found, wants, from, range, you, car);
         }
 
-        if (Wants(Kind.Prop, Kind.Scenery))
+        if (wants[(int)Kind.Pickup])
         {
-            Take<DynamicSMActor>();
-            Take<ApexDestructibleActor>();
+            Take<RBMCombatThrownObject>(found, wants, from, range, you, car);
+            Take<RPickupBaseBase>(found, wants, from, range, you, car);
+            Take<DroppedPickup>(found, wants, from, range, you, car);
         }
 
-        if (Wants(Kind.Pickup))
-        {
-            Take<RBMCombatThrownObject>();
-            Take<RPickupBaseBase>();
-            Take<DroppedPickup>();
-        }
-
-        found.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+        found.Sort(static (a, b) => a.Distance.CompareTo(b.Distance));
+        _lastFound = found.Count;
         return found;
+    }
+
+    // Most of a class is out of range, so that's checked first. Whose level it's in is the
+    // dearest check, so it comes last.
+    static void Take<T>(List<Found> found, ReadOnlySpan<bool> wants, Vector3 from, float range, Actor? you, Actor? car)
+        where T : Actor
+    {
+        var reach = range * range;
+        foreach (var actor in Game.FindObjects<T>())
+        {
+            if (!actor.IsValid)
+            {
+                continue;
+            }
+
+            var gap = Vector3.DistanceSquared(actor.Location, from);
+            if (gap > reach || actor.bHidden || actor.bDeleteMe || actor.bPendingDelete || ReferenceEquals(actor, you) || ReferenceEquals(actor, car)
+                || KindOf(actor) is not { } kind || !wants[(int)kind] || actor.Outer is not Level)
+            {
+                continue;
+            }
+
+            found.Add(new Found(actor, kind, MathF.Sqrt(gap)));
+        }
     }
 
     public static bool Alive(Actor? actor) => actor is { IsValid: true, bDeleteMe: false, bPendingDelete: false };
@@ -130,44 +143,72 @@ static class Things
 
     public static bool IsPerson(Actor actor) => actor is Pawn and not Vehicle;
 
+    // A name comes from what the object is made from: a person's character, a vehicle's template,
+    // a prop's mesh. So a body the game hands out again as someone else is named again, and each
+    // name is only worked out once.
     public static string NameOf(Actor actor)
     {
-        if (Names.TryGetValue(actor.Ptr, out var known))
-        {
-            return known;
-        }
-
-        string name;
+        GameObject? from;
         try
         {
-            name = actor switch
-            {
-                RBMPawnAI { CharacterDefine: { IsValid: true } define } => People.Pretty(define.Name.ToString() ?? ""),
-                RVehicleNPC { ObjectArchetype: RVehicleNPC { IsValid: true } template } => People.Pretty(template.Name.ToString() ?? ""),
-                DynamicSMActor { StaticMeshComponent.StaticMesh: { IsValid: true } mesh } => People.Pretty(mesh.Name.ToString() ?? ""),
-                RBMCombatThrownObject { WeaponType: { IsValid: true } weapon } => People.Pretty((weapon.Name.ToString() ?? "").Replace("RBMWeapon", "")),
-                _ => "",
-            };
+            from = NamedAfter(actor);
         }
         catch
         {
-            name = "";
+            from = null;
         }
 
-        if (name.Length == 0)
+        if (from is not null)
         {
-            var type = actor.Class.Name.ToString() ?? "OBJECT";
-            name = People.Pretty(type.Length > 1 && type[0] == 'R' && char.IsUpper(type[1]) ? type[1..] : type);
+            if (!Names.TryGetValue(from, out var known))
+            {
+                known = People.Pretty(Tidy(from.Name.ToString() ?? ""));
+                Names.AddOrUpdate(from, known);
+            }
+
+            if (known.Length > 0)
+            {
+                return known;
+            }
         }
 
-        // Ids come back once an actor is gone, so the list is emptied now and then.
-        if (Names.Count > 2048)
+        var type = actor.Class;
+        if (!Names.TryGetValue(type, out var plain))
         {
-            Names.Clear();
+            var text = type.Name.ToString() ?? "OBJECT";
+            plain = People.Pretty(text.Length > 1 && text[0] == 'R' && char.IsUpper(text[1]) ? text[1..] : text);
+            Names.AddOrUpdate(type, plain);
         }
 
-        Names[actor.Ptr] = name;
-        return name;
+        return plain;
+    }
+
+    static GameObject? NamedAfter(Actor actor) => actor switch
+    {
+        RBMPawnAI { CharacterDefine: { IsValid: true } define } => define,
+        RVehicleNPC { ObjectArchetype: RVehicleNPC { IsValid: true } template } => template,
+        DynamicSMActor { StaticMeshComponent.StaticMesh: { IsValid: true } mesh } => mesh,
+        RBMCombatThrownObject { WeaponType: { IsValid: true } weapon } => weapon,
+        RDestructibleProp prop => MadeFrom(prop),
+        SkeletalMeshActor { SkeletalMeshComponent.SkeletalMesh: { IsValid: true } model } => model,
+        _ => null,
+    };
+
+    // A breakable prop is whichever of the three kinds of model it was given.
+    static GameObject? MadeFrom(RDestructibleProp prop)
+    {
+        var look = prop.InitialAppearance;
+        return look.ApexMesh is { IsValid: true } apex ? apex
+            : look.StaticMesh is { IsValid: true } still ? still
+            : look.SkeletalMesh is { IsValid: true } skeletal ? skeletal
+            : null;
+    }
+
+    // Weapon classes and breakable meshes carry a tag that says nothing to the player.
+    static string Tidy(string name)
+    {
+        name = name.Replace("RBMWeapon", "", StringComparison.Ordinal);
+        return name.EndsWith("_APEX", StringComparison.OrdinalIgnoreCase) ? name[..^5] : name;
     }
 
     // A box turned with the object: its middle and the three half sides as world directions.
@@ -204,6 +245,12 @@ static class Things
                     return shape;
                 case DynamicSMActor dynamic when dynamic.StaticMeshComponent is { IsValid: true } mesh && Model(mesh) is { } shape:
                     return shape;
+
+                // A breakable prop's model has no size at rest to read, so its box is the one the
+                // game keeps round it, square to the world.
+                case RDestructibleProp { MeshComp: { IsValid: true } whole } when Sane(whole.Bounds.BoxExtent):
+                    var round = whole.Bounds;
+                    return new Shape(round.Origin, Vector3.UnitX * round.BoxExtent.X, Vector3.UnitY * round.BoxExtent.Y, Vector3.UnitZ * round.BoxExtent.Z);
             }
 
             // Anything else goes by the biggest model it shows.

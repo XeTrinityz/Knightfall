@@ -270,6 +270,15 @@ sealed class RailTheme : Theme
         // The row number lights up when the option is switched away from normal.
         var changed = !feature.Preference && !feature.IsDefault;
         Draw.Text(Kit.Number(index + 1), Inset, y + 10f, 10f, changed ? Live : selected ? accent : Ghost);
+
+        // A row that can't be used right now steps back, with the reason where its value goes.
+        if (feature.Blocked is { } why)
+        {
+            Draw.Text(feature.Label, LabelLeft, y + 7f, 15f, selected ? Dim : Ghost);
+            Kit.Locked(why, right, y + 10f, 10f, Ghost, selected ? Soft : Dim, LabelLeft + Draw.TextWidth(feature.Label, 15f) + 16f);
+            return;
+        }
+
         Draw.Text(feature.Label, LabelLeft, y + 7f, 15f, selected ? White : Soft);
 
         // A value flashes white for a moment when it changes.

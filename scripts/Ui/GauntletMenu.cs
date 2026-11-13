@@ -243,6 +243,15 @@ static class GauntletMenu
         var changed = !feature.Preference && !feature.IsDefault;
         var tone = Rgba.Mix(changed ? _live : _bright, White, feature.Glow(view.Now));
 
+        // A row that can't be used right now shows the reason in place of its control.
+        if (feature.Blocked is { } why)
+        {
+            const float size = 12f;
+            var mark = Kit.Padlock(Inset, top, size, _ghost);
+            Draw.TrackedHead(why, Inset + mark + 7f, top, size, 0f, _dim, FocusRight);
+            return top + size;
+        }
+
         switch (feature)
         {
             case Toggle toggle:
@@ -407,9 +416,15 @@ static class GauntletMenu
         var right = Width - Inset;
         var top = y + 4f;
         var tone = Rgba.Mix(changed ? _live : _dim, White, feature.Glow(view.Now));
+        var why = feature.Blocked;
         float valueLeft;
         switch (feature)
         {
+            // A row that can't be used right now shows a padlock where its value goes.
+            case var _ when why is not null:
+                valueLeft = right - Kit.Padlock(right - MathF.Round(size * 0.8f), top, size, _ghost);
+                break;
+
             case Toggle toggle:
                 valueLeft = Draw.TextRight(toggle.ValueText, right, top, size, toggle.On ? tone : _ghost);
                 break;
@@ -433,7 +448,7 @@ static class GauntletMenu
         }
 
         var label = feature.Label;
-        var ink = selected ? White : _pale;
+        var ink = why is not null ? _ghost : selected ? White : _pale;
         var limit = valueLeft - 8f;
         if (LabelLeft + Draw.TextWidth(label, 9f) <= limit)
         {

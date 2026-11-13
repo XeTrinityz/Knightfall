@@ -278,6 +278,10 @@ static class FreeCamera
 
         _hideWas = hide;
         _hidePadWas = hidePad;
+
+        // Here and not in the game tick, which stops in a pause. The keys and buttons go back to
+        // the game then, so its own menus and the map still work.
+        Keep(Free.On && Current == Kind.Fly && !World.Paused);
         if (!flying)
         {
             _onPad = Controls.LastDevice == Device.Pad;
@@ -360,7 +364,6 @@ static class FreeCamera
     static void Hold()
     {
         var want = Current == Kind.Fly ? World.Controller : null;
-        Keep(want is not null);
         if (ReferenceEquals(want, _inputOffFor))
         {
             return;

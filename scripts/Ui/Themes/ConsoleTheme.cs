@@ -345,6 +345,15 @@ sealed class ConsoleTheme : Theme
         // The row number lights up when the option is switched away from normal.
         var changed = !feature.Preference && !feature.IsDefault;
         Draw.Text(Kit.Number(index + 1), ListLeft + 18f, y + 10f, 10f, changed ? Live : selected ? accent : Ghost);
+
+        // A row that can't be used right now steps back, with the reason where its value goes.
+        if (feature.Blocked is { } why)
+        {
+            Draw.Text(feature.Label, ListLeft + 44f, y + 7f, 15f, selected ? Dim : Ghost);
+            Kit.Locked(why, right, y + 10f, 10f, Ghost, selected ? Soft : Dim, ListLeft + 44f + Draw.TextWidth(feature.Label, 15f) + 16f);
+            return;
+        }
+
         Draw.Text(feature.Label, ListLeft + 44f, y + 7f, 15f, selected ? White : Soft);
 
         // A value flashes white for a moment when it changes.
@@ -413,8 +422,10 @@ sealed class ConsoleTheme : Theme
             const float box = 62f;
             Draw.GradientAcross(left, y, width, box, (changed ? Live : accent) with { A = 26 }, accent with { A = 0 });
             Kit.Corners(left, y, width, box, 8f, changed ? Live : accent);
-            Draw.Text(feature.ValueText, left + 14f, y + 16f, 30f, value);
-            Tag(feature.IsDefault ? "DEFAULT" : "CHANGED", left + width - 10f, y + 23f, feature.IsDefault ? Ghost : Live);
+            // A row that can't be used right now keeps its value on show, stepped back.
+            var locked = feature.Blocked is not null;
+            Draw.Text(feature.ValueText, left + 14f, y + 16f, 30f, locked ? Ghost : value);
+            Tag(locked ? "LOCKED" : feature.IsDefault ? "DEFAULT" : "CHANGED", left + width - 10f, y + 23f, locked || feature.IsDefault ? Ghost : Live);
             y += box + 14f;
         }
 

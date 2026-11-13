@@ -364,6 +364,12 @@ static class Radial
             return;
         }
 
+        if (choice.Blocked is { } why)
+        {
+            Toasts.Show(choice.Plain, why, OutcomeKind.Failed, choice);
+            return;
+        }
+
         for (var i = 0; i < Math.Abs(steps); i++)
         {
             choice.Step(Math.Sign(steps));

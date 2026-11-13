@@ -59,6 +59,12 @@ static class Gyro
 
     public static bool Committed => Dragging != Handle.None && _travel >= Commit;
 
+    // A whole drag is one step for UNDO, noted when it first moves the object.
+    static bool _noted;
+
+    static readonly Handle[] Arrows = { Handle.Forward, Handle.Right, Handle.Up };
+    static readonly Handle[] Rings = { Handle.Turn, Handle.Tilt, Handle.Roll };
+
     // Where everything sits for this object this frame.
     readonly record struct Frame(Vector3 Middle, float Radius, Vector3 Forward, Vector3 Right, Vector3 Up, Vector3 Facing, Vector3 Side, Vector3 Lift);
 
@@ -124,7 +130,7 @@ static class Gyro
             Hover = Handle.Size;
         }
 
-        foreach (var arrow in new[] { Handle.Forward, Handle.Right, Handle.Up })
+        foreach (var arrow in Arrows)
         {
             var axis = AxisOf(frame, arrow);
             if (Hologram.Screen(frame.Middle + axis * frame.Radius * ArrowFrom, out var from)
@@ -136,7 +142,7 @@ static class Gyro
             }
         }
 
-        foreach (var ring in new[] { Handle.Turn, Handle.Tilt, Handle.Roll })
+        foreach (var ring in Rings)
         {
             for (var i = 0; i < RingPoints; i++)
             {
@@ -215,6 +221,7 @@ static class Gyro
 
         _lockedLook = controller.Rotation;
         _travel = 0f;
+        _noted = false;
         Dragging = Hover;
         return true;
     }
@@ -256,8 +263,13 @@ static class Gyro
             return true;
         }
 
-        var edit = Edits.Begin(actor);
-        edit.Changed = true;
+        var edit = _noted ? Edits.Begin(actor) : Edits.Touch(actor, Dragging switch
+        {
+            Handle.Forward or Handle.Right or Handle.Up => "MOVE",
+            Handle.Size => "SIZE",
+            _ => "TURN",
+        });
+        _noted = true;
         switch (Dragging)
         {
             case Handle.Forward or Handle.Right or Handle.Up:

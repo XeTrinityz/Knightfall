@@ -223,18 +223,22 @@ static class Menu
             MoveTo((View.RowIndex + 1) % rows);
         }
 
-        if (Controls.Pressed(Act.Left))
+        // A row that can't be used right now says why where its value goes, and takes no input.
+        if (View.Focus is { Blocked: null } open)
         {
-            View.Focus?.Step(-1);
-        }
-        else if (Controls.Pressed(Act.Right))
-        {
-            View.Focus?.Step(1);
-        }
+            if (Controls.Pressed(Act.Left))
+            {
+                open.Step(-1);
+            }
+            else if (Controls.Pressed(Act.Right))
+            {
+                open.Step(1);
+            }
 
-        if (Controls.Pressed(Act.Accept))
-        {
-            View.Focus?.Press();
+            if (Controls.Pressed(Act.Accept))
+            {
+                open.Press();
+            }
         }
 
         // A row with a job of its own for one of these keys does that in place of the usual.

@@ -51,6 +51,13 @@ abstract class Feature
     // What the key strip calls pressing the row, when SELECT doesn't say enough.
     public string? PressName { get; init; }
 
+    // Says why the row can't be used right now, or null when it can. It is asked every frame the
+    // row is on screen, so it has to be cheap. The menu draws such a row stepped back with the
+    // reason where its value goes, and a hotkey or the radial shows the reason as a note.
+    public Func<string?>? Block { get; init; }
+
+    public string? Blocked => Block?.Invoke();
+
     // Runs every game tick while the option is away from normal. For options that have to keep
     // doing something, like healing.
     public Action? Tick { get; init; }

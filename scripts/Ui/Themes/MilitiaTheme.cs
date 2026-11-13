@@ -339,8 +339,12 @@ sealed class MilitiaTheme : Theme
         // A state flashes white for a moment when it changes.
         var state = Rgba.Mix(accent, White, feature.Glow(now));
 
+        // A row that can't be used right now has no slab of its own to press. Its name steps
+        // back and the reason sits where its value goes.
+        var why = feature.Blocked;
+
         // Toggles and commands end in their own short slab, split off by a slanted gap.
-        var chip = feature is Toggle or Command;
+        var chip = why is null && feature is Toggle or Command;
         var mainRight = chip ? Width - ChipWidth - Gap : Width;
         Slab(-punch, mainRight, y, RowHeight, grow, back);
 
@@ -375,9 +379,16 @@ sealed class MilitiaTheme : Theme
 
         FadeWith(grow);
         Draw.Text(Kit.Number(index + 1), Inset - lean, y + 10f, 10f, changed ? accent : selected ? Ink : Ghost);
-        Draw.Text(feature.Label, Inset + 28f - lean, y + 7f, 15f, ink);
-
         var right = Width - Inset - lean;
+        if (why is not null)
+        {
+            var faint = selected ? Ink with { A = 150 } : Ghost;
+            Draw.Text(feature.Label, Inset + 28f - lean, y + 7f, 15f, faint);
+            Kit.Locked(why, right, y + 10f, 10f, faint, faint, Inset + 28f - lean + Draw.TextWidth(feature.Label, 15f) + 16f);
+            return;
+        }
+
+        Draw.Text(feature.Label, Inset + 28f - lean, y + 7f, 15f, ink);
         var value = selected ? Ink : changed ? state : White;
 
         switch (feature)

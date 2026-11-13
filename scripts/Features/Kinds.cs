@@ -132,7 +132,24 @@ sealed class Slider : Feature
 
     public override void Reset() => Set(_default);
 
-    public override void Step(int direction) => Set(Value + direction * StepSize);
+    // A slider that goes round, like an angle. Stepping past one end comes in at the other. The
+    // two ends are the same place, and it's always shown as the top one.
+    public bool Wraps { get; init; }
+
+    public override void Step(int direction)
+    {
+        var value = Value + direction * StepSize;
+        if (Wraps && Max > Min)
+        {
+            value = value > Max ? value - (Max - Min) : value < Min ? value + (Max - Min) : value;
+            if (value <= Min)
+            {
+                value = Max;
+            }
+        }
+
+        Set(value);
+    }
 
     public void SetTo(double value) => Set(value);
 

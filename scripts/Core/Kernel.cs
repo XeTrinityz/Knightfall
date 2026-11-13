@@ -130,6 +130,7 @@ static class Kernel
         Run("menu", static () => Menu.Update());
         Run("dash", static () => Dash.Update());
         Run("free camera", static () => FreeCamera.Poll());
+        Run("editor mode", static () => EditorMode.Poll());
         Run("guide", static () => Guide.Update());
         Run("freeze", static () => WorldTime.SyncFreeze());
         Run("bars draw", static target => CameraView.RenderBars(target), canvas);

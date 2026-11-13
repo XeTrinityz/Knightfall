@@ -487,6 +487,17 @@ static class Hotkeys
     // What a hotkey or a radial slot does to its row.
     public static void Fire(Feature feature)
     {
+        // A row that can't be used right now is left alone, and says why.
+        if (feature.Blocked is { } why)
+        {
+            if (feature is not Command { Quiet: true })
+            {
+                Toasts.Show(feature.Plain, why, OutcomeKind.Failed, feature);
+            }
+
+            return;
+        }
+
         switch (feature)
         {
             case Command command:

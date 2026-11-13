@@ -8,7 +8,7 @@ using BmSDK.Engine;
 namespace Knightfall;
 
 // EDITOR > MOVE. Puts the selected object somewhere new, steps it about, or carries it in front
-// of the camera. Everything here is noted first, so RESTORE can put it back.
+// of the camera. Everything here is noted first, so UNDO and RESTORE can put it back.
 static class Moving
 {
     const float Metre = Teleport.UnitsPerMetre;
@@ -39,36 +39,59 @@ static class Moving
     static Vector3 _velocity;
     static object? _paused;
 
-    // Set once EDITOR MODE pushes or pulls what's held, which then wins over GRAB DISTANCE.
+    // Set once what's held is pushed or pulled, which then wins over GRAB DISTANCE.
     static bool _reached;
+
+    // How far the step rows have shifted what's held off the middle of the view, sideways and up.
+    static float _side;
+    static float _rise;
 
     // What GRAB is carrying, if anything.
     public static Actor? Held => _holding ? _held : null;
 
+    // What the rows that move the selection show while it can't be moved. It sits above the rows,
+    // which take it as they are made.
+    static readonly Func<string?> Unmovable = static () => Stuck(Editor.Selected);
+
     public static readonly Command GoTo = new(
         "editor.move.go_to", "GO TO IT",
         "Puts you beside the selected object, facing it.",
-        GoToSelected);
+        GoToSelected)
+    {
+        Block = static () => Editor.Selected is null ? "NOTHING SELECTED" : null,
+    };
 
     public static readonly Command Bring = new(
         "editor.move.bring", "BRING IT TO ME",
         "Puts the selected object on the ground in front of you.",
-        BringSelected);
+        BringSelected)
+    {
+        Block = Unmovable,
+    };
 
     public static readonly Command AtCrosshair = new(
         "editor.move.crosshair", "PLACE AT CROSSHAIR",
-        "Puts the selected object where you're aiming, standing on the floor there or against the wall.",
-        PlaceAtCrosshair);
+        "Puts the selected object where you're aiming. It stands on a floor, sits against a wall or hangs under a ceiling.",
+        PlaceAtCrosshair)
+    {
+        Block = Unmovable,
+    };
 
     public static readonly Command Drop = new(
         "editor.move.drop", "DROP TO GROUND",
         "Sets the selected object down on the floor beneath it.",
-        DropSelected);
+        DropSelected)
+    {
+        Block = Unmovable,
+    };
 
     public static readonly Toggle Grab = new(
         "editor.move.grab", "GRAB",
-        "The selected object floats in front of the camera and follows your view. Turn it off to let go, and turn quickly as you do to throw it.",
-        saved: false);
+        "The selected object floats in front of the camera and follows your view. The STEP and TURN rows shift it while you hold it. Turn it off to let go, and turn quickly as you do to throw it.",
+        saved: false)
+    {
+        Block = Unmovable,
+    };
 
     public static readonly Slider GrabDistance = new(
         "editor.move.grab_distance", "GRAB DISTANCE",
@@ -81,9 +104,17 @@ static class Moving
     public static readonly Slider Forward = Step("forward", "MOVE FORWARD", "Moves the selected object the way the camera looks, or back toward it below zero.");
     public static readonly Slider Right = Step("right", "MOVE RIGHT", "Moves the selected object to the camera's right, or left below zero.");
     public static readonly Slider Up = Step("up", "MOVE UP", "Lifts the selected object, or lowers it below zero.");
-    public static readonly Slider Turn = Spin("turn", "TURN", "Turns the selected object left or right.");
-    public static readonly Slider Tilt = Spin("tilt", "TILT", "Tips the selected object forward or back.");
-    public static readonly Slider Roll = Spin("roll", "ROLL", "Rolls the selected object onto its side.");
+    public static readonly Slider Turn = Angle("turn", "TURN", "Turns the selected object left or right.");
+    public static readonly Slider Tilt = Angle("tilt", "TILT", "Tips the selected object forward or back.");
+    public static readonly Slider Roll = Angle("roll", "ROLL", "Rolls the selected object onto its side.");
+
+    public static readonly Command Upright = new(
+        "editor.move.upright", "STAND UPRIGHT",
+        "Takes the tilt and roll off the selected object, so it stands straight. Its turn stays.",
+        StandUpright)
+    {
+        Block = Unmovable,
+    };
 
     static readonly Slider[] Steps = { Forward, Right, Up, Turn, Tilt, Roll };
     static readonly double[] Shown = new double[6];
@@ -93,21 +124,25 @@ static class Moving
         new("PUT", GoTo, Bring, AtCrosshair, Drop),
         new("GRAB", Grab, GrabDistance),
         new("STEP", Forward, Right, Up),
-        new("TURN", Turn, Tilt, Roll),
-        new("RESTORE", Editor.RestoreSelected),
+        new("TURN", Turn, Tilt, Roll, Upright),
+        new("UNDO", Editor.Undo, Editor.RestoreSelected),
     };
 
-    // The MOVE and TURN rows show how far the selected object has gone since it was first touched.
+    // The STEP and TURN rows show how far they have taken the selected object since it was first
+    // touched. A turn goes all the way round.
     static Slider Step(string id, string label, string help) =>
         new("editor.move." + id, label, help + " Each step is a quarter of a metre.", min: -50, max: 50, step: 0.25, value: 0, unit: " M", saved: false)
         {
             Preference = true,
+            Block = Unmovable,
         };
 
-    static Slider Spin(string id, string label, string help) =>
+    static Slider Angle(string id, string label, string help) =>
         new("editor.move." + id, label, help, min: -180, max: 180, step: 15, value: 0, unit: " DEG", saved: false)
         {
             Preference = true,
+            Wraps = true,
+            Block = Unmovable,
         };
 
     // A new selection, or none. The step rows show its totals and any grab lets go.
@@ -119,17 +154,37 @@ static class Moving
             Grab.Reset();
         }
 
+        Reshow(actor);
+        Change.Selected(actor);
+    }
+
+    // The step rows catch up with what's been done to it.
+    public static void Reshow(Actor? actor)
+    {
         var edit = actor is null ? null : Edits.Find(actor);
-        double[] totals = edit is null
-            ? new double[6]
-            : new double[] { edit.Moved.X, edit.Moved.Y, edit.Moved.Z, edit.Turned.X, edit.Turned.Y, edit.Turned.Z };
+        Span<float> totals = stackalloc float[6];
+        if (edit is not null)
+        {
+            (totals[0], totals[1], totals[2]) = (edit.Moved.X, edit.Moved.Y, edit.Moved.Z);
+            (totals[3], totals[4], totals[5]) = (edit.Turned.X, edit.Turned.Y, edit.Turned.Z);
+        }
+
         for (var i = 0; i < Steps.Length; i++)
         {
             Steps[i].Show(totals[i]);
             Shown[i] = Steps[i].Value;
         }
+    }
 
-        Change.Selected(actor);
+    // Why the selection can't be moved, or null when it can.
+    public static string? Stuck(Actor? actor)
+    {
+        if (actor is null)
+        {
+            return "NOTHING SELECTED";
+        }
+
+        return Things.Fixed(actor) ?? (Edits.Find(actor) is { Removed: true } ? "IT'S REMOVED" : null);
     }
 
     public static void Tick()
@@ -143,8 +198,15 @@ static class Moving
                 continue;
             }
 
-            if (actor is null || Things.Fixed(actor) is not null || Edits.Find(actor) is { Removed: true }
-                || World.Controller is not { } controller)
+            // A row that can't act goes back to what it showed, and says why.
+            if (Stuck(actor) is { } why)
+            {
+                Steps[i].Show(Shown[i]);
+                Toasts.Show(Steps[i].Plain, why, OutcomeKind.Failed, Steps[i]);
+                continue;
+            }
+
+            if (World.Controller is not { } controller)
             {
                 Steps[i].Show(Shown[i]);
                 continue;
@@ -152,8 +214,17 @@ static class Moving
 
             var change = (float)(value - Shown[i]);
             Shown[i] = value;
-            controller.GetPlayerViewPoint(out _, out var view);
-            Nudge(actor, i, change, view);
+            if (i < 3)
+            {
+                controller.GetPlayerViewPoint(out _, out var view);
+                Edits.Touch(actor!, "MOVE");
+                Shift(actor!, i, change, view);
+            }
+            else
+            {
+                Edits.Touch(actor!, "TURN");
+                Spin(actor!, i, change);
+            }
         }
 
         // A pause holds everything where it is.
@@ -172,27 +243,38 @@ static class Moving
         }
     }
 
-    static void Nudge(Actor actor, int row, float change, Rotator view)
+    static bool Carrying(Actor actor) => _holding && ReferenceEquals(_held, actor);
+
+    // One of the three STEP rows. What's being carried is placed from the view each tick, so
+    // there a step pushes it away or shifts where it's held.
+    static void Shift(Actor actor, int row, float change, Rotator view)
     {
         var edit = Edits.Begin(actor);
-        edit.Changed = true;
+        switch (row)
+        {
+            case 0:
+                edit.Moved.X += change;
+                break;
+            case 1:
+                edit.Moved.Y += change;
+                break;
+            default:
+                edit.Moved.Z += change;
+                break;
+        }
 
-        // What's being carried keeps the turn it's given, since the carry sets its facing each tick.
-        if (_holding && ReferenceEquals(_held, actor) && row >= 3)
+        if (Carrying(actor))
         {
             switch (row)
             {
-                case 3:
-                    _yawOffset += change;
-                    edit.Turned.X += change;
+                case 0:
+                    Push(change * Metre);
                     break;
-                case 4:
-                    _heldPitch += change;
-                    edit.Turned.Y += change;
+                case 1:
+                    _side += change * Metre;
                     break;
                 default:
-                    _heldRoll += change;
-                    edit.Turned.Z += change;
+                    _rise += change * Metre;
                     break;
             }
 
@@ -200,56 +282,91 @@ static class Moving
         }
 
         var ahead = Teleport.Flat(view.ToDirection());
-        var right = new Vector3(-ahead.Y, ahead.X, 0f);
-        var at = actor.Location;
-        var turn = actor.Rotation;
+        var way = row switch
+        {
+            0 => ahead,
+            1 => new Vector3(-ahead.Y, ahead.X, 0f),
+            _ => Vector3.UnitZ,
+        };
+        Edits.Put(actor, actor.Location + way * change * Metre, actor.Rotation);
+    }
+
+    // One of the three TURN rows, by its place in the list. What's being carried keeps the turn
+    // it's given, since the carry sets its facing each tick.
+    static void Spin(Actor actor, int row, float change)
+    {
+        var edit = Edits.Begin(actor);
         switch (row)
         {
-            case 0:
-                at += ahead * change * Metre;
-                edit.Moved.X += change;
-                break;
-            case 1:
-                at += right * change * Metre;
-                edit.Moved.Y += change;
-                break;
-            case 2:
-                at += Vector3.UnitZ * change * Metre;
-                edit.Moved.Z += change;
-                break;
             case 3:
-                turn = new Rotator(turn.Pitch, turn.Yaw + change, turn.Roll);
-                edit.Turned.X += change;
+                edit.Turned.X = Wrap(edit.Turned.X + change);
                 break;
             case 4:
-                turn = new Rotator(turn.Pitch + change, turn.Yaw, turn.Roll);
-                edit.Turned.Y += change;
+                edit.Turned.Y = Wrap(edit.Turned.Y + change);
                 break;
             default:
-                turn = new Rotator(turn.Pitch, turn.Yaw, turn.Roll + change);
-                edit.Turned.Z += change;
+                edit.Turned.Z = Wrap(edit.Turned.Z + change);
                 break;
         }
 
-        Edits.Put(actor, at, turn);
+        if (Carrying(actor))
+        {
+            switch (row)
+            {
+                case 3:
+                    _yawOffset += change;
+                    break;
+                case 4:
+                    _heldPitch += change;
+                    break;
+                default:
+                    _heldRoll += change;
+                    break;
+            }
+
+            return;
+        }
+
+        var turn = actor.Rotation;
+        turn = row switch
+        {
+            3 => new Rotator(turn.Pitch, turn.Yaw + change, turn.Roll),
+            4 => new Rotator(turn.Pitch + change, turn.Yaw, turn.Roll),
+            _ => new Rotator(turn.Pitch, turn.Yaw, turn.Roll + change),
+        };
+        Edits.Put(actor, actor.Location, turn);
+    }
+
+    static float Wrap(float degrees)
+    {
+        degrees %= 360f;
+        return degrees > 180f ? degrees - 360f : degrees <= -180f ? degrees + 360f : degrees;
     }
 
     // Held where the camera looks. People are paused while held so their AI doesn't fight it.
     static void Carry()
     {
-        if (Editor.Selected is not { } actor || Things.Fixed(actor) is not null || Edits.Find(actor) is { Removed: true }
-            || World.Controller is not { } controller)
+        var actor = Editor.Selected;
+        if (Stuck(actor) is { } why)
+        {
+            Toasts.Show(Grab.Plain, why, OutcomeKind.Failed, Grab);
+            Grab.Reset();
+            return;
+        }
+
+        if (World.Controller is not { } controller)
         {
             Grab.Reset();
             return;
         }
 
         controller.GetPlayerViewPoint(out var eye, out var view);
-        if (!_holding || !ReferenceEquals(_held, actor))
+        if (!Carrying(actor!))
         {
             LetGo();
-            Things.Box(actor, out var middle, out _);
-            _offset = middle - actor.Location;
+            Edits.Touch(actor!, "GRAB");
+            Things.Box(actor!, out var middle, out _);
+            _offset = middle - actor!.Location;
             _distance = MathF.Max(GrabNearest, Vector3.Distance(eye, middle));
             _yawOffset = actor.Rotation.Yaw - view.Yaw;
             _heldPitch = actor.Rotation.Pitch;
@@ -257,15 +374,16 @@ static class Moving
             _velocity = Vector3.Zero;
             _last = actor.Location;
             _lastAt = World.Now;
-            Edits.Begin(actor).Changed = true;
             _paused = actor is RBMPawnAI body ? Freezer.Pause(body) : null;
             _reached = false;
+            (_side, _rise) = (0f, 0f);
             _held = actor;
             _holding = true;
         }
 
         var distance = !_reached && GrabDistance.Value > 0 ? (float)GrabDistance.Value * Metre : _distance;
-        var at = eye + view.ToDirection() * distance - _offset;
+        var ahead = Teleport.Flat(view.ToDirection());
+        var at = eye + view.ToDirection() * distance + new Vector3(-ahead.Y, ahead.X, 0f) * _side + Vector3.UnitZ * _rise - _offset;
         var seconds = World.Now - _lastAt;
         if (seconds > 0f)
         {
@@ -274,7 +392,7 @@ static class Moving
 
         _last = at;
         _lastAt = World.Now;
-        Edits.Put(actor, at, new Rotator(_heldPitch, view.Yaw + _yawOffset, _heldRoll));
+        Edits.Put(actor!, at, new Rotator(_heldPitch, view.Yaw + _yawOffset, _heldRoll));
     }
 
     // Pushes what's held further from the camera, or pulls it in below zero.
@@ -339,31 +457,57 @@ static class Moving
 
     static Outcome Movable(out Actor actor)
     {
-        actor = null!;
-        if (Editor.Selected is not { } selected)
-        {
-            return Outcome.Failed("NOTHING SELECTED");
-        }
-
-        if (Things.Fixed(selected) is { } why)
-        {
-            return Outcome.Failed(why);
-        }
-
-        if (Edits.Find(selected) is { Removed: true })
-        {
-            return Outcome.Failed("IT'S REMOVED");
-        }
-
-        actor = selected;
-        return Outcome.Done();
+        actor = Editor.Selected!;
+        return Stuck(actor) is { } why ? Outcome.Failed(why) : Outcome.Done();
     }
 
+    // The carry would take it straight back, so a grab lets go first.
     static Outcome Moved(Actor actor, Vector3 at)
     {
-        Edits.Begin(actor).Changed = true;
+        if (Carrying(actor))
+        {
+            LetGo();
+            Grab.Reset();
+        }
+
+        Edits.Touch(actor, "MOVE");
         Edits.Put(actor, at, actor.Rotation);
         return Outcome.Done("MOVED");
+    }
+
+    // Lifts it clear and rolls it over, for FLIP OVER.
+    public static void Flip(Actor actor, float lift)
+    {
+        Edits.Touch(actor, "FLIP");
+        if (!Carrying(actor))
+        {
+            Edits.Put(actor, actor.Location + Vector3.UnitZ * lift, actor.Rotation);
+        }
+
+        Spin(actor, 5, 180f);
+        Reshow(actor);
+    }
+
+    static Outcome StandUpright()
+    {
+        if (Movable(out var actor) is { Kind: OutcomeKind.Failed } refused)
+        {
+            return refused;
+        }
+
+        var carried = Carrying(actor);
+        var pitch = Wrap(carried ? _heldPitch : actor.Rotation.Pitch);
+        var roll = Wrap(carried ? _heldRoll : actor.Rotation.Roll);
+        if (MathF.Abs(pitch) < 0.5f && MathF.Abs(roll) < 0.5f)
+        {
+            return Outcome.Unchanged("ALREADY UPRIGHT");
+        }
+
+        Edits.Touch(actor, "TURN");
+        Spin(actor, 4, -pitch);
+        Spin(actor, 5, -roll);
+        Reshow(actor);
+        return Outcome.Done("UPRIGHT");
     }
 
     static Outcome GoToSelected()
@@ -447,7 +591,8 @@ static class Moving
                 return Moved(actor, new Vector3(spot.X - across.X, spot.Y - across.Y, spot.Z + Lift(actor) + 2f));
             }
 
-            return Moved(actor, spot + normal * (MathF.Max(half.X, half.Y) + 5f) - across);
+            // Against a wall or under a ceiling, by how far its box reaches that way.
+            return Moved(actor, spot + normal * (Vector3.Dot(Vector3.Abs(normal), half) + 5f) - across);
         }
 
         return Outcome.Failed("AIM AT SOMETHING");
@@ -460,9 +605,10 @@ static class Moving
             return refused;
         }
 
+        // Looked for from its middle down, so one sunk into the ground comes back up onto it.
         Things.Box(actor, out var middle, out var half);
         var bottom = middle.Z - half.Z;
-        if (!Teleport.Floor(actor, middle, bottom + 20f, bottom - FloorReach, out var floor))
+        if (!Teleport.Floor(actor, middle, middle.Z, bottom - FloorReach, out var floor))
         {
             return Outcome.Failed("NO GROUND BELOW");
         }

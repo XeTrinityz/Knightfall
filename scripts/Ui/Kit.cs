@@ -299,6 +299,28 @@ static class Kit
         }
     }
 
+    // A small padlock, as tall as the size. Returns its width.
+    public static float Padlock(float x, float y, float size, Rgba color)
+    {
+        var width = MathF.Round(size * 0.8f);
+        var body = MathF.Round(size * 0.55f);
+        var loop = MathF.Round(width * 0.6f);
+        Draw.Frame(x + (width - loop) / 2f, y, loop, size - body + 1f, 1f, color);
+        Draw.Rect(x, y + size - body, width, body, color);
+        return width;
+    }
+
+    // What a row that can't be used right now shows in place of its value: a padlock and the
+    // reason, ending at the right. Returns where it starts.
+    public static float Locked(string why, float right, float y, float size, Rgba mark, Rgba text, float leftmost)
+    {
+        var gap = MathF.Round(size * 0.6f);
+        var room = MathF.Round(size * 0.8f) + gap;
+        var left = Draw.TextRightFit(why, right, y, size, text, leftmost + room);
+        Padlock(left - room, y, size, mark);
+        return left - room;
+    }
+
     // A key name in a small outlined box, centred on y. Returns its width.
     public static float Cap(string text, float x, float y, float size, Rgba frame, Rgba color)
     {

@@ -24,7 +24,7 @@ static class EditorMode
     // Kept from the game while the mode is on. FREE CAMERA keeps the pad and its own fly keys.
     static readonly Keys[] EditKeys =
     {
-        Keys.LButton, Keys.RButton, Keys.Q, Keys.E, Keys.Z, Keys.X, Keys.F, Keys.G, Keys.C, Keys.R, Keys.Delete, Keys.W, Keys.S,
+        Keys.LButton, Keys.RButton, Keys.Q, Keys.E, Keys.Z, Keys.X, Keys.F, Keys.G, Keys.C, Keys.U, Keys.R, Keys.Delete, Keys.Back, Keys.W, Keys.S,
     };
 
     static readonly bool[] KeyTaken = new bool[EditKeys.Length];
@@ -36,6 +36,9 @@ static class EditorMode
     static bool _pressing;
     static bool _grabbing;
     static bool _turning;
+
+    // A hold tries to grab once, when it has lasted long enough.
+    static bool _grabTried;
 
     // A hold on a gyro handle only drags it once the view moves. Held still this long, it grabs
     // the object instead, since the handles cover most of a small object.
@@ -88,7 +91,6 @@ static class EditorMode
             return;
         }
 
-        Keep(!Menu.Showing);
         var now = Stopwatch.GetTimestamp();
         var seconds = _lastAt == 0 ? 0f : MathF.Min((float)((now - _lastAt) / (double)Stopwatch.Frequency), 0.1f);
         _lastAt = now;
@@ -142,35 +144,35 @@ static class EditorMode
             // Up and down push and pull on the pad, so left and right size what's held.
             if (Pressed(0, Pad.Button.DPadLeft))
             {
-                Step(Change.Size, -1);
+                Size(-1);
             }
 
             if (Pressed(0, Pad.Button.DPadRight))
             {
-                Step(Change.Size, 1);
+                Size(1);
             }
         }
         else
         {
             if (Pressed(0, Pad.Button.DPadDown))
             {
-                Step(Change.Size, -1);
+                Size(-1);
             }
 
             if (Pressed(0, Pad.Button.DPadUp))
             {
-                Step(Change.Size, 1);
+                Size(1);
             }
         }
 
         if (Pressed(Keys.Z, 0))
         {
-            Step(Change.Size, -1);
+            Size(-1);
         }
 
         if (Pressed(Keys.X, 0))
         {
-            Step(Change.Size, 1);
+            Size(1);
         }
 
         if (Pressed(Keys.F, Pad.Button.X))
@@ -186,6 +188,17 @@ static class EditorMode
         if (Pressed(Keys.C, 0))
         {
             Toasts.Run(Moving.AtCrosshair);
+        }
+
+        if (Pressed(Keys.U, 0))
+        {
+            Toasts.Run(Moving.Upright);
+        }
+
+        if (Pressed(Keys.Back, 0))
+        {
+            LetGoOfGrab();
+            Toasts.Run(Editor.Undo);
         }
 
         if (Pressed(Keys.Delete, _grabbing ? 0 : Pad.Button.DPadLeft))
@@ -208,6 +221,7 @@ static class EditorMode
         if (down && !_pressing)
         {
             _pressing = true;
+            _grabTried = false;
             _pressedAt = now;
 
             // On a gyro handle, the click drags the handle instead.
@@ -253,17 +267,30 @@ static class EditorMode
 
         if (down && _pressing && !_grabbing && (now - _pressedAt) / (double)Stopwatch.Frequency >= HoldToGrab)
         {
-            if (Editor.Aimed() is { } aimed)
+            // The world is looked over once. A hold that found nothing then goes by the aim
+            // preview, which is kept up to date anyway.
+            var first = !_grabTried;
+            _grabTried = true;
+            var before = Editor.Selected;
+            if ((first ? Editor.Aimed() : Editor.Preview) is { } aimed)
             {
                 Editor.Select(aimed);
             }
 
-            if (Editor.Selected is not null)
+            // Something that can't be carried says why once, and the camera keeps its forward key.
+            if (Editor.Selected is { } wanted)
             {
-                _grabbing = true;
-                if (!Moving.Grab.On)
+                if (Moving.Stuck(wanted) is not { } why)
                 {
-                    Moving.Grab.Step(1);
+                    _grabbing = true;
+                    if (!Moving.Grab.On)
+                    {
+                        Moving.Grab.Step(1);
+                    }
+                }
+                else if (first || !ReferenceEquals(before, wanted))
+                {
+                    Toasts.Show(Moving.Grab.Plain, why, OutcomeKind.Failed, Moving.Grab);
                 }
             }
 
@@ -285,30 +312,33 @@ static class EditorMode
         }
     }
 
-    // Single-key changes need something selected, and say what they did.
-    static bool Selected()
+    // A single-key change that can't act says why, under the row's own name. One that can says
+    // what it did.
+    static bool Allowed(Feature row, string? why)
     {
-        if (Editor.Selected is not null)
+        if (why is null)
         {
             return true;
         }
 
-        Toasts.Show("EDITOR MODE", "NOTHING SELECTED", OutcomeKind.Failed);
+        Toasts.Show(row.Plain, why, OutcomeKind.Failed, row);
         return false;
     }
 
     static void Step(Slider row, int direction)
     {
-        if (Selected())
+        if (Allowed(row, row.Blocked))
         {
             row.Step(direction);
             Toasts.Used(row);
         }
     }
 
+    static void Size(int direction) => Step(Change.Size, direction);
+
     static void Flip(Toggle row)
     {
-        if (Selected())
+        if (Allowed(row, row.Blocked))
         {
             row.Press();
             Toasts.Used(row);
@@ -419,6 +449,10 @@ static class EditorMode
         }
     }
 
+    // Every drawn frame, since the game tick stops in a pause. The keys go back to the game
+    // while it's paused or the menu is open, so its own menus and the map still take clicks.
+    public static void Poll() => Keep(On.On && _started && !Menu.Showing && !World.Paused);
+
     // A key only changes hands while it's up, or the game would see it stuck down.
     static void Keep(bool keep)
     {
@@ -479,7 +513,7 @@ static class EditorMode
                     new(new[] { Pad.Describe(Pad.Button.X) }, "FREEZE"),
                     new(new[] { Pad.Describe(Pad.Button.Y) }, "DROP TO GROUND"),
                     new(new[] { Pad.Describe(Pad.Button.DPadLeft) }, "REMOVE"),
-                    new(new[] { Pad.Describe(Pad.Button.DPadRight) }, "RESTORE"),
+                    new(new[] { Pad.Describe(Pad.Button.DPadRight) }, "RESTORE IT"),
                     new(new[] { Pad.Describe(Pad.Button.B) }, "DESELECT"),
                     new(new[] { Pad.Describe(Pad.Button.RightStick) }, "HIDE CONTROLS"),
                 };
@@ -501,8 +535,10 @@ static class EditorMode
             new(new[] { "F" }, "FREEZE"),
             new(new[] { "G" }, "DROP TO GROUND"),
             new(new[] { "C" }, "PLACE AT CROSSHAIR"),
+            new(new[] { "U" }, "STAND UPRIGHT"),
             new(new[] { "DEL" }, "REMOVE"),
-            new(new[] { "R" }, "RESTORE"),
+            new(new[] { "BKSP" }, "UNDO"),
+            new(new[] { "R" }, "RESTORE IT"),
             new(new[] { "RIGHT CLICK" }, "DESELECT"),
             new(new[] { "H" }, "HIDE CONTROLS"),
         };

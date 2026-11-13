@@ -221,10 +221,11 @@ SPAWNER
 EDITOR
 
 - SELECT: SELECT AIMED picks what's in the middle of the screen, with a bracket showing what it would take. SELECTED steps through what's nearby. SELECT FROM and RANGE narrow it.
-- MOVE: GO TO IT, BRING IT TO ME, PLACE AT CROSSHAIR, DROP TO GROUND, GRAB to carry or throw it, and MOVE and TURN steps.
-- CHANGE: SIZE, FREEZE, REMOVE (hidden, never deleted) and NO COLLISION, plus LAUNCH, FLIP OVER, HEAL OR REPAIR, DESTROY OR KNOCK OUT, DISARM and REVIVE.
-- MODE: EDITOR MODE flies the free camera and edits with single keys or the pad. Click to select, hold to grab, and the controls show on screen. LAND WHERE YOU FLEW puts Batman under the camera after.
-- RESTORE SELECTED and RESTORE EVERYTHING put things back exactly as they were. Pieces built into the level can't be moved.
+- MOVE: GO TO IT, BRING IT TO ME, PLACE AT CROSSHAIR, DROP TO GROUND, GRAB to carry or throw it, MOVE and TURN steps that also shift what you're carrying, and STAND UPRIGHT.
+- CHANGE: SIZE, FREEZE, REMOVE (hidden, never deleted) and NO COLLISION, plus LAUNCH, FLIP OVER, HEAL OR REPAIR (it rebuilds a broken prop too), DESTROY OR KNOCK OUT, DISARM and REVIVE.
+- MODE: EDITOR MODE flies the free camera and edits with single keys or the pad. Click to select, hold to grab, Backspace to undo, and the controls show on screen. LAND WHERE YOU FLEW puts Batman under the camera after.
+- UNDO takes back the last change, up to 40 of them. RESTORE SELECTED and RESTORE EVERYTHING put things back exactly as they were. Pieces built into the level can't be moved, but REMOVE takes them away.
+- A row that can't act on what's selected is locked. It shows a padlock and the reason, like PART OF THE LEVEL or NOT A PERSON, so you don't have to try it to find out.
 
 SOUNDS > GAME SOUNDS
 
