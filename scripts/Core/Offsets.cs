@@ -21,6 +21,12 @@ static class Offsets
     public const nint SetSaveNameCode = 0x142BA0;
     public const nint SaveSlotValue = 0x3101F6C;
 
+    // The game's music player keeps what it last asked for as pairs of numbers, a state group
+    // and the state picked in it. This is where the pairs start, from the start of the game's
+    // exe. Checked in GameSounds by one of the groups being the soundtrack's.
+    public const nint MusicStates = 0x3AF5E4C;
+    public const int MusicStatePairs = 4;
+
     // A script Canvas keeps its native canvas here, and a native Function keeps its code here.
     // The code of PushTranslationMatrix is searched this far for the call to the push that
     // takes any matrix. Checked in Hologram by the first bytes of that push.

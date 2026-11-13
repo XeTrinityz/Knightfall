@@ -181,6 +181,9 @@ sealed class Choice : Feature
 
     public int Index { get; private set; }
 
+    // What accept does in place of stepping on, for a list whose pick is there to be used.
+    public Action? Pressed { get; init; }
+
     public int Count => _options.Length;
 
     public string CurrentId => _options[Index].Id;
@@ -218,6 +221,17 @@ sealed class Choice : Feature
     public override void Reset() => Set(_default);
 
     public override void Step(int direction) => Set((Index + direction + _options.Length) % _options.Length);
+
+    public override void Press()
+    {
+        if (Pressed is null)
+        {
+            Step(1);
+            return;
+        }
+
+        Pressed();
+    }
 
     public void SetTo(int index) => Set(Math.Clamp(index, 0, _options.Length - 1));
 

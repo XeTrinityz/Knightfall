@@ -228,7 +228,9 @@ EDITOR
 
 SOUNDS > GAME SOUNDS
 
-- SHOW, REFRESH SOUND LIST, SOUND, PLAY SOUND and STOP SOUND. Plays the game's own sounds that are loaded where you are, or switches the soundtrack to one of its moods.
+- SOUNDTRACK. Keeps the game's music on one mood, like EXPLORE, COMBAT or SILENCE, until you pick GAME'S OWN again.
+- SHOW, GROUP and SOUND. Finds any sound the game has loaded where you are, thug and story voice lines included. Select on SOUND plays it.
+- PLAY SOUND, STOP SOUND, PREVIEW and REFRESH SOUND LIST. Plays the picked sound on you. PREVIEW plays each one as you stop on it.
 
 SETTINGS > LOOK
 
