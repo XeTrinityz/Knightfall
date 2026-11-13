@@ -8,7 +8,8 @@ using BmSDK.Engine;
 namespace Knightfall;
 
 // SPAWNER > VEHICLES. Any vehicle template the game has loaded, built the way the game builds
-// its own chase car: spawned from the template, then given something to do.
+// its own chase car: spawned from the template, then given something to do. What's loaded changes
+// as you move, so the list is read each time the tab comes up.
 static class Vehicles
 {
     // Vehicles need more room than people, both from you and from each other.
@@ -38,33 +39,34 @@ static class Vehicles
     static List<Recipe> _recipes = new();
     static RGameInfo? _world;
     static string _listedGroup = "";
+    static bool _shown;
 
     public static readonly Choice Group = new(
         "spawner.vehicles.group", "GROUP",
         "Which kind of vehicle VEHICLE lists.",
-        new[] { ("", "EVERYTHING") }, saved: false)
-    {
-        Opening = () =>
-        {
-            if (!ReferenceEquals(_world, World.Info) || _recipes.Count == 0)
-            {
-                Refresh();
-            }
-        },
-    };
+        new[] { ("", "EVERYTHING") }, saved: false);
 
     public static readonly Choice Vehicle = new(
         "spawner.vehicles.vehicle", "VEHICLE",
-        "Every vehicle the game has loaded. Militia tanks and drones are loaded across the city, cars depend on where you are.",
-        new[] { ("", "OPEN THE MENU IN GAME") }, saved: false);
+        "Every vehicle the game has loaded. Militia tanks and drones are loaded across the city, cars depend on where you are. Select spawns it.",
+        new[] { ("", "OPEN THE MENU IN GAME") }, saved: false)
+    {
+        Pressed = static () => Spawn!.Press(),
+        PressName = "SPAWN",
+    };
 
     public static readonly Command RefreshList = new(
         "spawner.vehicles.refresh", "REFRESH LIST",
-        "Reads again which vehicles can be spawned here. Use it after travelling somewhere new.",
+        "Reads again which vehicles can be spawned here, without leaving the tab. Coming back to the tab reads it too.",
         () =>
         {
+            if (World.Info is null)
+            {
+                return Outcome.NoPlayer;
+            }
+
             Refresh();
-            return Outcome.Done($"{_recipes.Count} LISTED");
+            return _recipes.Count > 0 ? Outcome.Done($"{_recipes.Count} LISTED") : Outcome.Unchanged("NONE LOADED HERE");
         });
 
     public static readonly Choice Side = new(
@@ -93,7 +95,7 @@ static class Vehicles
 
     public static readonly Command Spawn = new(
         "spawner.vehicles.spawn", "SPAWN VEHICLE",
-        "Spawns the vehicle picked above, HOW MANY times, the way this tab and PLACE say. Drones appear in the air.",
+        "Spawns the vehicle picked in VEHICLE, HOW MANY times, the way this tab and PLACE say. Drones appear in the air.",
         SpawnPicked);
 
     public static readonly Catalog.Section[] Sections =
@@ -103,9 +105,17 @@ static class Vehicles
         Placing.Section,
     };
 
-    // Runs every tick. VEHICLE follows GROUP as soon as it changes.
+    // Runs every tick. The list is read when the tab comes up, and VEHICLE follows GROUP as soon
+    // as it changes.
     public static void Tick()
     {
+        var shown = Menu.Shows(Vehicle);
+        if (shown && !_shown)
+        {
+            Refresh();
+        }
+
+        _shown = shown;
         if (Group.CurrentId != _listedGroup)
         {
             ListVehicles();
@@ -146,6 +156,12 @@ static class Vehicles
 
     static Outcome SpawnPicked()
     {
+        // A hotkey can ask before the tab has read the list, or after GROUP changed.
+        if (!ReferenceEquals(_world, World.Info) || _recipes.Count == 0)
+        {
+            Refresh();
+        }
+
         ListVehicles();
         if (_recipes.Find(recipe => recipe.Key == Vehicle.CurrentId) is not { } picked)
         {
@@ -175,26 +191,9 @@ static class Vehicles
 
     static Outcome Build(Recipe picked)
     {
-        if (Teleport.Mover is not { } mover || World.Controller is not { } controller)
+        if (Placing.Plan(Room, out var mover, out var spots) is { } refused)
         {
-            return Outcome.NoPlayer;
-        }
-
-        if (controller.bCinematicMode)
-        {
-            return Outcome.Failed("NOT IN A SCENE");
-        }
-
-        var room = Spawned.Room;
-        if (room == 0)
-        {
-            return Outcome.Failed("AT MOST AT ONCE");
-        }
-
-        var spots = Placing.Spots(mover, Math.Min((int)Placing.Count.Value, room), Room);
-        if (spots.Count == 0)
-        {
-            return Outcome.Failed("NO ROOM THERE");
+            return refused;
         }
 
         var template = picked.Template;

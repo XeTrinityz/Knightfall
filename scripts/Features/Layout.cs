@@ -100,6 +100,7 @@ static class Layout
         Catalog.Background("spawner.bodyguards", Bodyguards.Tick, Bodyguards.Release);
         Catalog.Background("spawner.vehicles", Vehicles.Tick);
         Catalog.Background("spawner.objects", Objects.Tick);
+        Catalog.Background("spawner.weapons", Arms.Tick);
 
         Catalog.AddPage(Editor.Page)
             .Add("SELECT", Editor.Sections)

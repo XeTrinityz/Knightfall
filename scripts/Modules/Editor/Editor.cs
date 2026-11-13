@@ -157,8 +157,16 @@ static class Editor
 
     public static readonly Command CopySelected = new(
         "spawner.spawned.copy", "SPAWN COPY OF SELECTED",
-        "Spawns another of the editor's selected person, vehicle or object, the way PLACE says.",
-        Copy);
+        "Spawns another of the editor's selected person, vehicle or object, the way its tab and PLACE say.",
+        Copy)
+    {
+        Block = static () => Selected switch
+        {
+            null => "NOTHING SELECTED",
+            RBMPawnAI or RVehicleNPC or DynamicSMActor => null,
+            _ => "CAN'T COPY THAT",
+        },
+    };
 
     public static readonly Catalog.Section[] Sections =
     {

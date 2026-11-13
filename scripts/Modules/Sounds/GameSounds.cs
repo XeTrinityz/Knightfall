@@ -103,12 +103,9 @@ static class GameSounds
 
     readonly record struct Entry(AkEvent Sound, string[] Words);
 
-    // A run of the sorted sounds. Depth is how many leading words the group's name already says.
-    readonly record struct Bunch(string Label, int Start, int Count, int Depth);
-
     static readonly List<AkEvent>[] ByKind = Kinds.Select(_ => new List<AkEvent>()).ToArray();
     static readonly Dictionary<GameObject, int> KindOfPackage = new();
-    static readonly List<Bunch> Bunches = new();
+    static readonly List<WordGroups.Bunch> Bunches = new();
     static Entry[] _entries = Array.Empty<Entry>();
     static int _total;
     static int _listedKind = -1;
@@ -413,13 +410,10 @@ static class GameSounds
             }
         }
 
-        entries.Sort(static (a, b) => Compare(a.Words, b.Words));
+        entries.Sort(static (a, b) => WordGroups.Compare(a.Words, b.Words));
         _entries = entries.ToArray();
         Bunches.Clear();
-        if (_entries.Length > 0)
-        {
-            Split(0, _entries.Length, 0, "");
-        }
+        Bunches.AddRange(WordGroups.Split(Array.ConvertAll(_entries, static entry => entry.Words), GroupMost));
 
         if (Bunches.Count == 0)
         {
@@ -448,7 +442,7 @@ static class GameSounds
         for (var i = 0; i < bunch.Count; i++)
         {
             var entry = _entries[bunch.Start + i];
-            options[i] = (i.ToString(), Label(entry, bunch.Depth));
+            options[i] = (i.ToString(), WordGroups.Label(entry.Words, bunch.Depth));
             if (ReferenceEquals(entry.Sound, keep))
             {
                 index = i;
@@ -476,109 +470,6 @@ static class GameSounds
         var words = name.ToUpperInvariant().Split('_', StringSplitOptions.RemoveEmptyEntries);
         return words.Length == 0 ? null : words;
     }
-
-    static int Compare(string[] a, string[] b)
-    {
-        var shared = Math.Min(a.Length, b.Length);
-        for (var i = 0; i < shared; i++)
-        {
-            var order = string.CompareOrdinal(a[i], b[i]);
-            if (order != 0)
-            {
-                return order;
-            }
-        }
-
-        return a.Length - b.Length;
-    }
-
-    static string WordAt(int entry, int depth)
-    {
-        var words = _entries[entry].Words;
-        return depth < words.Length ? words[depth] : "";
-    }
-
-    // Splits a run that is too long by the next word of its names. Runs that share a word and
-    // are still too long are split again by the word after. Small neighbours are put together,
-    // named by the first and last word they cover.
-    static void Split(int start, int end, int depth, string prefix)
-    {
-        if (end - start <= GroupMost)
-        {
-            Bunches.Add(new Bunch(prefix.Length == 0 ? "ALL" : prefix, start, end - start, depth));
-            return;
-        }
-
-        var from = start;
-        var held = 0;
-        var first = "";
-        var last = "";
-
-        void Flush()
-        {
-            if (held == 0)
-            {
-                return;
-            }
-
-            var one = first == last;
-            var words = one ? first : first.Length == 0 ? "TO " + last : first + " - " + last;
-            Bunches.Add(new Bunch(Join(prefix, words), from, held, one && first.Length > 0 ? depth + 1 : depth));
-            held = 0;
-        }
-
-        for (var i = start; i < end;)
-        {
-            var word = WordAt(i, depth);
-            var next = i + 1;
-            while (next < end && WordAt(next, depth) == word)
-            {
-                next++;
-            }
-
-            var size = next - i;
-            if (size > GroupMost)
-            {
-                Flush();
-                if (word.Length > 0)
-                {
-                    Split(i, next, depth + 1, Join(prefix, word));
-                }
-                else
-                {
-                    // Names that are the same to the last word can't be split any further.
-                    Bunches.Add(new Bunch(prefix.Length == 0 ? "ALL" : prefix, i, size, depth));
-                }
-            }
-            else
-            {
-                if (held + size > GroupMost)
-                {
-                    Flush();
-                }
-
-                if (held == 0)
-                {
-                    from = i;
-                    first = word;
-                }
-
-                last = word;
-                held += size;
-            }
-
-            i = next;
-        }
-
-        Flush();
-    }
-
-    static string Join(string prefix, string words) =>
-        prefix.Length == 0 ? words : words.Length == 0 ? prefix : prefix + " " + words;
-
-    // The words the group's name doesn't already say.
-    static string Label(Entry entry, int depth) =>
-        depth > 0 && depth < entry.Words.Length ? string.Join(' ', entry.Words, depth, entry.Words.Length - depth) : string.Join(' ', entry.Words);
 
     static Entry? Picked()
     {
@@ -618,7 +509,7 @@ static class GameSounds
             return Outcome.Failed("NOT LOADED NOW");
         }
 
-        var label = Label(entry, Bunches[_listedGroup].Depth);
+        var label = WordGroups.Label(entry.Words, Bunches[_listedGroup].Depth);
         Quiet();
 
         // Most sounds, every voice line among them, sit in a bank the game only loads when it

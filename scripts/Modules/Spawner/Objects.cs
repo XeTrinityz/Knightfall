@@ -8,14 +8,18 @@ using BmSDK.Engine;
 namespace Knightfall;
 
 // SPAWNER > OBJECTS. Copies of any mesh in the world or in memory. Physics objects are built the
-// way the game knocks a roof rack off a car, still ones like our own sky copies.
+// way the game knocks a roof rack off a car, still ones like our own sky copies. What's around
+// you and what's loaded both change as you move, so the list is read each time the tab comes up.
 static class Objects
 {
     const float Metre = Teleport.UnitsPerMetre;
 
     const float NearbyRange = 100f * Metre;
     const int NearbyMost = 150;
-    const int LoadedMost = 500;
+
+    // The most meshes one group of EVERYTHING LOADED lists. A bigger set is split by the words
+    // of its names.
+    const int GroupMost = 100;
 
     // Specks too small to pick out, and whole blocks of city.
     const float Smallest = 5f;
@@ -39,76 +43,100 @@ static class Objects
     // How far outside a piece's box the crosshair spot may be and still count as on it.
     const float Snug = 10f;
 
+    const int Loaded = 1;
+
+    // A mesh is of a kind when a whole word of its name is one of these, so CAR doesn't take
+    // every carpet and scarecrow with it.
     static readonly (string Id, string Label, string[] Words)[] Kinds =
     {
         ("any", "ANYTHING", Array.Empty<string>()),
-        ("boxes", "BOXES AND CRATES", new[] { "crate", "box", "pallet", "case", "container", "carton" }),
-        ("bins", "BARRELS AND BINS", new[] { "barrel", "drum", "bin", "dumpster", "trash", "garbage" }),
-        ("cars", "CARS AND WRECKS", new[] { "car", "van", "truck", "bus", "taxi", "wreck", "vehicle" }),
-        ("street", "STREET THINGS", new[] { "lamp", "light", "bench", "hydrant", "cone", "sign", "bollard", "post", "meter", "mailbox", "phone", "kiosk" }),
-        ("barriers", "BARRIERS AND FENCES", new[] { "barrier", "barricade", "fence", "rail", "gate", "jersey" }),
-        ("plants", "PLANTS", new[] { "tree", "plant", "bush", "shrub", "planter", "flower" }),
-        ("furniture", "FURNITURE", new[] { "chair", "table", "desk", "sofa", "couch", "shelf", "cabinet", "bed", "stool" }),
+        ("boxes", "BOXES AND CRATES", new[] { "CRATE", "WOODCRATE", "BOX", "PALLET", "CASE", "SUITCASE", "CONTAINER", "CARTON", "TRUNK" }),
+        ("bins", "BARRELS AND BINS", new[] { "BARREL", "DRUM", "OILDRUM", "BIN", "DUMPSTER", "TRASH", "TRASHBAG", "GARBAGE" }),
+        ("cars", "CARS AND WRECKS", new[] { "CAR", "VAN", "TRUCK", "BUS", "TAXI", "WRECK", "VEHICLE", "BOAT", "BIKE", "TRAILER", "CARRIAGE" }),
+        ("street", "STREET THINGS", new[] { "LAMP", "STREETLAMP", "LIGHT", "STREETLIGHT", "BENCH", "HYDRANT", "CONE", "SIGN", "BOLLARD", "POST", "METER", "MAILBOX", "PHONE", "KIOSK" }),
+        ("barriers", "BARRIERS AND FENCES", new[] { "BARRIER", "BARRICADE", "FENCE", "RAIL", "RAILING", "HANDRAIL", "GATE", "JERSEY" }),
+        ("plants", "PLANTS", new[] { "TREE", "PLANT", "PLANTPOT", "BUSH", "SHRUB", "PLANTER", "FLOWER", "VEGETATION", "VEG", "GRASS", "VINE" }),
+        ("furniture", "FURNITURE", new[] { "CHAIR", "TABLE", "DESK", "SOFA", "COUCH", "SHELF", "BOOKCASE", "CABINET", "CUPBOARD", "BED", "STOOL" }),
     };
 
+    // Stand-ins for far off city blocks and invisible blockers, never something to place.
+    static readonly string[] Shells = { "LOD", "VISTA", "COLLISION", "COLL", "BLOCKING" };
+
+    const string Digits = "0123456789";
+
     // Metres is how far away a NEARBY one was when listed, shown only in the list.
-    sealed record Recipe(string Key, string Label, StaticMesh Mesh, MaterialInterface?[] Materials, Vector3 Scale, Rotator Tilt, float Radius, float Metres = -1f);
+    sealed record Recipe(string Key, string Label, string[] Words, StaticMesh Mesh, MaterialInterface?[] Materials, Vector3 Scale, Rotator Tilt, float Radius, float Metres = -1f);
 
     static List<Recipe> _recipes = new();
+    static List<WordGroups.Bunch> _groups = new();
     static RGameInfo? _world;
-    static string _listed = "";
+    static bool _shown;
+    static int _readFrom = -1;
+    static int _readShow = -1;
+    static int _listedGroup = -1;
 
     public static readonly Choice From = new(
         "spawner.objects.from", "FROM",
-        "NEARBY lists the pieces of the world around you, nearest first. EVERYTHING LOADED lists every mesh in memory by name, so narrow it with SHOW.",
+        "NEARBY lists the pieces of the world around you, nearest first. EVERYTHING LOADED lists every mesh in memory by name, in GROUPs.",
         new[] { ("nearby", "NEARBY"), ("loaded", "EVERYTHING LOADED") })
     {
         Preference = true,
-        Opening = () =>
-        {
-            if (!ReferenceEquals(_world, World.Info) || _recipes.Count == 0)
-            {
-                Refresh();
-            }
-        },
     };
 
     public static readonly Choice Show = new(
         "spawner.objects.show", "SHOW",
-        "Only lists meshes whose names sound like this kind of thing.",
+        "Only lists meshes whose names say they're this kind of thing.",
         Kinds.Select(kind => (kind.Id, kind.Label)).ToArray())
     {
         Preference = true,
     };
 
+    public static readonly Choice Group = new(
+        "spawner.objects.group", "GROUP",
+        "Meshes with names that start the same way, when FROM is EVERYTHING LOADED. The number is how many it has.",
+        new[] { ("", "OPEN THE MENU IN GAME") }, saved: false)
+    {
+        Block = static () => From.Index == Loaded ? null : "FROM IS NEARBY",
+    };
+
     public static readonly Choice Object = new(
         "spawner.objects.object", "OBJECT",
-        "The mesh to make copies of.",
-        new[] { ("", "OPEN THE MENU IN GAME") }, saved: false);
+        "The mesh to make copies of. Select spawns it.",
+        new[] { ("", "OPEN THE MENU IN GAME") }, saved: false)
+    {
+        Pressed = static () => Spawn!.Press(),
+        PressName = "SPAWN",
+    };
 
     public static readonly Command RefreshList = new(
         "spawner.objects.refresh", "REFRESH LIST",
-        "Reads the meshes again, around where you are now.",
+        "Reads the meshes again, around where you are now, without leaving the tab. Coming back to the tab reads them too.",
         () =>
         {
+            if (World.Info is null)
+            {
+                return Outcome.NoPlayer;
+            }
+
             Refresh();
-            return Outcome.Done($"{_recipes.Count} LISTED");
+            return _recipes.Count > 0 ? Outcome.Done($"{_recipes.Count} LISTED") : Outcome.Unchanged("NOTHING MATCHES");
         });
 
-    public static readonly Toggle Physics = new(
-        "spawner.objects.physics", "PHYSICS",
-        "On, copies fall, tumble and can be knocked about. Off, they stay exactly where they're put.",
+    public static readonly Toggle Solid = new(
+        "spawner.objects.solid", "SOLID",
+        "Off, you and everything else pass through them.",
         on: true)
     {
         Preference = true,
     };
 
-    public static readonly Toggle Solid = new(
-        "spawner.objects.solid", "SOLID",
-        "Off, you and everything else pass through them. PHYSICS needs it on.",
+    public static readonly Toggle Physics = new(
+        "spawner.objects.physics", "PHYSICS",
+        "On, copies fall, tumble and can be knocked about. Off, they stay exactly where they're put. Only SOLID copies can have it.",
         on: true)
     {
         Preference = true,
+        Block = static () => Solid.On ? null : "NEEDS SOLID ON",
     };
 
     public static readonly Slider Size = new(
@@ -121,7 +149,7 @@ static class Objects
 
     public static readonly Command Spawn = new(
         "spawner.objects.spawn", "SPAWN OBJECT",
-        "Spawns the object picked above, HOW MANY times, the way this tab and PLACE say.",
+        "Spawns the object picked in OBJECT, HOW MANY times, the way this tab and PLACE say.",
         SpawnPicked);
 
     public static readonly Command SpawnAimed = new(
@@ -131,21 +159,38 @@ static class Objects
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("WHICH", From, Show, Object, RefreshList),
-        new("HOW", Physics, Solid, Size, Spawn, SpawnAimed),
+        new("WHICH", From, Show, Group, Object, RefreshList),
+        new("HOW", Solid, Physics, Size, Spawn, SpawnAimed),
         Placing.Section,
     };
 
-    // Runs every tick. Once the menu has read a list, it follows FROM and SHOW as soon as they change.
+    static bool Read => _readFrom >= 0 && ReferenceEquals(_world, World.Info);
+
+    // Runs every tick. The list is read when the tab comes up, and from then on follows FROM,
+    // SHOW and GROUP as soon as they change.
     public static void Tick()
     {
-        if (_listed.Length > 0 && World.Info is not null && Wanted() != _listed)
+        var shown = Menu.Shows(Object);
+        if (shown && !_shown)
         {
             Refresh();
         }
-    }
 
-    static string Wanted() => From.CurrentId + "/" + Show.CurrentId;
+        _shown = shown;
+        if (!Read)
+        {
+            return;
+        }
+
+        if (From.Index != _readFrom || Show.Index != _readShow)
+        {
+            Refresh();
+        }
+        else if (Group.Index != _listedGroup)
+        {
+            ListObjects(null);
+        }
+    }
 
     static void Refresh()
     {
@@ -154,25 +199,68 @@ static class Objects
             return;
         }
 
+        var picked = Object.CurrentId;
         _world = World.Info;
-        _listed = Wanted();
-        var words = Kinds[Math.Clamp(Show.Index, 0, Kinds.Length - 1)].Words;
-        _recipes = From.Index == 1 ? Loaded(words) : Nearby(words);
+        _readFrom = From.Index;
+        _readShow = Show.Index;
+        var kind = Kinds[Math.Clamp(Show.Index, 0, Kinds.Length - 1)].Words;
+        if (From.Index == Loaded)
+        {
+            _recipes = InMemory(kind);
+            _groups = WordGroups.Split(_recipes.ConvertAll(static recipe => recipe.Words), GroupMost);
+        }
+        else
+        {
+            _recipes = Nearby(kind);
+            _groups = new List<WordGroups.Bunch>();
+        }
 
-        if (_recipes.Count == 0)
+        // The group the pick is in, when it's still listed.
+        var at = picked.Length == 0 ? -1 : _recipes.FindIndex(recipe => recipe.Key == picked);
+        var group = at < 0 ? 0 : Math.Max(0, _groups.FindIndex(bunch => at >= bunch.Start && at < bunch.Start + bunch.Count));
+        if (_groups.Count == 0)
+        {
+            Group.SetOptions(new[] { ("", _recipes.Count == 0 ? "NOTHING MATCHES" : "NEAREST FIRST") }, 0);
+        }
+        else
+        {
+            Group.SetOptions(_groups.Select((bunch, i) => (i.ToString(), $"{bunch.Label}  ({bunch.Count})")).ToArray(), group);
+        }
+
+        ListObjects(picked);
+    }
+
+    // The picked group's meshes, or all of them when the list has no groups.
+    static void ListObjects(string? keep)
+    {
+        _listedGroup = Group.Index;
+        var bunch = _groups.Count == 0
+            ? new WordGroups.Bunch("", 0, _recipes.Count, 0)
+            : _groups[Math.Clamp(_listedGroup, 0, _groups.Count - 1)];
+        if (bunch.Count == 0)
         {
             Object.SetOptions(new[] { ("", "NOTHING MATCHES") }, 0);
             return;
         }
 
-        var picked = Object.CurrentId;
-        var options = _recipes.Select(recipe => (recipe.Key, recipe.Metres >= 0f ? $"{recipe.Label}  {recipe.Metres:0} M" : recipe.Label)).ToArray();
-        Object.SetOptions(options, Math.Max(0, Array.FindIndex(options, option => option.Key == picked)));
+        var options = new (string, string)[bunch.Count];
+        var index = 0;
+        for (var i = 0; i < bunch.Count; i++)
+        {
+            var recipe = _recipes[bunch.Start + i];
+            options[i] = (recipe.Key, recipe.Metres >= 0f ? $"{recipe.Label}  {recipe.Metres:0} M" : WordGroups.Label(recipe.Words, bunch.Depth));
+            if (recipe.Key == keep)
+            {
+                index = i;
+            }
+        }
+
+        Object.SetOptions(options, index);
     }
 
     // Every piece of the world close by, the ones inside the big collection actors too, since
     // most of the city's props live there.
-    static List<Recipe> Nearby(string[] words)
+    static List<Recipe> Nearby(string[] kind)
     {
         if (Teleport.Mover is not { } mover)
         {
@@ -214,49 +302,89 @@ static class Objects
                 break;
             }
 
-            if (part.StaticMesh is not { IsValid: true } mesh || !seen.Add(mesh.Ptr) || !Matches(mesh, words))
+            if (part.StaticMesh is not { IsValid: true } mesh || !seen.Add(mesh.Ptr))
             {
                 continue;
             }
 
-            var recipe = RecipeOf(part, holder, mesh);
-            list.Add(recipe with { Metres = MathF.Sqrt(distance) / Metre });
+            var label = Named(mesh, out var words);
+            if (Placeable(words, kind))
+            {
+                list.Add(RecipeOf(part, holder, mesh, label, words) with { Metres = MathF.Sqrt(distance) / Metre });
+            }
         }
 
         return list;
     }
 
-    static List<Recipe> Loaded(string[] words)
+    // Every mesh in memory of the kind, sorted by the words of its name.
+    static List<Recipe> InMemory(string[] kind)
     {
         var list = new List<Recipe>();
         foreach (var mesh in Game.FindObjects<StaticMesh>())
         {
-            if (mesh.IsValid && !mesh.IsClassDefaultObject && Matches(mesh, words))
+            if (!mesh.IsValid || mesh.IsClassDefaultObject)
             {
-                list.Add(new Recipe(mesh.GetPathName(null), People.Pretty(mesh.Name.ToString() ?? "MESH"), mesh, Array.Empty<MaterialInterface?>(), Vector3.One, default, 0f));
+                continue;
+            }
+
+            var label = Named(mesh, out var words);
+            if (Placeable(words, kind))
+            {
+                list.Add(new Recipe(mesh.GetPathName(null), label, words, mesh, Array.Empty<MaterialInterface?>(), Vector3.One, default, 0f));
             }
         }
 
-        list.Sort((a, b) => string.CompareOrdinal(a.Label, b.Label));
-        return list.Take(LoadedMost).ToList();
+        list.Sort(static (a, b) => WordGroups.Compare(a.Words, b.Words));
+        return list;
     }
 
-    static bool Matches(StaticMesh mesh, string[] words)
+    // A mesh's name as the list shows it, and the same as words.
+    static string Named(StaticMesh mesh, out string[] words)
     {
-        if (words.Length == 0)
+        var label = People.Pretty(mesh.Name.ToString() ?? "MESH");
+        words = label.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return label;
+    }
+
+    static bool Placeable(string[] words, string[] kind) => !Says(words, Shells) && (kind.Length == 0 || Says(words, kind));
+
+    // Whether one of the name's words is one of these, or its plural. A number on the end of a
+    // word doesn't count, so BIN01 is a BIN.
+    static bool Says(string[] words, string[] wanted)
+    {
+        foreach (var word in words)
         {
-            return true;
+            var bare = word.AsSpan().TrimEnd(Digits);
+            foreach (var want in wanted)
+            {
+                if (!bare.StartsWith(want, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var rest = bare[want.Length..];
+                if (rest.Length == 0 || rest is "S" || rest is "ES")
+                {
+                    return true;
+                }
+            }
         }
 
-        var name = mesh.Name.ToString() ?? "";
-        return words.Any(word => name.Contains(word, StringComparison.OrdinalIgnoreCase));
+        return false;
     }
 
     static Actor? HolderOf(StaticMeshComponent part) =>
         part.Owner is { IsValid: true } owner ? owner : part.Outer as Actor is { IsValid: true } outer ? outer : null;
 
-    // A collection actor's pieces carry their own place and size, anything else's come from the actor.
     static Recipe RecipeOf(StaticMeshComponent part, Actor holder, StaticMesh mesh)
+    {
+        var label = Named(mesh, out var words);
+        return RecipeOf(part, holder, mesh, label, words);
+    }
+
+    // A collection actor's pieces carry their own place and size, anything else's come from the actor.
+    static Recipe RecipeOf(StaticMeshComponent part, Actor holder, StaticMesh mesh, string label, string[] words)
     {
         var materials = new MaterialInterface?[Math.Clamp(part.GetNumElements(), 0, 32)];
         for (var i = 0; i < materials.Length; i++)
@@ -267,8 +395,7 @@ static class Objects
         var collection = holder is StaticMeshCollectionActor;
         var scale = collection ? part.Scale3D * part.Scale : holder.DrawScale3D * holder.DrawScale * part.Scale3D * part.Scale;
         var turn = collection ? part.Rotation : holder.Rotation;
-        return new Recipe(mesh.GetPathName(null), People.Pretty(mesh.Name.ToString() ?? "MESH"), mesh, materials, scale,
-            new Rotator(turn.Pitch, 0f, turn.Roll), part.Bounds.SphereRadius);
+        return new Recipe(mesh.GetPathName(null), label, words, mesh, materials, scale, new Rotator(turn.Pitch, 0f, turn.Roll), part.Bounds.SphereRadius);
     }
 
     static Outcome SpawnPicked()
@@ -276,6 +403,12 @@ static class Objects
         if (World.Info is null)
         {
             return Outcome.NoPlayer;
+        }
+
+        // A hotkey can ask before the tab has read the list.
+        if (!Read)
+        {
+            Refresh();
         }
 
         if (_recipes.Find(recipe => recipe.Key == Object.CurrentId) is not { } picked)
@@ -382,29 +515,13 @@ static class Objects
 
     static Outcome Make(Recipe recipe)
     {
-        if (Teleport.Mover is not { } mover || World.Controller is not { } controller)
-        {
-            return Outcome.NoPlayer;
-        }
-
-        if (controller.bCinematicMode)
-        {
-            return Outcome.Failed("NOT IN A SCENE");
-        }
-
-        var room = Spawned.Room;
-        if (room == 0)
-        {
-            return Outcome.Failed("AT MOST AT ONCE");
-        }
-
         var size = (float)Size.Value;
-        var spots = Placing.Spots(mover, Math.Min((int)Placing.Count.Value, room), MathF.Min(recipe.Radius * 2f * size, MostRoom));
-        if (spots.Count == 0)
+        if (Placing.Plan(MathF.Min(recipe.Radius * 2f * size, MostRoom), out _, out var spots) is { } refused)
         {
-            return Outcome.Failed("NO ROOM THERE");
+            return refused;
         }
 
+        Log.Info($"Spawner: spawning {spots.Count} x {recipe.Label} ({recipe.Key}).");
         var physics = Physics.On && Solid.On;
         var made = 0;
         foreach (var spot in spots)

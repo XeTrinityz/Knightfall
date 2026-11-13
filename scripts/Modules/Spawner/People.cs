@@ -9,6 +9,8 @@ namespace Knightfall;
 
 // SPAWNER > CHARACTERS. Anyone the area has loaded can be built again: the people around you,
 // whoever its missions and streets spawn. Each comes through the game's own population spawner.
+// What's loaded changes as you move, so the lists are read each time a tab that shows them
+// comes up.
 static class People
 {
     // How close FOLLOW YOU keeps them.
@@ -16,6 +18,13 @@ static class People
 
     // Classes that only make sense in their own scene.
     static readonly string[] Refused = { "Boss", "Fake", "Tutorial", "Cinematic", "Ragdoll", "Prototype2D", "MechSuit" };
+
+    // The folder of the game's pink stand-in for a character that's missing.
+    const string StandIns = ".Debugging.";
+
+    const int Fight = 0;
+    const int Follow = 2;
+    const int RunAway = 3;
 
     // The define folders the game files people under, as the menu names them.
     static readonly Dictionary<string, string> Folders = new(StringComparer.OrdinalIgnoreCase)
@@ -44,34 +53,42 @@ static class People
     static RGameInfo? _world;
     static string _listedGroup = "";
     static List<Arms.Kind> _weapons = new();
+    static bool _shown;
 
     public static readonly Choice Group = new(
         "spawner.characters.group", "GROUP",
         "Which kind of character WHO lists.",
-        new[] { ("", "EVERYONE") }, saved: false)
-    {
-        Opening = () =>
-        {
-            // Reading the lists walks every loaded class and person, so only a new world does it.
-            if (!ReferenceEquals(_world, World.Info) || _recipes.Count == 0)
-            {
-                Refresh();
-            }
-        },
-    };
+        new[] { ("", "EVERYONE") }, saved: false);
 
     public static readonly Choice Who = new(
         "spawner.characters.who", "WHO",
-        "Everyone this area can build: the people around you, and whoever its missions and streets spawn. Changes with where you are.",
-        new[] { ("", "OPEN THE MENU IN GAME") }, saved: false);
+        "Everyone this area can build: the people around you, and whoever its missions and streets spawn. Changes with where you are. Select spawns them.",
+        new[] { ("", "OPEN THE MENU IN GAME") }, saved: false)
+    {
+        Pressed = static () => Spawn!.Press(),
+        PressName = "SPAWN",
+        Block = static () => Mix!.On ? "RANDOM FROM GROUP IS ON" : null,
+    };
+
+    public static readonly Toggle Mix = new(
+        "spawner.characters.random", "RANDOM FROM GROUP",
+        "Each one spawned is a random pick from GROUP, for a mixed crowd. WHO is left out.")
+    {
+        Preference = true,
+    };
 
     public static readonly Command RefreshList = new(
         "spawner.characters.refresh", "REFRESH LIST",
-        "Reads again who can be spawned here. Use it after travelling somewhere new.",
+        "Reads again who can be spawned here, without leaving the tab. Coming back to the tab reads it too.",
         () =>
         {
+            if (World.Info is null)
+            {
+                return Outcome.NoPlayer;
+            }
+
             Refresh();
-            return Outcome.Done($"{_recipes.Count} LISTED");
+            return _recipes.Count > 0 ? Outcome.Done($"{_recipes.Count} LISTED") : Outcome.Unchanged("NOBODY LOADED HERE");
         });
 
     public static readonly Choice Side = new(
@@ -84,8 +101,8 @@ static class People
 
     public static readonly Choice Behaviour = new(
         "spawner.characters.behaviour", "BEHAVIOUR",
-        "What they do once spawned: come at you, stand where they are, or follow you around.",
-        new[] { ("fight", "FIGHT"), ("stand", "STAND"), ("follow", "FOLLOW YOU") })
+        "What they do once spawned: come at you, stand where they are, or follow you around. Enemies can also RUN AWAY, the way thugs run from the Batmobile. With nowhere to run, like on a roof, they cower.",
+        new[] { ("fight", "FIGHT"), ("stand", "STAND"), ("follow", "FOLLOW YOU"), ("runaway", "RUN AWAY") })
     {
         Preference = true,
     };
@@ -113,12 +130,12 @@ static class People
 
     public static readonly Command Spawn = new(
         "spawner.characters.spawn", "SPAWN CHARACTER",
-        "Spawns the character picked above, HOW MANY times, the way this tab and PLACE say.",
+        "Spawns the character picked in WHO, HOW MANY times, the way this tab and PLACE say.",
         SpawnPicked);
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("WHO", Group, Who, RefreshList),
+        new("WHO", Group, Who, Mix, RefreshList),
         new("HOW", Side, Behaviour, Weapon, Health, Size, Spawn),
         Placing.Section,
     };
@@ -145,17 +162,21 @@ static class People
         Bodyguards.ListWho();
     }
 
-    // Everyone listed who can fight, for the bodyguards tab. Refresh hands it the new list each
-    // time the lists are read.
-    // An enemy the area has loaded, from the group named if it has one. Nothing when there is
-    // nobody at all.
-    public static string? EnemyKey(string group)
+    // Reads the lists when this world's haven't been read, or came up empty. For what spawns
+    // without the menu, like a hotkey or a villain's call.
+    public static void Fresh()
     {
         if (!ReferenceEquals(_world, World.Info) || _recipes.Count == 0)
         {
             Refresh();
         }
+    }
 
+    // An enemy the area has loaded, from the group named if it has one. Nothing when there is
+    // nobody at all.
+    public static string? EnemyKey(string group)
+    {
+        Fresh();
         var enemies = _recipes.Where(recipe => recipe.Enemy && recipe.Loaded).ToList();
         return (enemies.Find(recipe => recipe.Group.Equals(group, StringComparison.OrdinalIgnoreCase)) ?? enemies.FirstOrDefault())?.Key;
     }
@@ -164,16 +185,14 @@ static class People
     // ones first.
     public static List<string> GroupKeys(string group, Class? kind = null)
     {
-        if (!ReferenceEquals(_world, World.Info) || _recipes.Count == 0)
-        {
-            Refresh();
-        }
-
+        Fresh();
         return _recipes.Where(recipe => recipe.Enemy && recipe.Loaded && recipe.Group.Equals(group, StringComparison.OrdinalIgnoreCase)
                 && (kind is null || Is(recipe.Pawn, kind)))
             .OrderBy(recipe => recipe.Weapon is null ? 1 : 0).Select(recipe => recipe.Key).ToList();
     }
 
+    // Everyone listed who can fight, for the bodyguards tab. Refresh hands it the new list each
+    // time the lists are read.
     public static (string Key, string Label)[] Fighters() =>
         _recipes.Where(recipe => recipe.Enemy && recipe.Loaded).Select(recipe => (recipe.Key, $"{recipe.Label}  ({recipe.Group})")).ToArray();
 
@@ -210,7 +229,7 @@ static class People
         var room = Spawned.Room;
         if (room == 0)
         {
-            return Outcome.Failed("AT MOST AT ONCE");
+            return Spawned.Full;
         }
 
         var spots = Crowd.RingSpots(around ?? mover, Math.Min(count, room));
@@ -269,23 +288,33 @@ static class People
         return normal;
     }
 
-    // Runs every tick. WHO follows GROUP as soon as it changes.
+    // Runs every tick. The lists are read when a tab that shows them comes up, and WHO follows
+    // GROUP as soon as it changes.
     public static void Tick()
     {
+        var shown = Menu.Shows(Who) || Menu.Shows(Bodyguards.Who);
+        if (shown && !_shown)
+        {
+            Refresh();
+        }
+
+        _shown = shown;
         if (Group.CurrentId != _listedGroup)
         {
             ListWho();
         }
     }
 
+    static IEnumerable<Recipe> Listed() => _recipes.Where(recipe => _listedGroup.Length == 0 || recipe.Group == _listedGroup);
+
     static void ListWho()
     {
         var group = Group.CurrentId;
         _listedGroup = group;
-        var shown = _recipes.Where(recipe => group.Length == 0 || recipe.Group == group).ToList();
+        var shown = Listed().ToList();
         if (shown.Count == 0)
         {
-            Who.SetOptions(new[] { ("", "NOBODY LOADED HERE") }, 0);
+            Who.SetOptions(new[] { ("", World.Info is null ? "OPEN THE MENU IN GAME" : "NOBODY LOADED HERE") }, 0);
             return;
         }
 
@@ -296,8 +325,15 @@ static class People
 
     static Outcome SpawnPicked()
     {
-        // The group may have changed since WHO was listed.
+        // A hotkey can ask before any tab has read the lists, or after GROUP changed.
+        Fresh();
         ListWho();
+        if (Mix.On)
+        {
+            var crowd = Listed().Where(recipe => recipe.Loaded).ToList();
+            return crowd.Count > 0 ? Build(crowd) : Outcome.Failed("NOBODY LOADED HERE");
+        }
+
         if (_recipes.Find(recipe => recipe.Key == Who.CurrentId) is not { } picked)
         {
             return Outcome.Failed("PICK SOMEONE FIRST");
@@ -309,7 +345,7 @@ static class People
             return Outcome.Failed("GONE, PICK AGAIN");
         }
 
-        return Build(picked);
+        return Build(new List<Recipe> { picked });
     }
 
     // Another of someone already in the world, the way this tab and PLACE say.
@@ -321,44 +357,32 @@ static class People
         }
 
         return Make(body.Class, body.CharacterDefine, body.CharactersType, body.WeaponType) is { } recipe
-            ? Build(recipe)
+            ? Build(new List<Recipe> { recipe })
             : Outcome.Failed("CAN'T COPY THEM");
     }
 
-    static Outcome Build(Recipe picked)
+    // One for each spot PLACE gives. With more than one to pick from, each is a random pick.
+    static Outcome Build(List<Recipe> from)
     {
-        if (Teleport.Mover is not { } mover || World.Controller is not { } controller)
-        {
-            return Outcome.NoPlayer;
-        }
-
-        if (controller.bCinematicMode)
-        {
-            return Outcome.Failed("NOT IN A SCENE");
-        }
-
         if (World.Info?.PopulationManager is not { IsValid: true } people)
         {
             return Outcome.Failed("NOT IN THIS AREA");
         }
 
-        var room = Spawned.Room;
-        if (room == 0)
+        if (Placing.Plan(0f, out _, out var spots) is { } refused)
         {
-            return Outcome.Failed("AT MOST AT ONCE");
+            return refused;
         }
 
-        var spots = Placing.Spots(mover, Math.Min((int)Placing.Count.Value, room));
-        if (spots.Count == 0)
-        {
-            return Outcome.Failed("NO ROOM THERE");
-        }
-
-        // Written before the native call, so a crash inside it names who.
-        Log.Info($"Spawner: spawning {spots.Count} x {picked.Label} ({picked.Pawn.Name}, {picked.Define.GetPathName(null)}, {picked.Type.Name}).");
+        var passive = Side.Index == 1;
+        var behaviour = Behaviour.Index;
         var made = 0;
         foreach (var spot in spots)
         {
+            var picked = from.Count == 1 ? from[0] : from[Random.Shared.Next(from.Count)];
+
+            // Written before the native call, so a crash inside it names who.
+            Log.Info($"Spawner: spawning {picked.Label} ({picked.Pawn.Name}, {picked.Define.GetPathName(null)}, {picked.Type.Name}).");
             var body = people.SpawnPawn(picked.Pawn, picked.Define, picked.Type, spot.Floor + new System.Numerics.Vector3(0f, 0f, 100f), spot.Facing);
             if (body is not { IsValid: true, bDeleteMe: false })
             {
@@ -371,23 +395,20 @@ static class People
                 continue;
             }
 
-            var passive = Side.Index == 1;
-            var behaviour = Behaviour.Index;
             var spawn = Spawned.Add(body, picked.Label, passive, () => Start(body, behaviour, passive));
-            SetUp(body, picked, spawn);
+            SetUp(body, picked, spawn, behaviour);
             made++;
         }
 
         return made > 0 ? Outcome.Done($"{made} SPAWNED") : Outcome.Failed("THE GAME REFUSED");
     }
 
-    static void SetUp(RBMPawnAI body, Recipe picked, Spawned.Spawn spawn)
+    static void SetUp(RBMPawnAI body, Recipe picked, Spawned.Spawn spawn, int behaviour)
     {
         var brain = body.AIController is { IsValid: true } ai ? ai : null;
-        var behaviour = Behaviour.Index;
         if (brain?.RiotBrain is { IsValid: true } riot)
         {
-            riot.bRiotWantsToFight = behaviour == 0 && !spawn.Passive;
+            riot.bRiotWantsToFight = behaviour == Fight && !spawn.Passive;
         }
 
         Arm(body, picked);
@@ -417,7 +438,7 @@ static class People
 
         switch (behaviour)
         {
-            case 0 when body is RPawnVillain thug && !passive:
+            case Fight when body is RPawnVillain thug && !passive:
                 thug.SetIsValidCombatant(true);
                 thug.ForceIntoCombat();
                 if (!thug.bIsCurrentCombatant)
@@ -426,14 +447,47 @@ static class People
                 }
 
                 break;
-            case 2 when Teleport.Mover is { } you && brain.CreateSpawnedBehaviour(RBMBehaviour_Follow.StaticClass()) is RBMBehaviour_Follow follow:
+            case Follow when Teleport.Mover is { } you && brain.CreateSpawnedBehaviour(RBMBehaviour_Follow.StaticClass()) is RBMBehaviour_Follow follow:
                 // The game's follow gives up at once if it has nobody to follow when it starts.
                 follow.FollowActor = you;
                 follow.FollowDist = FollowGap;
                 follow.FollowDistSq = FollowGap * FollowGap;
                 brain.ActivateSpawnedBehaviour(follow);
                 break;
+            case RunAway when body is RPawnVillain && brain.RiotBrain is { IsValid: true } riot && FleeClass() is { } flee:
+                // The way the game breaks a street thug who has the Batmobile coming at him. He
+                // runs along the roads, and the game takes him away once he's far off and unseen.
+                brain.ExitCombat();
+                if (brain.GetBehaviour(0) is { IsValid: true } doing)
+                {
+                    brain.InstantExitBehaviour(doing, true);
+                }
+
+                riot.bRiotHiding = true;
+                riot.RunAwayBehaviour = flee;
+                brain.DefaultFleeBehaviourClass = flee;
+                brain.SpawnBehaviour(flee, null!);
+                break;
         }
+    }
+
+    // The run away the city's streets give their people. Nothing indoors, where there are none.
+    static Class? FleeClass()
+    {
+        if (World.Info?.PopulationManager is not { IsValid: true } people)
+        {
+            return null;
+        }
+
+        foreach (var street in people.PopulationVolumes)
+        {
+            if (street is { IsValid: true } && street.CityRunAwayBehaviourClass is { IsValid: true } flee)
+            {
+                return flee;
+            }
+        }
+
+        return null;
     }
 
     static void Arm(RBMPawnAI body, Recipe picked)
@@ -565,6 +619,11 @@ static class People
         }
 
         var path = define.GetPathName(null);
+        if (path.Contains(StandIns, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
         var enemy = Is(pawn, RPawnVillain.StaticClass());
         return new Recipe(path + "@" + pawnName, Pretty(define.Name.ToString() ?? "CHARACTER"), GroupOf(path, enemy), pawn, define, type,
             weapon is { IsValid: true } ? weapon : null, enemy);

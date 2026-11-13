@@ -20,30 +20,40 @@ static class Arms
 
     public sealed record Kind(string Key, string Label, Class Class);
 
+    // How handing someone a weapon went.
+    public enum Handed
+    {
+        Given,
+        Already,
+        Refused,
+        NoModel,
+    }
+
     static List<Kind> _kinds = new();
     static RGameInfo? _world;
+    static bool _shown;
 
     public static readonly Choice Weapon = new(
         "spawner.weapons.weapon", "WEAPON",
-        "Every weapon the game has loaded here: guns, blades, shields and throwable crates. One whose model isn't loaded here is refused.",
+        "Every weapon the game has loaded here with its model: guns, blades, shields and throwable crates. Select drops one on the ground.",
         new[] { ("", "OPEN THE MENU IN GAME") }, saved: false)
     {
-        Opening = () =>
-        {
-            if (!ReferenceEquals(_world, World.Info) || _kinds.Count == 0)
-            {
-                Refresh();
-            }
-        },
+        Pressed = static () => Drop!.Press(),
+        PressName = "DROP",
     };
 
     public static readonly Command RefreshList = new(
         "spawner.weapons.refresh", "REFRESH LIST",
-        "Reads again which weapons are loaded here.",
+        "Reads again which weapons are loaded here, without leaving the tab. Coming back to the tab reads it too.",
         () =>
         {
+            if (World.Info is null)
+            {
+                return Outcome.NoPlayer;
+            }
+
             Refresh();
-            return Outcome.Done($"{_kinds.Count} LISTED");
+            return _kinds.Count > 0 ? Outcome.Done($"{_kinds.Count} LISTED") : Outcome.Unchanged("NONE LOADED HERE");
         });
 
     public static readonly Command Drop = new(
@@ -51,24 +61,57 @@ static class Arms
         "Lays the weapon above on the ground, HOW MANY times, the way PLACE says. Thugs nearby pick them up and use them.",
         DropPicked);
 
+    public static readonly Command GiveAimed = new(
+        "spawner.weapons.give_aimed", "GIVE TO WHO I AIM AT",
+        "Puts the weapon above in the hands of the person in the middle of your screen, spawned or not.",
+        () => Editor.Aimed(null, static kind => kind is Things.Kind.Enemy or Things.Kind.Friendly) is RBMPawnAI body ? GiveTo(body) : Outcome.Failed("AIM AT A PERSON"));
+
     public static readonly Command Give = new(
         "spawner.weapons.give", "GIVE TO PICKED SPAWN",
-        "Puts the weapon above in the hands of the person picked in SPAWNED, or your newest spawned person when nothing is picked there.",
-        GivePicked);
+        "Puts the weapon above in the hands of the person picked in SPAWNED. When the pick there isn't a person, your newest spawned person gets it.",
+        () => Spawned.Person() is { } body ? GiveTo(body) : Outcome.Failed("NO SPAWNED PEOPLE"))
+    {
+        Block = static () => Spawned.AnyPerson ? null : "NO SPAWNED PEOPLE",
+    };
 
     public static readonly Command GiveSelected = new(
         "spawner.weapons.give_selected", "GIVE TO SELECTED",
         "Puts the weapon above in the hands of the person the editor has selected.",
-        () => Editor.Selected is RBMPawnAI body ? GiveTo(body) : Outcome.Failed("SELECT A PERSON"));
+        () => Editor.Selected is RBMPawnAI body ? GiveTo(body) : Outcome.Failed("SELECT A PERSON"))
+    {
+        Block = static () => Editor.Selected is RBMPawnAI ? null : "SELECT A PERSON",
+    };
+
+    public static readonly Command GiveGuards = new(
+        "spawner.weapons.give_bodyguards", "GIVE TO BODYGUARDS",
+        "Puts the weapon above in the hands of every bodyguard still standing.",
+        ArmGuards)
+    {
+        Block = static () => Bodyguards.All.Count == 0 ? "NO BODYGUARDS" : null,
+    };
 
     public static readonly Catalog.Section[] Sections =
     {
         new("WHICH", Weapon, RefreshList),
-        new("USE", Drop, Give, GiveSelected),
+        new("USE", Drop, GiveAimed, Give, GiveSelected, GiveGuards),
         Placing.Section,
     };
 
-    // Every loaded class that's a real weapon a person can hold.
+    // Runs every tick. The list is read each time the tab comes up, since what's loaded changes
+    // as you move.
+    public static void Tick()
+    {
+        var shown = Menu.Shows(Weapon);
+        if (shown && !_shown)
+        {
+            Refresh();
+        }
+
+        _shown = shown;
+    }
+
+    // Every loaded class that's a real weapon a person can hold. One whose model isn't loaded
+    // here would be invisible in their hands, so it's left out.
     public static List<Kind> Find()
     {
         var root = RBMWeapon.StaticClass();
@@ -78,7 +121,7 @@ static class Arms
             var name = type.IsValid ? type.Name.ToString() ?? "" : "";
             if (!name.StartsWith("RBMWeapon", StringComparison.Ordinal) || name.EndsWith("Base", StringComparison.Ordinal)
                 || Abstract.Contains(name) || Refused.Any(word => name.Contains(word, StringComparison.OrdinalIgnoreCase))
-                || !People.Is(type, root))
+                || !People.Is(type, root) || type.DefaultObject is not RBMWeapon made || !HasModel(made.Mesh))
             {
                 continue;
             }
@@ -90,21 +133,33 @@ static class Arms
         return found.Values.ToList();
     }
 
-    // Swaps what they hold for this, the way the game arms people. False when they already hold one.
-    public static bool Hand(RBMPawnAI body, Class weapon)
+    // Swaps what they hold for this, the way the game arms people. One that turns out to have no
+    // model is taken back, since an invisible weapon is no use to anyone.
+    public static Handed Hand(RBMPawnAI body, Class weapon)
     {
         if (body.CurrWeapon is { IsValid: true } held)
         {
             if (ReferenceEquals(held.Class, weapon))
             {
-                return false;
+                return Handed.Already;
             }
 
             body.DisappearDisarm();
         }
 
         body.SpawnWeapon(weapon, true, false);
-        return true;
+        if (body.CurrWeapon is not { IsValid: true } got || !ReferenceEquals(got.Class, weapon))
+        {
+            return Handed.Refused;
+        }
+
+        if (!HasModel(got.Mesh))
+        {
+            body.DisappearDisarm();
+            return Handed.NoModel;
+        }
+
+        return Handed.Given;
     }
 
     static void Refresh()
@@ -127,41 +182,41 @@ static class Arms
         Weapon.SetOptions(options, Math.Max(0, Array.FindIndex(options, option => option.Key == picked)));
     }
 
-    static Kind? Picked() => _kinds.Find(kind => kind.Key == Weapon.CurrentId);
-
-    static Outcome DropPicked()
+    // The weapon picked in WEAPON, or why there's none to use. A hotkey can ask before the tab
+    // has read the list.
+    static Outcome? NoWeapon(out Kind kind)
     {
-        if (Teleport.Mover is not { } mover || World.Controller is not { } controller)
+        kind = null!;
+        if (!ReferenceEquals(_world, World.Info) || _kinds.Count == 0)
         {
-            return Outcome.NoPlayer;
+            Refresh();
         }
 
-        if (controller.bCinematicMode)
-        {
-            return Outcome.Failed("NOT IN A SCENE");
-        }
-
-        if (Picked() is not { } kind)
+        if (_kinds.Find(listed => listed.Key == Weapon.CurrentId) is not { } picked)
         {
             return Outcome.Failed("PICK A WEAPON FIRST");
         }
 
-        if (!kind.Class.IsValid)
+        if (!picked.Class.IsValid)
         {
             Refresh();
             return Outcome.Failed("GONE, PICK AGAIN");
         }
 
-        var room = Spawned.Room;
-        if (room == 0)
+        kind = picked;
+        return null;
+    }
+
+    static Outcome DropPicked()
+    {
+        if (NoWeapon(out var kind) is { } none)
         {
-            return Outcome.Failed("AT MOST AT ONCE");
+            return none;
         }
 
-        var spots = Placing.Spots(mover, Math.Min((int)Placing.Count.Value, room));
-        if (spots.Count == 0)
+        if (Placing.Plan(0f, out _, out var spots) is { } refused)
         {
-            return Outcome.Failed("NO ROOM THERE");
+            return refused;
         }
 
         var made = 0;
@@ -218,44 +273,56 @@ static class Arms
         return Outcome.Failed(unloaded ? "NOT LOADED HERE" : "THE GAME REFUSED");
     }
 
-    static Outcome GivePicked() => Spawned.Person() is { } body ? GiveTo(body) : Outcome.Failed("PICK A PERSON IN SPAWNED");
-
     static Outcome GiveTo(RBMPawnAI body)
     {
-        if (Picked() is not { } kind)
+        if (NoWeapon(out var kind) is { } none)
         {
-            return Outcome.Failed("PICK A WEAPON FIRST");
+            return none;
         }
 
-        if (!kind.Class.IsValid)
-        {
-            Refresh();
-            return Outcome.Failed("GONE, PICK AGAIN");
-        }
-
-        if (body.Health <= 0 || body is RPawnVillain { bGoodAsDead: true })
+        if (!Crowd.Standing(body))
         {
             return Outcome.Failed("THEY'RE DOWN");
         }
 
-        if (!Hand(body, kind.Class))
+        return Hand(body, kind.Class) switch
         {
-            return Outcome.Unchanged("ALREADY HOLDING IT");
+            Handed.Given => Outcome.Done("GIVEN"),
+            Handed.Already => Outcome.Unchanged("ALREADY HOLDING IT"),
+            Handed.NoModel => Outcome.Failed("NOT LOADED HERE"),
+            _ => Outcome.Failed("THEY CAN'T HOLD IT"),
+        };
+    }
+
+    static Outcome ArmGuards()
+    {
+        if (Bodyguards.All.Count == 0)
+        {
+            return Outcome.Failed("NO BODYGUARDS");
         }
 
-        if (body.CurrWeapon is not { IsValid: true } got || !ReferenceEquals(got.Class, kind.Class))
+        if (NoWeapon(out var kind) is { } none)
         {
-            return Outcome.Failed("THEY CAN'T HOLD IT");
+            return none;
         }
 
-        // An invisible weapon is no use to anyone, so it's taken back.
-        if (!HasModel(got.Mesh))
+        var standing = 0;
+        var armed = 0;
+        foreach (var guard in Bodyguards.All)
         {
-            body.DisappearDisarm();
-            return Outcome.Failed("NOT LOADED HERE");
+            if (!Fight.Standing(guard.Body))
+            {
+                continue;
+            }
+
+            standing++;
+            if (Hand(guard.Body, kind.Class) is Handed.Given or Handed.Already)
+            {
+                armed++;
+            }
         }
 
-        return Outcome.Done("GIVEN");
+        return armed > 0 ? Outcome.Done($"{armed} ARMED") : Outcome.Failed(standing == 0 ? "NONE STANDING" : "THEY CAN'T HOLD IT");
     }
 
     static bool HasModel(SkeletalMeshComponent? part) => part is { IsValid: true } && part.SkeletalMesh is { IsValid: true };

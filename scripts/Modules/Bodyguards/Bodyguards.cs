@@ -49,10 +49,11 @@ static class Bodyguards
 
     public static readonly Choice Who = new(
         "spawner.bodyguards.who", "WHO",
-        "Who HIRE brings: everyone this area has loaded who can fight. Changes with where you are.",
+        "Who HIRE brings: everyone this area has loaded who can fight. Changes with where you are. Select hires them.",
         new[] { ("", "OPEN THE MENU IN GAME") }, saved: false)
     {
-        Opening = ListWho,
+        Pressed = static () => Hire!.Press(),
+        PressName = "HIRE",
     };
 
     public static readonly Slider Count = new(
@@ -73,7 +74,7 @@ static class Bodyguards
 
     public static readonly Command Hire = new(
         "spawner.bodyguards.hire", "HIRE BODYGUARD",
-        "Brings the person picked above to your side as a bodyguard. They follow you everywhere and fight whoever comes for you.",
+        "Brings the person picked in WHO to your side as a bodyguard. They follow you everywhere and fight whoever comes for you.",
         HirePicked);
 
     public static readonly Command Recruit = new(
@@ -89,22 +90,42 @@ static class Bodyguards
     public static readonly Command Attack = new(
         "spawner.bodyguards.attack", "ATTACK WHO I AIM AT",
         "Sends every bodyguard after the enemy in the middle of your screen until that one is down.",
-        AttackAimed);
+        AttackAimed)
+    {
+        Block = NoTeam,
+    };
 
     public static readonly Command Regroup = new(
         "spawner.bodyguards.regroup", "BRING THEM TO ME",
         "Puts every bodyguard still standing in a ring around you, wherever they are.",
-        RegroupNow);
+        RegroupNow)
+    {
+        Block = NoTeam,
+    };
 
     public static readonly Command Heal = new(
         "spawner.bodyguards.heal", "HEAL BODYGUARDS",
         "Fills every bodyguard's health and gets the ones knocked out back on their feet.",
-        HealAll);
+        HealAll)
+    {
+        Block = NoTeam,
+    };
+
+    public static readonly Command DismissAimed = new(
+        "spawner.bodyguards.dismiss_aimed", "DISMISS WHO I AIM AT",
+        "Lets the bodyguard in the middle of your screen go. A hired one leaves the world. A recruited one goes back to being an enemy.",
+        DismissOne)
+    {
+        Block = NoTeam,
+    };
 
     public static readonly Command Dismiss = new(
         "spawner.bodyguards.dismiss", "DISMISS BODYGUARDS",
         "Lets every bodyguard go. Hired ones leave the world. Recruited ones go back to being enemies.",
-        DismissAll);
+        DismissAll)
+    {
+        Block = NoTeam,
+    };
 
     public static readonly Slider Range = new(
         "spawner.bodyguards.range", "PROTECT RANGE",
@@ -153,12 +174,15 @@ static class Bodyguards
     public static readonly Catalog.Section[] Sections =
     {
         new("HIRE", Who, People.RefreshList, People.Weapon, Count, Health, Hire, Recruit),
-        new("ORDERS", Orders, Attack, Regroup, Heal, Dismiss),
+        new("ORDERS", Orders, Attack, Regroup, Heal, DismissAimed, Dismiss),
         new("BEHAVIOUR", Range, Gap, EnemiesFight, CatchUp, Unbeatable, HitsToKnockOut),
         GuardMarks.Section,
     };
 
     public static IReadOnlyList<Guard> All => Team;
+
+    // Asked every frame the rows that need a team are on screen.
+    static string? NoTeam() => Team.Count == 0 ? "NO BODYGUARDS" : null;
 
     // Whether anyone is being steered. The hit redirects ask this first, so every other attack
     // in the game costs one check.
@@ -186,7 +210,7 @@ static class Bodyguards
 
     public static Fighter? FighterOf(RPawnVillain body) => (Fighter?)GuardOf(body) ?? Hunters.Of(body);
 
-    // The fighters the area has loaded. Called when the menu opens and when the lists are read again.
+    // The fighters the area has loaded. Called each time the lists are read.
     public static void ListWho()
     {
         var fighters = People.Fighters();
@@ -202,6 +226,8 @@ static class Bodyguards
 
     static Outcome HirePicked()
     {
+        // A hotkey can ask before any tab has read the lists.
+        People.Fresh();
         if (Who.CurrentId.Length == 0)
         {
             ListWho();
@@ -301,6 +327,22 @@ static class Bodyguards
 
         Adopt(thug, Things.NameOf(thug), true, Math.Max(thug.HealthMax, thug.Health));
         return Outcome.Done("RECRUITED");
+    }
+
+    static Outcome DismissOne()
+    {
+        if (Team.Count == 0)
+        {
+            return Outcome.Unchanged("NO BODYGUARDS");
+        }
+
+        if (Editor.Aimed(Things.Kind.Enemy) is not RPawnVillain thug || GuardOf(thug) is null)
+        {
+            return Outcome.Failed("AIM AT A BODYGUARD");
+        }
+
+        Let(thug);
+        return Outcome.Done("DISMISSED");
     }
 
     static void Adopt(RPawnVillain body, string label, bool recruited, int baseHealth)

@@ -7,7 +7,7 @@ using BmSDK.Engine;
 namespace Knightfall;
 
 // SPAWNER, the PLACE rows every spawning tab shares, and the spots they work out. Each spot is
-// open dry ground you can see from where you stand, so nothing lands inside a wall or the bay.
+// open dry ground that can be seen from where you look, so nothing lands inside a wall or the bay.
 static class Placing
 {
     const float Metre = Teleport.UnitsPerMetre;
@@ -25,25 +25,32 @@ static class Placing
     const float Nudge = 150f;
     const int NudgeTries = 6;
 
+    // How many floors down a spot looks for one that can be seen.
+    const int Floors = 3;
+
+    const int InFront = 0;
+    const int Crosshair = 1;
+
     public static readonly Choice Where = new(
         "spawner.place.where", "WHERE",
-        "IN FRONT puts spawns on the ground ahead of you, DISTANCE away. CROSSHAIR puts them where you're aiming.",
-        new[] { ("front", "IN FRONT"), ("crosshair", "CROSSHAIR") })
+        "IN FRONT puts spawns on the ground ahead of you, DISTANCE away. CROSSHAIR puts them where you're aiming. AROUND YOU puts them in a ring round you, DISTANCE out.",
+        new[] { ("front", "IN FRONT"), ("crosshair", "CROSSHAIR"), ("around", "AROUND YOU") })
     {
         Preference = true,
     };
 
     public static readonly Slider Distance = new(
         "spawner.place.distance", "DISTANCE",
-        "How far in front of you spawns appear when WHERE is IN FRONT.",
+        "How far from you spawns appear when WHERE is IN FRONT or AROUND YOU.",
         min: 2, max: 40, step: 1, value: 6, unit: " M")
     {
         Preference = true,
+        Block = static () => Where.Index == Crosshair ? "WHERE IS CROSSHAIR" : null,
     };
 
     public static readonly Slider Count = new(
         "spawner.place.count", "HOW MANY",
-        "How many each SPAWN makes. They stand in a block, SPACING apart.",
+        "How many each SPAWN makes. They stand in a block, or a ring with AROUND YOU, SPACING apart.",
         min: 1, max: 12, step: 1, value: 1)
     {
         Preference = true,
@@ -69,37 +76,65 @@ static class Placing
 
     public readonly record struct Spot(Vector3 Floor, Rotator Facing);
 
-    // Up to count spots, fewer when there isn't room. Empty when the middle can't be found. Room
-    // keeps big spawns at least that far from you, from walls you aim at and from each other.
-    public static List<Spot> Spots(Pawn mover, int count, float room = 0f)
+    // Works out where the next SPAWN goes. Gives back why not when nothing can be spawned now,
+    // and null with at least one spot when it can. There are HOW MANY spots, fewer when MOST AT
+    // ONCE or the ground leaves less room. Room keeps big spawns at least that far from you,
+    // from walls you aim at and from each other.
+    public static Outcome? Plan(float room, out Pawn mover, out List<Spot> spots)
     {
-        var spots = new List<Spot>();
-        if (World.Controller is not { } controller)
+        spots = new List<Spot>();
+        mover = null!;
+        if (Teleport.Mover is not { } pawn || World.Controller is not { } controller)
         {
-            return spots;
+            return Outcome.NoPlayer;
         }
 
+        mover = pawn;
+        if (controller.bCinematicMode)
+        {
+            return Outcome.Failed("NOT IN A SCENE");
+        }
+
+        var left = Spawned.Room;
+        if (left == 0)
+        {
+            return Spawned.Full;
+        }
+
+        var count = Math.Min((int)Count.Value, left);
+        var gap = MathF.Max((float)Spacing.Value * Metre, room);
         controller.GetPlayerViewPoint(out var eye, out var view);
-
-        // CROSSHAIR goes where the camera looks, IN FRONT the way you face.
-        Vector3 ahead;
-        Vector3 middle;
-        if (Where.Index == 1)
+        switch (Where.Index)
         {
-            ahead = Teleport.Flat(view.ToDirection());
-            Blink.Aim(mover, eye, eye + view.ToDirection() * Reach, out var aimed, out _);
-            middle = aimed - ahead * MathF.Max(Nudge, room / 2f);
-        }
-        else
-        {
-            ahead = Teleport.Flat(mover.Rotation.ToDirection());
-            middle = mover.Location + ahead * MathF.Max((float)Distance.Value * Metre, room);
+            case Crosshair:
+                // Where the camera looks, and each spot has to be in its sight.
+                var looking = Teleport.Flat(view.ToDirection());
+                if (!Blink.Aim(pawn, eye, eye + view.ToDirection() * Reach, out var aimed, out _))
+                {
+                    return Outcome.Failed("AIM AT THE GROUND");
+                }
+
+                Grid(pawn, spots, aimed - looking * MathF.Max(Nudge, room / 2f), looking, count, gap, eye);
+                break;
+
+            case InFront:
+                var ahead = Teleport.Flat(pawn.Rotation.ToDirection());
+                Grid(pawn, spots, pawn.Location + ahead * MathF.Max((float)Distance.Value * Metre, room), ahead, count, gap, pawn.Location + new Vector3(0f, 0f, Eyes));
+                break;
+
+            default:
+                Ring(pawn, spots, MathF.Max((float)Distance.Value * Metre, room), count, gap);
+                break;
         }
 
+        return spots.Count > 0 ? null : Outcome.Failed("NO ROOM THERE");
+    }
+
+    // Rows across and back from the middle, the first row nearest you.
+    static void Grid(Pawn mover, List<Spot> spots, Vector3 middle, Vector3 ahead, int count, float gap, Vector3 sight)
+    {
         var side = new Vector3(-ahead.Y, ahead.X, 0f);
         var columns = (int)MathF.Ceiling(MathF.Sqrt(count));
-        var gap = MathF.Max((float)Spacing.Value * Metre, room);
-        var sight = mover.Location + new Vector3(0f, 0f, Eyes);
         for (var i = 0; i < count; i++)
         {
             var row = i / columns;
@@ -110,8 +145,24 @@ static class Placing
                 spots.Add(new Spot(floor, Face(floor, mover)));
             }
         }
+    }
 
-        return spots;
+    // Evenly round you, the first one straight ahead. The ring grows until they fit the gap apart.
+    static void Ring(Pawn mover, List<Spot> spots, float radius, int count, float gap)
+    {
+        var here = mover.Location;
+        var sight = here + new Vector3(0f, 0f, Eyes);
+        var first = mover.Rotation.Yaw * MathF.PI / 180f;
+        radius = MathF.Max(radius, count * gap / MathF.Tau);
+        for (var i = 0; i < count; i++)
+        {
+            var angle = first + MathF.Tau * i / count;
+            var at = here + new Vector3(MathF.Cos(angle), MathF.Sin(angle), 0f) * radius;
+            if (Find(mover, at, here.Z, sight) is { } floor)
+            {
+                spots.Add(new Spot(floor, Face(floor, mover)));
+            }
+        }
     }
 
     static Vector3? Find(Pawn mover, Vector3 at, float height, Vector3 sight)
@@ -120,10 +171,18 @@ static class Placing
         {
             var angle = MathF.Tau * attempt / NudgeTries;
             var spot = attempt == 0 ? at : at + new Vector3(MathF.Cos(angle), MathF.Sin(angle), 0f) * Nudge;
-            if (Teleport.Floor(mover, spot, height + StepUp, height - StepDown, out var floor) && Teleport.Dry(floor)
-                && mover.FastTrace(floor + new Vector3(0f, 0f, Eyes), sight, Vector3.Zero, false))
+
+            // Under a bridge or an awning the first floor down is its top, which can't be seen,
+            // so the floors below it get a look too.
+            var top = height + StepUp;
+            for (var i = 0; i < Floors && Teleport.Floor(mover, spot, top, height - StepDown, out var floor); i++)
             {
-                return floor;
+                if (Teleport.Dry(floor) && mover.FastTrace(floor + new Vector3(0f, 0f, Eyes), sight, Vector3.Zero, false))
+                {
+                    return floor;
+                }
+
+                top = floor.Z - 5f;
             }
         }
 

@@ -211,12 +211,13 @@ WORLD > WEATHER
 
 SPAWNER
 
-- CHARACTERS: anyone the area has loaded, with SIDE (HOSTILE or PASSIVE), BEHAVIOUR, WEAPON, HEALTH and SIZE, placed by the PLACE rows on open ground you can see.
-- BODYGUARDS: HIRE BODYGUARD brings any fighter the area has loaded to your side, and RECRUIT WHO I AIM AT turns an enemy into one. They follow you, fight whoever comes near and catch up when you leave them behind. ORDERS (PROTECT ME, HOLD HERE, STAND DOWN), ATTACK WHO I AIM AT, BRING THEM TO ME, HEAL and DISMISS run the team. PROTECT RANGE, FOLLOW DISTANCE, ENEMIES FIGHT BODYGUARDS, UNBEATABLE BODYGUARDS and BODYGUARD MARKERS set how they behave and show.
+- CHARACTERS: anyone the area has loaded, with SIDE (HOSTILE or PASSIVE), BEHAVIOUR (FIGHT, STAND, FOLLOW YOU or RUN AWAY), WEAPON, HEALTH and SIZE. RANDOM FROM GROUP spawns a mixed crowd. The PLACE rows put spawns IN FRONT of you, at your CROSSHAIR or AROUND YOU, on open ground you can see.
+- Every list is read again each time you come to its tab, and pressing select on a pick spawns it.
+- BODYGUARDS: HIRE BODYGUARD brings any fighter the area has loaded to your side, and RECRUIT WHO I AIM AT turns an enemy into one. They follow you, fight whoever comes near and catch up when you leave them behind. ORDERS (PROTECT ME, HOLD HERE, STAND DOWN), ATTACK WHO I AIM AT, BRING THEM TO ME, HEAL, DISMISS WHO I AIM AT and DISMISS run the team. PROTECT RANGE, FOLLOW DISTANCE, ENEMIES FIGHT BODYGUARDS, UNBEATABLE BODYGUARDS and BODYGUARD MARKERS set how they behave and show.
 - VEHICLES: any tank, drone, walker or car the game has loaded, HOSTILE or ON YOUR SIDE (hacked for good, no self-destruct), with BEHAVIOUR and HEALTH, placed by the same PLACE rows.
-- OBJECTS: copies of any mesh nearby or in memory, or of whatever you aim at, with PHYSICS, SOLID and SIZE. They sit on the floor by their real size.
-- WEAPONS: any weapon the game has loaded. DROP ON THE GROUND lays it out for thugs to pick up, GIVE TO PICKED SPAWN and GIVE TO SELECTED put it in the hands of someone you spawned or the editor has selected.
-- SPAWNED: go to or delete what you spawned, and clear the fallen and far away automatically. EDIT IT, SELECT WHAT YOU SPAWN and SPAWN COPY OF SELECTED work with the EDITOR.
+- OBJECTS: copies of any mesh nearby or in memory, or of whatever you aim at, with SOLID, PHYSICS and SIZE. SHOW narrows the list to a kind of thing, and GROUP splits everything in memory into short lists by name. They sit on the floor by their real size.
+- WEAPONS: any weapon the game has loaded. DROP ON THE GROUND lays it out for thugs to pick up. GIVE TO WHO I AIM AT, GIVE TO PICKED SPAWN, GIVE TO SELECTED and GIVE TO BODYGUARDS put it in someone's hands.
+- SPAWNED: go to or delete what you spawned, with SHOW to list and delete just the people, vehicles, objects or weapons, and clear the fallen and far away automatically. EDIT IT, SELECT WHAT YOU SPAWN and SPAWN COPY OF SELECTED work with the EDITOR.
 
 EDITOR
 

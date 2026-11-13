@@ -16,13 +16,24 @@ static class Spawned
     // Upkeep, like clearing the fallen, runs this often.
     const float CheckEvery = 0.5f;
 
+    // GO TO IT steps beside a spawn this near. Further off it travels like any teleport, since
+    // the ground there may not be loaded.
+    const float Near = 100f * Metre;
+    const float Beside = 300f;
+
     // A spawned person with its own reason for standing down, which the game reads back.
     public static readonly FName Calm = new("KnightfallCalm");
+
+    // What SPAWN says when MOST AT ONCE leaves no room.
+    public static readonly Outcome Full = Outcome.Failed("MOST AT ONCE REACHED");
 
     public sealed class Spawn
     {
         public required Actor Actor;
         public required string Label;
+
+        // Counts up with every spawn, so each keeps its name in the list while others come and go.
+        public int Number;
         public bool Passive;
 
         // A bodyguard, who follows you and so is never cleared for being far away.
@@ -43,10 +54,19 @@ static class Spawned
     static readonly List<Spawn> Spawns = new();
     static float _checkedAt = -1f;
     static bool _listDue;
+    static int _made;
+
+    public static readonly Choice Show = new(
+        "spawner.spawned.show", "SHOW",
+        "Which of your spawns SPAWNED lists and DELETE ALL SHOWN takes away.",
+        new[] { ("all", "EVERYTHING"), ("people", "PEOPLE"), ("vehicles", "VEHICLES"), ("objects", "OBJECTS"), ("weapons", "WEAPONS") }, saved: false)
+    {
+        Changed = static () => _listDue = true,
+    };
 
     public static readonly Choice Pick = new(
         "spawner.spawned.pick", "SPAWNED",
-        "Everything you've spawned that's still in the world, newest first.",
+        "What you've spawned that's still in the world, newest first. The number is the order they were spawned in.",
         new[] { ("", "NOTHING YET") }, saved: false)
     {
         Opening = List,
@@ -55,12 +75,18 @@ static class Spawned
     public static readonly Command GoTo = new(
         "spawner.spawned.go_to", "GO TO IT",
         "Puts you beside the spawn picked above.",
-        GoToPicked);
+        GoToPicked)
+    {
+        Block = NonePicked,
+    };
 
     public static readonly Command Delete = new(
         "spawner.spawned.delete", "DELETE IT",
         "Takes the spawn picked above out of the world.",
-        DeletePicked);
+        DeletePicked)
+    {
+        Block = NonePicked,
+    };
 
     public static readonly Command EditIt = new(
         "spawner.spawned.edit", "EDIT IT",
@@ -74,17 +100,26 @@ static class Spawned
 
             Editor.Select(spawn.Actor);
             return Outcome.Done("SELECTED");
-        });
+        })
+    {
+        Block = NonePicked,
+    };
 
     public static readonly Command DeleteLast = new(
         "spawner.spawned.delete_last", "DELETE LAST",
-        "Takes your newest spawn out of the world.",
-        () => Spawns.Count > 0 ? Take(Spawns[^1]) : Outcome.Unchanged("NOTHING SPAWNED"));
+        "Takes your newest spawn out of the world, whatever SHOW says.",
+        () => Spawns.Count > 0 ? Take(Spawns[^1]) : Outcome.Unchanged("NOTHING SPAWNED"))
+    {
+        Block = NoneSpawned,
+    };
 
     public static readonly Command DeleteAll = new(
-        "spawner.spawned.delete_all", "DELETE EVERYTHING SPAWNED",
-        "Takes everything you've spawned out of the world. Nothing the game placed is touched.",
-        TakeAll);
+        "spawner.spawned.delete_all", "DELETE ALL SHOWN",
+        "Takes every spawn SHOW lists out of the world. Nothing the game placed is touched.",
+        TakeShown)
+    {
+        Block = NoneSpawned,
+    };
 
     public static readonly Toggle ClearFallen = new(
         "spawner.spawned.clear_fallen", "CLEAR THE FALLEN",
@@ -100,6 +135,7 @@ static class Spawned
         min: 5, max: 180, step: 5, value: 30, unit: " S")
     {
         Preference = true,
+        Block = static () => ClearFallen.On ? null : "CLEAR THE FALLEN IS OFF",
     };
 
     public static readonly Slider ClearFar = new(
@@ -120,16 +156,41 @@ static class Spawned
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("YOUR SPAWNS", Pick, GoTo, Delete, DeleteLast, DeleteAll),
+        new("YOUR SPAWNS", Show, Pick, GoTo, Delete, DeleteLast, DeleteAll),
         new("CLEAN UP", ClearFallen, ClearAfter, ClearFar, Most),
     };
 
     // How many more fit under MOST AT ONCE.
     public static int Room => Math.Max(0, (int)Most.Value - Alive().Count());
 
+    // Whether a spawned person is still in the world. A row asks every frame it's on screen.
+    public static bool AnyPerson
+    {
+        get
+        {
+            foreach (var spawn in Spawns)
+            {
+                if (spawn.Actor is RBMPawnAI && Alive(spawn))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    // Asked every frame their rows are on screen.
+    static string? NoneSpawned() => Spawns.Count == 0 ? "NOTHING SPAWNED" : null;
+
+    static string? NonePicked() => Pick.CurrentId.Length == 0 ? NoneSpawned() ?? "NONE OF THAT KIND" : null;
+
     public static Spawn Add(Actor actor, string label, bool passive, Action? start = null, bool guard = false)
     {
-        var spawn = new Spawn { Actor = actor, Label = label, Passive = passive, Guard = guard, Start = start, StartAt = World.Now + StartAfter };
+        var spawn = new Spawn
+        {
+            Actor = actor, Label = label, Number = ++_made, Passive = passive, Guard = guard, Start = start, StartAt = World.Now + StartAfter,
+        };
         Spawns.Add(spawn);
         _listDue = true;
 
@@ -145,14 +206,29 @@ static class Spawned
     // Runs every tick. Passive people are kept calm, since a hit can make them hostile again.
     public static void Tick()
     {
-        // The list on screen follows new and lost spawns while the menu is open.
+        // The list on screen follows SHOW, and new and lost spawns, while the menu is open.
         if (_listDue && Menu.Showing)
         {
-            _listDue = false;
             List();
         }
 
-        if (Spawns.Count == 0 || MathF.Abs(World.Now - _checkedAt) < CheckEvery)
+        if (Spawns.Count == 0)
+        {
+            return;
+        }
+
+        // Every tick, so a new spawn gets going as soon as it's ready.
+        for (var i = 0; i < Spawns.Count; i++)
+        {
+            var spawn = Spawns[i];
+            if (spawn.Start is { } start && World.Now >= spawn.StartAt && Alive(spawn) && (spawn.Ready?.Invoke() ?? true))
+            {
+                spawn.Start = null;
+                Kernel.Run("spawner.start", start);
+            }
+        }
+
+        if (MathF.Abs(World.Now - _checkedAt) < CheckEvery)
         {
             return;
         }
@@ -161,14 +237,6 @@ static class Spawned
         if (Spawns.RemoveAll(spawn => !Alive(spawn)) > 0)
         {
             _listDue = true;
-        }
-        foreach (var spawn in Spawns)
-        {
-            if (spawn.Start is { } start && World.Now >= spawn.StartAt && (spawn.Ready?.Invoke() ?? true))
-            {
-                spawn.Start = null;
-                Kernel.Run("spawner.start", start);
-            }
         }
 
         var you = Teleport.Mover?.Location;
@@ -216,33 +284,37 @@ static class Spawned
         _ => false,
     };
 
+    // Which of SHOW's kinds a spawn is, by that option's id.
+    static string KindOf(Actor actor) => actor switch
+    {
+        Vehicle => "vehicles",
+        Pawn => "people",
+        RBMCombatThrownObject => "weapons",
+        _ => "objects",
+    };
+
+    static bool Shown(Spawn spawn) => Show.Index == 0 || KindOf(spawn.Actor) == Show.CurrentId;
+
     static void List()
     {
-        var alive = Alive().Reverse().ToList();
-        if (alive.Count == 0)
+        _listDue = false;
+        var shown = Alive().Where(Shown).Reverse().ToList();
+        if (shown.Count == 0)
         {
-            Pick.SetOptions(new[] { ("", "NOTHING YET") }, 0);
+            Pick.SetOptions(new[] { ("", Spawns.Count == 0 ? "NOTHING YET" : "NONE OF THAT KIND") }, 0);
             return;
         }
 
         var picked = Pick.CurrentId;
-        var options = alive.Select((spawn, i) => (spawn.Actor.Ptr.ToString(), $"{spawn.Label} {alive.Count - i}")).ToArray();
+        var options = shown.Select(spawn => (spawn.Actor.Ptr.ToString(), $"{spawn.Label} {spawn.Number}")).ToArray();
         Pick.SetOptions(options, Math.Max(0, Array.FindIndex(options, option => option.Item1 == picked)));
     }
 
     static Spawn? Picked() => Alive().FirstOrDefault(spawn => spawn.Actor.Ptr.ToString() == Pick.CurrentId);
 
-    // The person picked above, or the newest spawned person when nothing is picked. Null when the
-    // pick isn't a person.
-    public static RBMPawnAI? Person()
-    {
-        if (Pick.CurrentId.Length == 0)
-        {
-            return Alive().Select(spawn => spawn.Actor).OfType<RBMPawnAI>().LastOrDefault();
-        }
-
-        return Picked()?.Actor as RBMPawnAI;
-    }
+    // The person picked in the list. When the pick isn't a person, the newest one still standing.
+    public static RBMPawnAI? Person() =>
+        Picked()?.Actor as RBMPawnAI ?? Alive().Select(spawn => spawn.Actor).OfType<RBMPawnAI>().LastOrDefault(Crowd.Standing);
 
     static Outcome GoToPicked()
     {
@@ -256,8 +328,10 @@ static class Spawned
             return Outcome.NoPlayer;
         }
 
-        var beside = spawn.Actor.Location + Teleport.Flat(spawn.Actor.Rotation.ToDirection()) * 300f;
-        return Teleport.Hop(mover, beside, new Rotator(0f, spawn.Actor.Rotation.Yaw + 180f, 0f), false);
+        var beside = spawn.Actor.Location + Teleport.Flat(spawn.Actor.Rotation.ToDirection()) * Beside;
+        return Vector3.DistanceSquared(beside, mover.Location) > Near * Near
+            ? Teleport.Start(GoTo, beside, true)
+            : Teleport.Hop(mover, beside, new Rotator(0f, spawn.Actor.Rotation.Yaw + 180f, 0f), false);
     }
 
     static Outcome DeletePicked()
@@ -272,21 +346,20 @@ static class Spawned
         return outcome;
     }
 
-    static Outcome TakeAll()
+    static Outcome TakeShown()
     {
         var count = 0;
         foreach (var spawn in Spawns.ToArray())
         {
-            if (Alive(spawn))
+            if (Alive(spawn) && Shown(spawn))
             {
                 Take(spawn);
                 count++;
             }
         }
 
-        Spawns.Clear();
         List();
-        return count > 0 ? Outcome.Done($"{count} DELETED") : Outcome.Unchanged("NOTHING SPAWNED");
+        return count > 0 ? Outcome.Done($"{count} DELETED") : Outcome.Unchanged(NoneSpawned() ?? "NONE OF THAT KIND");
     }
 
     // Takes a spawned thing out of the world, listed or not. A script reload forgets the list
