@@ -137,6 +137,7 @@ static class Movement
         new("GLIDING", Glide.Slider, FreeFlight),
         new("GRAPPLE", Grapple.Slider, Boost.Slider, Reach.Slider, Zip.Slider),
         new("FALLING", FallGravity),
+        new("NOCLIP", Noclip.Clip, Noclip.Speed),
     };
 
     // A villain that walks at a share of the player's pace. It goes through the same hold as
