@@ -35,10 +35,8 @@ static class Objects
     const float FellTooFar = 25f * Metre;
     const float SettleTime = 4f;
 
-    // How many layers the crosshair looks through, past you, people and invisible volumes.
+    // How far SPAWN WHAT YOU AIM AT looks.
     const float Reach = 20000f;
-    const int Layers = 8;
-    const float StepPast = 60f;
 
     // How far outside a piece's box the crosshair spot may be and still count as on it.
     const float Snug = 10f;
@@ -438,43 +436,28 @@ static class Objects
 
     static Outcome CopyAimed()
     {
-        if (Teleport.Mover is not { } mover || World.Controller is not { } controller)
+        if (Teleport.Mover is null)
         {
             return Outcome.NoPlayer;
         }
 
-        controller.GetPlayerViewPoint(out var eye, out var view);
-        var way = view.ToDirection();
-        var end = eye + way * Reach;
-        var start = eye;
-        for (var i = 0; i < Layers; i++)
+        if (!Crosshair.Surface(Reach, out var hit))
         {
-            var hit = mover.Trace(out var spot, out _, end, start, Component.ECollisionFilter.COF_TraceWorld, Vector3.Zero, out var info, 0);
-            if (hit is null)
-            {
-                break;
-            }
-
-            if (hit is Volume or Pawn)
-            {
-                start = spot + way * StepPast;
-                continue;
-            }
-
-            var part = info.HitComponent is StaticMeshComponent { IsValid: true } direct ? direct : PartAt(hit, spot);
-            if (part?.StaticMesh is not { IsValid: true } mesh || HolderOf(part) is not { } holder)
-            {
-                return Outcome.Failed("NOT A MESH");
-            }
-
-            return Make(RecipeOf(part, holder, mesh));
+            return Outcome.Failed("AIM AT SOMETHING");
         }
 
-        return Outcome.Failed("AIM AT SOMETHING");
+        var part = hit.Part is StaticMeshComponent { IsValid: true } direct ? direct : PartAt(hit.Actor, hit.Spot);
+        if (part?.StaticMesh is not { IsValid: true } mesh || HolderOf(part) is not { } holder)
+        {
+            return Outcome.Failed(hit.Actor is Vehicle ? "THAT'S A VEHICLE" : "NOT A MESH");
+        }
+
+        return Make(RecipeOf(part, holder, mesh));
     }
 
     // When the hit doesn't say which piece it was: the actor's own mesh, or else the smallest
-    // piece of the world whose box holds the spot.
+    // piece of the world whose box holds the spot. A breakable prop or a vehicle is never taken
+    // for the piece of world under it.
     static StaticMeshComponent? PartAt(Actor hit, Vector3 spot)
     {
         if (hit is DynamicSMActor { StaticMeshComponent: { IsValid: true } dynamic })
@@ -485,6 +468,24 @@ static class Objects
         if (hit is StaticMeshActor { StaticMeshComponent: { IsValid: true } still })
         {
             return still;
+        }
+
+        if (hit is Pawn)
+        {
+            return null;
+        }
+
+        if (hit is ApexDestructibleActor)
+        {
+            foreach (var own in hit.Components)
+            {
+                if (own is StaticMeshComponent { IsValid: true, HiddenGame: false, StaticMesh: { IsValid: true } } shown)
+                {
+                    return shown;
+                }
+            }
+
+            return null;
         }
 
         StaticMeshComponent? best = null;

@@ -146,8 +146,8 @@ static partial class ArkhamKnight
         return aim.LengthSquared() > 1f ? Vector3.Normalize(aim) : barrel;
     }
 
-    // The crosshair's own spot. The camera's line only stops on walls and the ground, so a thug
-    // under the crosshair is looked for along it, nearest first. Aimed at the wall behind him, a
+    // The crosshair's own spot. The camera's line can slip past a thug's edge, so a thug under the
+    // crosshair is looked for along it too, nearest first. Aimed at the wall behind him, a
     // round from the gun off to one side of the camera would pass him by up close.
     static Vector3 AimPoint(Vector3 from)
     {
@@ -181,8 +181,8 @@ static partial class ArkhamKnight
     // The thugs along a line before the first wall, nearest first, and how far the line runs.
     static float Line(RPawnPlayer player, Vector3 from, Vector3 way)
     {
-        var walled = Blink.Aim(player, from, from + way * Range, out var wall, out _);
-        var reach = walled ? Vector3.Dot(wall - from, way) : Range;
+        var walled = Crosshair.Line(player, from, from + way * Range, Crosshair.Meets.Level, out var wall);
+        var reach = walled ? wall.Distance : Range;
 
         InLine.Clear();
         foreach (var thug in Crowd.StandingEnemies())

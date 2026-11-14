@@ -14,12 +14,6 @@ static class Editor
     public const string Page = "EDITOR";
 
     const float Metre = Teleport.UnitsPerMetre;
-    const float Reach = 30000f;
-    const int Layers = 8;
-    const float StepPast = 60f;
-
-    // How far off the middle of the screen something can be and still be what you aim at.
-    const float AimCone = 5f;
 
     const int ListMost = 40;
     const float PreviewEvery = 0.2f;
@@ -282,9 +276,8 @@ static class Editor
         var options = new List<(string Id, string Label)> { ("", "NONE") };
         var selected = Selected;
         var index = 0;
-        if (World.Controller is { } controller)
+        if (Crosshair.View(out var eye, out _))
         {
-            controller.GetPlayerViewPoint(out var eye, out _);
             var only = Only();
             var found = Things.Near(eye, (float)Range.Value * Metre, only);
             var shown = found.Take(ListMost).ToList();
@@ -320,69 +313,12 @@ static class Editor
         _pickSeen = Pick.CurrentId;
     }
 
-    // What's in the middle of the screen: whatever the view runs into first, or failing that the
-    // thing nearest the middle within a few degrees, which catches people and thin things a line
-    // slips past. Nothing behind a wall counts.
+    // What's in the middle of the screen, of the kinds SELECT FROM allows, within RANGE.
     public static Actor? Aimed() => Aimed(Only());
 
     // Wanted narrows the kinds further, for callers that only want, say, people.
-    public static Actor? Aimed(Things.Kind? only, Func<Things.Kind, bool>? wanted = null)
-    {
-        if (World.Controller is not { } controller || Teleport.Mover is not { } mover)
-        {
-            return null;
-        }
-
-        controller.GetPlayerViewPoint(out var eye, out var view);
-        var way = view.ToDirection();
-        var range = (float)Range.Value * Metre;
-        var start = eye;
-        var blocked = range;
-        for (var i = 0; i < Layers; i++)
-        {
-            var hit = mover.Trace(out var spot, out _, eye + way * Reach, start, Component.ECollisionFilter.COF_TraceAll, Vector3.Zero, out _, 0);
-            if (hit is null)
-            {
-                break;
-            }
-
-            if (hit is Volume or WorldInfo || ReferenceEquals(hit, World.Player) || ReferenceEquals(hit, World.Driving))
-            {
-                start = spot + way * StepPast;
-                continue;
-            }
-
-            if (!hit.bHidden && Things.KindOf(hit) is { } kind && (only is null || kind == only) && (wanted?.Invoke(kind) ?? true))
-            {
-                return hit;
-            }
-
-            blocked = MathF.Min(blocked, Vector3.Distance(eye, spot));
-            break;
-        }
-
-        Actor? best = null;
-        var closest = AimCone;
-        foreach (var item in Things.Near(eye, range, only, wanted))
-        {
-            Things.Box(item.Actor, out var middle, out var half);
-            var toward = middle - eye;
-            var distance = toward.Length();
-            if (distance < 1f || distance - MathF.Max(half.X, half.Y) > blocked)
-            {
-                continue;
-            }
-
-            var angle = MathF.Acos(Math.Clamp(Vector3.Dot(toward / distance, way), -1f, 1f)) * 180f / MathF.PI;
-            if (angle < closest)
-            {
-                closest = angle;
-                best = item.Actor;
-            }
-        }
-
-        return best;
-    }
+    public static Actor? Aimed(Things.Kind? only, Func<Things.Kind, bool>? wanted = null) =>
+        Crosshair.Pick((float)Range.Value * Metre, only, wanted);
 
     static Outcome Copy()
     {

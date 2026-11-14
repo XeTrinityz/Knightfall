@@ -174,22 +174,19 @@ static class Lightning
             return Outcome.Failed("NO LIGHTNING HERE");
         }
 
-        if (Teleport.Mover is not { } mover || World.Controller is not { } controller)
+        if (Teleport.Mover is null)
         {
             return Outcome.NoPlayer;
         }
 
-        controller.GetPlayerViewPoint(out var eye, out var view);
-        var hit = mover.Trace(out var spot, out _, eye + view.ToDirection() * Reach, eye, Component.ECollisionFilter.COF_TraceAll, Vector3.Zero, out _, 0);
-
-        // A person or a car gets the bolt right on them. Anything else gets one at that distance.
-        if (hit is Pawn { IsValid: true, bDeleteMe: false } target && !ReferenceEquals(target, mover) && !ReferenceEquals(target, World.Player))
+        // A person or a vehicle gets the bolt right on them. Anything else gets one at that distance.
+        if (Crosshair.Pick(Reach, wanted: static kind => kind is Things.Kind.Enemy or Things.Kind.Friendly or Things.Kind.Vehicle) is Pawn target)
         {
             sky.NextStrikeIntensity = 1f;
             sky.ManualTriggerLightningTargetActor(target);
             return Outcome.Done("STRIKE");
         }
 
-        return StrikeAhead(hit is not null ? Math.Max(Nearest, Vector3.Distance(eye, spot)) : null);
+        return StrikeAhead(Crosshair.Surface(Reach, out var hit) ? Math.Max(Nearest, hit.Distance) : null);
     }
 }

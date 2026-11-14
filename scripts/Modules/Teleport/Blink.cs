@@ -37,12 +37,9 @@ static class Blink
     const float StreetDrop = 300f;
     const float SameLevel = 100f;
 
-    // Invisible boxes and people are seen through when aiming.
-    const int Layers = 12;
-
     public static readonly Command ToCrosshair = new(
         "teleport.move.to_crosshair", "BLINK TO CROSSHAIR",
-        "Takes you to where the camera is aimed, on foot or in the Batmobile. Aim at a wall to land at its foot, or on top when the top is just above where you aimed.",
+        "Takes you to where the camera is aimed, on foot or in the Batmobile. Aim at a wall to land at its foot, or on top when the top is just above where you aimed. You can land on cars and props too.",
         AtCrosshair);
 
     public static readonly Command Forward = new(
@@ -97,23 +94,23 @@ static class Blink
 
     static Outcome AtCrosshair()
     {
-        if (Teleport.Mover is not { } mover || World.Controller is not { } controller)
+        if (Teleport.Mover is not { } mover || !Crosshair.View(out var eye, out var aim))
         {
             return Outcome.NoPlayer;
         }
 
-        controller.GetPlayerViewPoint(out var eye, out var view);
-        var aim = view.ToDirection();
         var end = eye + aim * ((float)Range.Value * Metre + Vector3.Distance(eye, mover.Location));
-        var facing = new Rotator(0f, view.Yaw, 0f);
+        var facing = new Rotator(0f, MathF.Atan2(aim.Y, aim.X) * 180f / MathF.PI, 0f);
 
         // Nothing in reach, so down to the ground under the far end.
-        if (!Aim(mover, eye, end, out var spot, out var normal))
+        if (!Crosshair.Line(mover, eye, end, Crosshair.Meets.Solid, out var hit))
         {
             return Down(mover, end, end.Z, facing);
         }
 
-        if (normal.Z >= Teleport.Level)
+        var spot = hit.Spot;
+        var normal = hit.Normal;
+        if (hit.Floor)
         {
             return Land(mover, spot, facing);
         }
@@ -144,9 +141,9 @@ static class Blink
         var room = Room(mover);
         var length = (float)Range.Value * Metre;
         var eyes = mover.Location + new Vector3(0f, 0f, car ? CarSight : 0f);
-        if (Aim(mover, eyes, eyes + way * (length + room), out var wall, out _))
+        if (Crosshair.Line(mover, eyes, eyes + way * (length + room), Crosshair.Meets.Level, out var wall))
         {
-            length = Vector3.Distance(eyes, wall) - room;
+            length = wall.Distance - room;
         }
 
         if (length < Shortest)
@@ -254,36 +251,6 @@ static class Blink
 
     static Outcome Land(Pawn mover, Vector3 floor, Rotator facing) =>
         Teleport.Dry(floor) ? Teleport.Hop(mover, floor, facing, true) : Outcome.Failed("WATER");
-
-    // The first solid thing between two points, seen through invisible boxes and people.
-    public static bool Aim(Actor tracer, Vector3 from, Vector3 to, out Vector3 spot, out Vector3 normal)
-    {
-        var way = Vector3.Normalize(to - from);
-        var start = from;
-        for (var i = 0; i < Layers; i++)
-        {
-            var hit = tracer.Trace(out spot, out normal, to, start, Component.ECollisionFilter.COF_TraceWorld, Vector3.Zero, out _, 0);
-            if (hit is null)
-            {
-                break;
-            }
-
-            if (hit is not Volume && hit is not Pawn)
-            {
-                return true;
-            }
-
-            start = spot + way * 5f;
-            if (Vector3.Dot(to - start, way) <= 0f)
-            {
-                break;
-            }
-        }
-
-        spot = to;
-        normal = default;
-        return false;
-    }
 
     static float Room(Pawn mover) =>
         mover is RVehicleBatmobileBase ? CarRoom : (mover.CylinderComponent is { IsValid: true } body ? body.CollisionRadius : 35f) + FootRoom;

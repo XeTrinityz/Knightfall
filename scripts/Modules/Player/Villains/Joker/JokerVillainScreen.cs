@@ -41,7 +41,7 @@ static partial class JokerVillain
 
     // Both crosshair calls are script functions given kept strings. Their script and what it
     // calls only read and copy the strings and never assign to them, so the kept ones are safe.
-    static void Crosshair(RPlayerController controller)
+    static void ShowCrosshair(RPlayerController controller)
     {
         if (!Aim.On || Arms.Raised < Drawn || controller.ModularHud is not { IsValid: true } hud || hud.TargetsModule is not { IsValid: true } targets)
         {

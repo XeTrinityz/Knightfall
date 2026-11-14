@@ -197,8 +197,8 @@ static partial class Firefly
         if (_back > 1f && World.Player is { IsValid: true } wearer)
         {
             var behind = view.Location - view.Rotation.ToDirection() * _back;
-            view.Location = Blink.Aim(wearer, view.Location, behind, out var wall, out _)
-                ? wall + view.Rotation.ToDirection() * WallRoom
+            view.Location = Crosshair.Line(wearer, view.Location, behind, Crosshair.Meets.Level, out var wall)
+                ? wall.Spot + view.Rotation.ToDirection() * WallRoom
                 : behind;
         }
 

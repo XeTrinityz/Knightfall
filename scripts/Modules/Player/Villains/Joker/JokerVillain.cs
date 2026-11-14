@@ -122,7 +122,7 @@ static partial class JokerVillain
         Fight(player, controller);
         KeepGoons();
         Tint(controller);
-        Crosshair(controller);
+        ShowCrosshair(controller);
         XRay(controller);
         ShowHud();
     }

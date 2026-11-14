@@ -29,7 +29,7 @@ static class Placing
     const int Floors = 3;
 
     const int InFront = 0;
-    const int Crosshair = 1;
+    const int AtCrosshair = 1;
 
     public static readonly Choice Where = new(
         "spawner.place.where", "WHERE",
@@ -45,7 +45,7 @@ static class Placing
         min: 2, max: 40, step: 1, value: 6, unit: " M")
     {
         Preference = true,
-        Block = static () => Where.Index == Crosshair ? "WHERE IS CROSSHAIR" : null,
+        Block = static () => Where.Index == AtCrosshair ? "WHERE IS CROSSHAIR" : null,
     };
 
     public static readonly Slider Count = new(
@@ -103,18 +103,17 @@ static class Placing
 
         var count = Math.Min((int)Count.Value, left);
         var gap = MathF.Max((float)Spacing.Value * Metre, room);
-        controller.GetPlayerViewPoint(out var eye, out var view);
         switch (Where.Index)
         {
-            case Crosshair:
+            case AtCrosshair:
                 // Where the camera looks, and each spot has to be in its sight.
-                var looking = Teleport.Flat(view.ToDirection());
-                if (!Blink.Aim(pawn, eye, eye + view.ToDirection() * Reach, out var aimed, out _))
+                if (!Crosshair.View(out var eye, out var way) || !Crosshair.Line(pawn, eye, eye + way * Reach, Crosshair.Meets.Solid, out var aimed))
                 {
                     return Outcome.Failed("AIM AT THE GROUND");
                 }
 
-                Grid(pawn, spots, aimed - looking * MathF.Max(Nudge, room / 2f), looking, count, gap, eye);
+                var looking = Teleport.Flat(way);
+                Grid(pawn, spots, aimed.Spot - looking * MathF.Max(Nudge, room / 2f), looking, count, gap, eye);
                 break;
 
             case InFront:

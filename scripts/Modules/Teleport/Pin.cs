@@ -42,18 +42,17 @@ static class Pin
 
     static Outcome Mark()
     {
-        if (Teleport.Mover is not { } mover || World.Controller is not { } controller || World.Info is null)
+        if (Teleport.Mover is null || World.Info is null)
         {
             return Outcome.NoPlayer;
         }
 
-        controller.GetPlayerViewPoint(out var eye, out var view);
-        if (!Blink.Aim(mover, eye, eye + view.ToDirection() * Reach, out var spot, out _))
+        if (!Crosshair.Surface(Reach, out var hit))
         {
             return Outcome.Failed("NOTHING THERE");
         }
 
-        Markers.Set(spot);
+        Markers.Set(hit.Spot);
         return Outcome.Done("SET");
     }
 

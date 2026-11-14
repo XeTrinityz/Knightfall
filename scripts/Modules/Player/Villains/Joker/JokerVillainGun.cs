@@ -154,8 +154,8 @@ static partial class JokerVillain
     static void Pellet(RPawnPlayer player, RJokerGunGadget gun, Vector3 from, Vector3 way, float range)
     {
         var end = from + way * range;
-        var walled = Blink.Aim(player, from, end, out var wall, out var normal);
-        var reach = walled ? Vector3.Dot(wall - from, way) : range;
+        var walled = Crosshair.Line(player, from, end, Crosshair.Meets.Level, out var wall);
+        var reach = walled ? wall.Distance : range;
 
         InLine.Clear();
         foreach (var thug in Crowd.StandingEnemies())
@@ -181,13 +181,13 @@ static partial class JokerVillain
             Strike(player, gun, thug, at, way, i);
         }
 
-        var stop = hit > 0 ? InLine[hit - 1].At : walled ? wall : end;
+        var stop = hit > 0 ? InLine[hit - 1].At : walled ? wall.Spot : end;
         Tracer(gun, from, stop);
         if (hit == 0 && walled)
         {
-            Impact(gun, wall, normal);
-            Villains.Break(player, wall, Splash, Struck);
-            Villains.Wreck(player, wall, Splash, CarShare, 0, Struck);
+            Impact(gun, wall.Spot, wall.Normal);
+            Villains.Break(player, wall.Spot, Splash, Struck);
+            Villains.Wreck(player, wall.Spot, Splash, CarShare, 0, Struck);
         }
     }
 

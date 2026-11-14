@@ -170,8 +170,8 @@ static partial class RiddlerMech
         }
 
         var wanted = view.Location + Vector3.UnitZ * _lift - view.Rotation.ToDirection() * _back;
-        view.Location = Blink.Aim(player, view.Location, wanted, out var wall, out _)
-            ? wall + Vector3.Normalize(view.Location - wanted) * WallRoom
+        view.Location = Crosshair.Line(player, view.Location, wanted, Crosshair.Meets.Level, out var wall)
+            ? wall.Spot + Vector3.Normalize(view.Location - wanted) * WallRoom
             : wanted;
     }
 

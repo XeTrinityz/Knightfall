@@ -147,7 +147,7 @@ static partial class MrFreeze
         var way = Aim.Target - from;
         var along = way.LengthSquared() > 1f ? Vector3.Normalize(way) : Teleport.Flat(player.Rotation.ToDirection());
         var end = from + along * MathF.Min(way.Length(), BeamReach);
-        _beamEnd = Blink.Aim(player, from, end, out var wall, out _) ? wall : end;
+        _beamEnd = Crosshair.Line(player, from, end, Crosshair.Meets.Level, out var wall) ? wall.Spot : end;
 
         BeamSound(player, true);
         if (now >= _nextHit)

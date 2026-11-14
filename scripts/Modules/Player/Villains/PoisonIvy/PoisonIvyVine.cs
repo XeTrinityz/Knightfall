@@ -474,9 +474,9 @@ static partial class PoisonIvy
             vine.Measured = true;
             vine.StartAt = car.Location;
             vine.StartTurn = car.Rotation;
-            if (Blink.Aim(vine.Host, car.Location + Vector3.UnitZ * 50f, car.Location - Vector3.UnitZ * 500f, out var floor, out _))
+            if (Crosshair.Line(vine.Host, car.Location + Vector3.UnitZ * 50f, car.Location - Vector3.UnitZ * 500f, Crosshair.Meets.Level, out var floor))
             {
-                vine.RideHeight = MathF.Max(20f, car.Location.Z - floor.Z);
+                vine.RideHeight = MathF.Max(20f, car.Location.Z - floor.Spot.Z);
             }
             var off = car.Location - chassis;
             var forward = car.Rotation.ToDirection();
@@ -930,11 +930,11 @@ static partial class PoisonIvy
         var landed = false;
         var hit = vine.ArcLast;
         var normal = Vector3.Zero;
-        if (at.Z < vine.ArcLast.Z && Blink.Aim(player, vine.ArcLast, at, out var struck, out var facing))
+        if (at.Z < vine.ArcLast.Z && Crosshair.Line(player, vine.ArcLast, at, Crosshair.Meets.Level, out var struck))
         {
             landed = true;
-            hit = struck;
-            normal = facing;
+            hit = struck.Spot;
+            normal = struck.Normal;
         }
         else if (t >= ArcLongest)
         {
@@ -946,9 +946,9 @@ static partial class PoisonIvy
             if (normal.Z < 0.5f)
             {
                 var from = hit + Teleport.Flat(normal) * WallGap;
-                if (Blink.Aim(player, from + Vector3.UnitZ * 50f, from - Vector3.UnitZ * DropDeepest, out var ground, out _))
+                if (Crosshair.Line(player, from + Vector3.UnitZ * 50f, from - Vector3.UnitZ * DropDeepest, Crosshair.Meets.Level, out var ground))
                 {
-                    hit = ground;
+                    hit = ground.Spot;
                 }
             }
 

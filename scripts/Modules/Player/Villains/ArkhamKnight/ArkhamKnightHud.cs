@@ -86,15 +86,15 @@ static partial class ArkhamKnight
         var half = (HudWidth - Pad * 2f - 16f) / 2f;
         StrikeGauge(x + Pad, y + HudHeight - 44f, half);
         MilitiaGauge(x + Pad + half + 16f, y + HudHeight - 44f, half, time);
-        Crosshair();
+        Reticle();
     }
 
-    static void DrawCrosshair(float rise, float seconds) => Crosshair();
+    static void DrawCrosshair(float rise, float seconds) => Reticle();
 
     // At the middle of the screen, where the camera's line runs, while he aims. The rifle's is a
     // cross with a gap and a dot, the pistols' a pair of brackets. It goes red on a thug and
     // flashes an X when a round strikes one.
-    static void Crosshair()
+    static void Reticle()
     {
         if (!Aim.On || Arms.Raised < 0.5f)
         {

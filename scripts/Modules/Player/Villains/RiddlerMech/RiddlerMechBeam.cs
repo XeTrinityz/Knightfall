@@ -235,10 +235,10 @@ static partial class RiddlerMech
         var aim = feet + ahead * _beamLength;
         var touch = aim;
         var facing = Vector3.UnitZ;
-        if (Blink.Aim(player, claw, aim, out var wall, out var normal))
+        if (Crosshair.Line(player, claw, aim, Crosshair.Meets.Level, out var wall))
         {
-            touch = wall + normal * 20f;
-            facing = normal;
+            touch = wall.Spot + wall.Normal * 20f;
+            facing = wall.Normal;
         }
 
         Villains.Show(ref _beam, _beamLook, claw, Rotator.FromDirection(touch - claw), touch);

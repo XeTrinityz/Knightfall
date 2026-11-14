@@ -13,8 +13,6 @@ static class Moving
 {
     const float Metre = Teleport.UnitsPerMetre;
     const float Reach = 30000f;
-    const int Layers = 8;
-    const float StepPast = 60f;
 
     // Room left between you and what you bring or go to.
     const float Gap = 150f;
@@ -562,40 +560,27 @@ static class Moving
             return refused;
         }
 
-        if (World.Controller is not { } controller || Teleport.Mover is not { } mover)
+        if (World.Controller is null)
         {
             return Outcome.NoPlayer;
         }
 
-        controller.GetPlayerViewPoint(out var eye, out var view);
-        var way = view.ToDirection();
-        var start = eye;
-        for (var i = 0; i < Layers; i++)
+        // It never lands on itself, and people are aimed through.
+        if (!Crosshair.Surface(Reach, out var hit, Crosshair.Meets.Solid, actor))
         {
-            var hit = mover.Trace(out var spot, out var normal, eye + way * Reach, start, Component.ECollisionFilter.COF_TraceWorld, Vector3.Zero, out _, 0);
-            if (hit is null)
-            {
-                break;
-            }
-
-            if (hit is Volume || ReferenceEquals(hit, actor) || ReferenceEquals(hit, World.Player) || ReferenceEquals(hit, World.Driving))
-            {
-                start = spot + way * StepPast;
-                continue;
-            }
-
-            Things.Box(actor, out var middle, out var half);
-            var across = middle - actor.Location;
-            if (normal.Z >= Floorish)
-            {
-                return Moved(actor, new Vector3(spot.X - across.X, spot.Y - across.Y, spot.Z + Lift(actor) + 2f));
-            }
-
-            // Against a wall or under a ceiling, by how far its box reaches that way.
-            return Moved(actor, spot + normal * (Vector3.Dot(Vector3.Abs(normal), half) + 5f) - across);
+            return Outcome.Failed("AIM AT SOMETHING");
         }
 
-        return Outcome.Failed("AIM AT SOMETHING");
+        Things.Box(actor, out var middle, out var half);
+        var across = middle - actor.Location;
+        var spot = hit.Spot;
+        if (hit.Normal.Z >= Floorish)
+        {
+            return Moved(actor, new Vector3(spot.X - across.X, spot.Y - across.Y, spot.Z + Lift(actor) + 2f));
+        }
+
+        // Against a wall or under a ceiling, by how far its box reaches that way.
+        return Moved(actor, spot + hit.Normal * (Vector3.Dot(Vector3.Abs(hit.Normal), half) + 5f) - across);
     }
 
     static Outcome DropSelected()

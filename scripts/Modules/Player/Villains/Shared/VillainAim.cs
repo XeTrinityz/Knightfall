@@ -120,8 +120,10 @@ sealed class VillainAim
 
         _eye = eye;
         _look = way;
+        // Cars, props and thugs stop it too, so a gun off to one side of the camera still meets
+        // what's under the crosshair rather than the ground behind it.
         var end = eye + way * Reach;
-        Target = Blink.Aim(player, eye, end, out var spot, out _) ? spot : end;
+        Target = Crosshair.Line(player, eye, end, Crosshair.Meets.Anything, out var hit) ? hit.Spot : end;
 
         _facing = null;
         if (On && !airborne)
@@ -160,7 +162,9 @@ sealed class VillainAim
             target = player.Location + Vector3.Normalize(off) * reach;
         }
 
-        return Blink.Aim(player, target + Vector3.UnitZ * GroundAbove, target - Vector3.UnitZ * GroundBelow, out at, out _);
+        var found = Crosshair.Line(player, target + Vector3.UnitZ * GroundAbove, target - Vector3.UnitZ * GroundBelow, Crosshair.Meets.Level, out var ground);
+        at = found ? ground.Spot : target - Vector3.UnitZ * GroundBelow;
+        return found;
     }
 
     // Turns the body flat toward a way, no faster than the rate in degrees a second.
