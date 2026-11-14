@@ -163,13 +163,37 @@ static partial class RiddlerMech
         }
     }
 
-    // When the beam is on in its firing move, from the move's own StartBeam and StopBeam.
-    static void BeamTimes(AnimNodeSequence played, out float from, out float to)
+    static void BeamTimes(AnimNodeSequence played, out float from, out float to) =>
+        BeamWindow(played.AnimSeq, played.GetAnimPlaybackLength(), out from, out to);
+
+    // How far the beam gets before its firing move turns it off, since it only runs out while the
+    // move has it on. Read once from the move.
+    static float? _beamRange;
+
+    static float BeamRange()
     {
-        var length = played.GetAnimPlaybackLength();
+        if (_beamRange is { } known)
+        {
+            return known;
+        }
+
+        if (Copies[Action] is not { IsValid: true } copy || copy.FindAnimSequence(FireMove) is not { IsValid: true } sequence)
+        {
+            return BeamReach;
+        }
+
+        var rate = sequence.RateScale > 0.01f ? sequence.RateScale : 1f;
+        BeamWindow(sequence, sequence.SequenceLength, out var from, out var to);
+        _beamRange = Math.Clamp(BeamSpeed * (to - from) / rate, 0f, BeamReach);
+        return _beamRange.Value;
+    }
+
+    // When the beam is on in its firing move, from the move's own StartBeam and StopBeam.
+    static void BeamWindow(AnimSequence? sequence, float length, out float from, out float to)
+    {
         from = length * 0.15f;
         to = length * 0.85f;
-        if (played.AnimSeq is not { IsValid: true } sequence)
+        if (sequence is not { IsValid: true })
         {
             return;
         }

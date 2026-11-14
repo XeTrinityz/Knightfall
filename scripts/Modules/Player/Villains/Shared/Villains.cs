@@ -57,7 +57,7 @@ static class Villains
     static Villain[] Roster => _roster ??= new Villain[]
     {
         new(Firefly.Option, Firefly.Sections, Firefly.AimView, Firefly.KeepAimFacing, Firefly.DefaultKeys, Firefly.Marking, Firefly.Marks),
-        new(RiddlerMech.Option, RiddlerMech.Sections, RiddlerMech.Fit, Keys: RiddlerMech.DefaultKeys),
+        new(RiddlerMech.Option, RiddlerMech.Sections, RiddlerMech.Fit, Keys: RiddlerMech.DefaultKeys, Marking: RiddlerMech.Marking, Marks: RiddlerMech.Marks),
         new(MrFreeze.Option, MrFreeze.Sections, MrFreeze.AimView, MrFreeze.KeepAimFacing, Marking: MrFreeze.Marking, Marks: MrFreeze.Marks),
         new(JokerVillain.Option, JokerVillain.Sections, JokerVillain.AimView, JokerVillain.KeepAimFacing, Marking: JokerVillain.Marking, Marks: JokerVillain.Marks),
         new(PoisonIvy.Option, PoisonIvy.Sections, PoisonIvy.AimView, PoisonIvy.KeepAimFacing, Marking: PoisonIvy.Marking, Marks: PoisonIvy.Marks),
