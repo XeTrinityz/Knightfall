@@ -38,7 +38,7 @@ static class Suits
 
     static void Refresh()
     {
-        if (World.Info is not { } info || World.Player is not { } pawn || !Game.TryGetGameRI(out var game) || game.PersistentOptions is not { IsValid: true } options)
+        if (World.Player is not { } pawn || !Game.TryGetGameRI(out var game))
         {
             return;
         }
@@ -52,6 +52,33 @@ static class Suits
 
         ref var slot = ref Loaded.Slot(game, index);
         var character = slot.CharacterName.ToString();
+        var list = Unlocked(character);
+        if (list.Count == 0)
+        {
+            Suit.SetOptions(new[] { ("", "NONE UNLOCKED") }, 0);
+            return;
+        }
+
+        var worn = slot.MeshName.ToString() ?? "";
+        var wearing = list.FindIndex(entry => Wearing(worn, entry.Id));
+        if (wearing < 0)
+        {
+            wearing = list.FindIndex(entry => entry.Id.Equals(Owner(character) + "_Std", StringComparison.OrdinalIgnoreCase));
+        }
+
+        Suit.SetOptions(list.ToArray(), Math.Max(0, wearing));
+    }
+
+    // The suits the player has unlocked for a character, as skin names with the showcase's
+    // labels. Empty when there are none or the game can't say.
+    public static List<(string Id, string Label)> Unlocked(string character)
+    {
+        var list = new List<(string Id, string Label)>();
+        if (World.Info is not { } info || !Game.TryGetGameRI(out var game) || game.PersistentOptions is not { IsValid: true } options)
+        {
+            return list;
+        }
+
         var id = SkinId(Owner(character));
 
         // Some installs list a suit more than once, with spare rows that point at another suit's
@@ -91,7 +118,6 @@ static class Suits
             keys.Add(key);
         }
 
-        var list = new List<(string Id, string Label)>();
         foreach (var (key, skins) in suits)
         {
             var skin = skins.Find(candidate => users[candidate].Count == 1) ?? skins[0];
@@ -101,20 +127,7 @@ static class Suits
             }
         }
 
-        if (list.Count == 0)
-        {
-            Suit.SetOptions(new[] { ("", "NONE UNLOCKED") }, 0);
-            return;
-        }
-
-        var worn = slot.MeshName.ToString() ?? "";
-        var wearing = list.FindIndex(entry => Wearing(worn, entry.Id));
-        if (wearing < 0)
-        {
-            wearing = list.FindIndex(entry => entry.Id.Equals(Owner(character) + "_Std", StringComparison.OrdinalIgnoreCase));
-        }
-
-        Suit.SetOptions(list.ToArray(), Math.Max(0, wearing));
+        return list;
     }
 
     // Robin, Nightwing and Catwoman have second versions whose names end in 0. They wear the first
@@ -161,6 +174,10 @@ static class Suits
         var style = skin.LastIndexOf('_');
         return style >= 0 ? skin[..style] : skin;
     }
+
+    // Whether a skin is one of this character's suits.
+    public static bool Belongs(string skin, string character) =>
+        SkinId(skin).Equals(SkinId(Owner(character)), StringComparison.OrdinalIgnoreCase);
 
     // A worn standard suit has its battle damage level on the end of its name.
     static bool Wearing(string worn, string skin)

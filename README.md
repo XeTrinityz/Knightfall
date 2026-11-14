@@ -86,8 +86,9 @@ Hold aim, then fire or secondary fire. Each villain's own rows list the rest of 
 
 PLAYER > SIDEKICK
 
-- SIDEKICK and CALL SIDEKICK. Calls Robin, Nightwing, Catwoman or Batgirl to you. They turn up close by where you aren't looking, keep up with your pace, go through doors with you, crouch when you do, join your fights and do dual takedowns.
-- SWAP WITH SIDEKICK, BRING SIDEKICK HERE and DISMISS SIDEKICK. SWAP ON CALL BUTTON picks whether the call Batmobile button swaps you with them or calls the car.
+- SIDEKICK and CALL SIDEKICK. Calls Robin, Nightwing, Catwoman, Batgirl, Batman, Azrael, Red Hood or Harley Quinn to you, whoever you have installed. Pick the character you are playing and a second one comes. They turn up close by where you aren't looking, keep up with your pace, go through doors with you, crouch when you do, join your fights and do dual takedowns. A pair the game has no team animations for can't do dual takedowns.
+- SIDEKICK SUIT. Picks the suit they arrive in from the ones you have unlocked for them. STORY SUIT is the one picked in the showcase. Your own picks are left as they were.
+- SWAP WITH SIDEKICK, BRING SIDEKICK HERE and DISMISS SIDEKICK. SWAP ON CALL BUTTON picks whether the call Batmobile button swaps you with them or calls the car. In a fight the button never calls the car, and in the car it always gets you out.
 - SIDEKICK REJOINS. A sidekick the game takes away comes back once you are free. That covers scenes, restarts, loading a save and the story bringing in a partner of its own.
 - SIDEKICK FOLLOWS YOU, SIDEKICK FOLLOW DISTANCE, SIDEKICK CATCHES UP and SIDEKICK SNEAKS WITH YOU set how they keep up. SIDEKICK FIGHTS keeps them in or out of your fights. A fight that starts while they are far off brings them over.
 

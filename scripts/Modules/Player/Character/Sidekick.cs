@@ -15,7 +15,7 @@ namespace Knightfall;
 // is in. Then a body is spawned beside the player, given the story's partner AI and named as the
 // game's switch partner. From there the game's own swap, dual takedowns and team moves work
 // with it.
-static class Sidekick
+static partial class Sidekick
 {
     const string Lender = "sidekick";
     const float Metre = Teleport.UnitsPerMetre;
@@ -58,6 +58,9 @@ static class Sidekick
     const float FightRange = 2000f;
     const float FightWaitSeconds = 0.75f;
 
+    // Falling this far below a player who stands on solid ground, they have lost their floor.
+    const float FallCatch = 800f;
+
     // Behind a player on the move the walk and run gaps close right up, so they run when you do.
     const float BriskWalkPast = 60f;
     const float BriskRunPast = 320f;
@@ -79,13 +82,21 @@ static class Sidekick
     const string OutKey = "out";
     const string Coming = "ON THE WAY";
 
-    // The story's partner versions, which the partner AI was made for.
+    // Batman's data ships inside the game's own packages, so he has no file to look for.
+    const string Batman = "Playable_Batman";
+
+    // The story's partner versions come first, which the partner AI was made for. Anyone else
+    // runs on the same AI. Calling the character you are playing brings a twin.
     static readonly (string Name, string Label)[] Known =
     {
         ("Playable_Robin", "ROBIN"),
         ("Playable_Nightwing", "NIGHTWING"),
         ("Playable_Catwoman", "CATWOMAN"),
         ("Playable_DLCBatgirl", "BATGIRL"),
+        (Batman, "BATMAN"),
+        ("Playable_Azrael", "AZRAEL"),
+        ("Playable_DLCRedHood", "RED HOOD"),
+        ("Playable_DLCHarleyQuinn", "HARLEY QUINN"),
     };
 
     static readonly FName StealthMove = new("StealthMoveMode");
@@ -102,12 +113,22 @@ static class Sidekick
 
     public static readonly Choice Who = new(
         "player.sidekick.who", "SIDEKICK",
-        "Who CALL SIDEKICK brings in. They arrive in the suit you have picked for them. Select calls them.",
+        "Who CALL SIDEKICK brings in. Select calls them. The character you are playing brings a second one, in the suit you are wearing.",
         Installed())
     {
         Preference = true,
         Pressed = static () => Call!.Press(),
         PressName = "CALL",
+        Changed = static () => RefreshSuits(),
+    };
+
+    public static readonly Choice SuitPick = new(
+        "player.sidekick.suit", "SIDEKICK SUIT",
+        "The suit your sidekick arrives in, from the ones you have unlocked for them. STORY SUIT is the one picked for them in the showcase. It is read when they are called.",
+        new[] { ("", "STORY SUIT") }, saved: false)
+    {
+        Opening = static () => RefreshSuits(),
+        Block = static () => SuitLock,
     };
 
     public static readonly Command Call = new(
@@ -152,7 +173,7 @@ static class Sidekick
 
     public static readonly Toggle ButtonSwaps = new(
         "player.sidekick.button_swaps", "SWAP ON CALL BUTTON",
-        "With a sidekick out, the call Batmobile button swaps you with them, as in the story. Off, the button calls the Batmobile as usual and SWAP WITH SIDEKICK does the swap.",
+        "With a sidekick out, the call Batmobile button swaps you with them on foot, as in the story. Off, the button calls the Batmobile as usual and SWAP WITH SIDEKICK does the swap. In a fight the button never calls the car. In the car it always gets you out.",
         on: true)
     {
         Preference = true,
@@ -199,7 +220,7 @@ static class Sidekick
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("CALL", Who, Call, Bring, Dismiss, Rejoins),
+        new("CALL", Who, SuitPick, Call, Bring, Dismiss, Rejoins),
         new("SWAP", Swap, ButtonSwaps),
         new("FOLLOWING", Follows, Distance, CatchesUp, Sneaks),
         new("FIGHTING", Fights),
@@ -279,13 +300,34 @@ static class Sidekick
         var list = new List<(string Id, string Label)>();
         foreach (var (name, label) in Known)
         {
-            if (GameFiles.HasPackage(name))
+            if (name == Batman || GameFiles.HasPackage(name))
             {
                 list.Add((name, label));
             }
         }
 
-        return list.Count > 0 ? list.ToArray() : new[] { ("", "NONE INSTALLED") };
+        return list.ToArray();
+    }
+
+    // Why the suit can't be picked right now, or null.
+    static string? SuitLock => _body is not null || OnTheWay ? "ALREADY HERE" : _suitLock;
+
+    static string? _suitLock;
+    static string _suitsFor = "";
+
+    // The suits unlocked for whoever is picked to be called.
+    static void RefreshSuits()
+    {
+        var name = Who.CurrentId;
+        var keep = SuitPick.CurrentId;
+        _suitsFor = name;
+        var list = new List<(string Id, string Label)> { ("", "STORY SUIT") };
+        if (name.Length > 0)
+        {
+            list.AddRange(Suits.Unlocked(name));
+        }
+
+        SuitPick.SetOptions(list.ToArray(), Math.Max(0, list.FindIndex(entry => entry.Id == keep)));
     }
 
     static string? CallLock() =>
@@ -304,6 +346,13 @@ static class Sidekick
         _lookedAt = World.Now;
         Save();
         _busy = _body is null && !OnTheWay ? Busy(Who.CurrentId) : null;
+        _suitLock = Game.TryGetGameRI(out var look) && Who.CurrentId.Length > 0 && Loaded.IndexOf(look, new FName(Who.CurrentId)) >= 0
+            ? Who.CurrentId == Batman ? "WEARS YOUR SUIT" : "ALREADY LOADED" : null;
+        if (_suitsFor != Who.CurrentId)
+        {
+            RefreshSuits();
+        }
+
         _swapLock = _body is not null && World.Info is { bDualPlayerSwitchingDisabledBySeq: true } ? "LOCKED BY THE STORY" : null;
     }
 
@@ -347,8 +396,7 @@ static class Sidekick
             _asked = name.Length > 0 ? new FName(name) : default;
         }
 
-        var index = Loaded.IndexOf(game, _asked);
-        return index >= 0 && (index == 0 || index == Loaded.IndexOf(game, pawn)) ? "THAT IS YOU" : null;
+        return name == Batman && Loaded.IndexOf(game, _asked) < 0 ? "BATMAN ISN'T LOADED" : null;
     }
 
     static Outcome Summon()
@@ -456,11 +504,17 @@ static class Sidekick
 
         try
         {
+            if (_ownsSlot)
+            {
+                LendSuit(name, SuitPick.CurrentId);
+            }
+
             loader.SetCharacterData(out var slot, character, null!, null!);
             _slot = slot;
         }
         catch
         {
+            ReturnSuit();
             DropLoader();
             Forget();
             throw;
@@ -671,6 +725,7 @@ static class Sidekick
 
         if (_body is null)
         {
+            ReturnCallKey();
             Rejoin();
             return;
         }
@@ -739,18 +794,44 @@ static class Sidekick
         }
 
         Tune(_bot, controller);
+        LoadDoorMove();
         CapesApart(_body, _caller);
         Arena(Fights.On);
         Sneak(controller, follower);
+        ThroughDoor(controller, follower);
+        FreeSwap(controller);
+        Catch(controller, follower);
         if (Follows.On && CatchesUp.On)
         {
             CatchUp(controller, follower);
         }
     }
 
+    // A sidekick falling well below a player on solid ground has lost their floor, usually a
+    // part of the city that unloaded after a door. Left alone they fall out of the world and are
+    // only back after a rejoin. They are put beside the player, where the camera isn't looking.
+    static void Catch(RPlayerController controller, RPawnPlayer follower)
+    {
+        if (follower.Physics != Actor.EPhysics.PHYS_Falling || follower.CurrentSpecialMove is not null || controller.Pawn is not RPawnPlayer player
+            || player.Physics != Actor.EPhysics.PHYS_Walking || follower.Location.Z > player.Location.Z - FallCatch)
+        {
+            return;
+        }
+
+        controller.GetPlayerViewPoint(out var eye, out var view);
+        if (Unseen(player, eye, view, out var floor) || Beside(player, out floor))
+        {
+            Place(follower, floor, Heading(player.Location - floor, player.Rotation.Yaw));
+        }
+    }
+
     // A load that outlives this copy of the class would keep its slot for good.
     public static void Release()
     {
+        // Two reloads in a row can unload a copy before its first tick. It still has to take
+        // over the sidekick first, or it would hand on an empty record and the next copy would
+        // lose them.
+        Adopt();
         if (OnTheWay)
         {
             CancelLoad();
@@ -784,6 +865,7 @@ static class Sidekick
         if (_loaded || (_slot >= 0 && Game.TryGetGameRI(out var game) && Ready(game, _slot)))
         {
             _loaded = false;
+            ReturnSuit();
             Unhook();
             DropLoader();
             _arriving = true;
@@ -882,6 +964,7 @@ static class Sidekick
             return false;
         }
 
+        ReturnSuit();
         LogSlot($"{_name} did not load in their picked suit. Trying the standard suit.");
         slot.CharacterName = new FName(_name);
         slot.DamageLevel = 0;
@@ -910,8 +993,48 @@ static class Sidekick
         Log.Info($"{what} Slot {_slot} has {name} in suit {suit}. Character {data}, suit {look}.");
     }
 
+    // The game loads the suit picked in its options, so the pick is changed for the load and
+    // put back once the suit is in.
+    static string _lentFor = "";
+    static string _lentWas = "";
+
+    static void LendSuit(string character, string suit)
+    {
+        if (suit.Length == 0 || !Suits.Belongs(suit, character) || !Game.TryGetGameRI(out var game) || game.PersistentOptions is not { IsValid: true } options)
+        {
+            return;
+        }
+
+        var was = Suits.Active(options, character, 0);
+        if (was.Equals(suit, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _lentFor = suit;
+        _lentWas = was;
+        options.SetActivePlayerSkin(GameText.Once(suit));
+    }
+
+    static void ReturnSuit()
+    {
+        if (_lentFor.Length == 0)
+        {
+            return;
+        }
+
+        var was = _lentWas;
+        _lentFor = "";
+        _lentWas = "";
+        if (Game.TryGetGameRI(out var game) && game.PersistentOptions is { IsValid: true } options)
+        {
+            options.SetActivePlayerSkin(GameText.Once(was));
+        }
+    }
+
     static void CancelLoad()
     {
+        ReturnSuit();
         Unhook();
         DropLoader();
         ClearSlot();
@@ -967,24 +1090,35 @@ static class Sidekick
             : pawn.Location + Flat(pawn.Rotation.Yaw + 90f) * (ArriveBeside * 0.66f) - Vector3.UnitZ * height;
         var at = floor + new Vector3(0f, 0f, height + 5f);
         var facing = new Rotator(0f, Heading(pawn.Location - at, pawn.Rotation.Yaw), 0f);
-        if (Game.SpawnActor(kind, default, at, facing) is not RPawnPlayer body)
+        var body = Game.SpawnActor(kind, default, at, facing) as RPawnPlayer;
+        RRobinBotController? bot = null;
+        if (body is not null)
+        {
+            bot = Game.SpawnActor(RRobinBotController.StaticClass(), default, at, facing, null, body) as RRobinBotController;
+            if (bot is not null)
+            {
+                body.RiddlerCharData = data;
+                info.PlayerSwitchPawn = body;
+                body.SharedBotController = bot;
+                pawn.SharedBotController = bot;
+                bot.Possess(body, false);
+                GiveKit(body);
+            }
+        }
+
+        if (body is null)
         {
             return GiveUp("NO ROOM HERE");
         }
 
-        if (Game.SpawnActor(RRobinBotController.StaticClass(), default, at, facing, null, body) is not RRobinBotController bot)
+        if (bot is null)
         {
             body.Destroy();
             return GiveUp("FAILED");
         }
 
-        body.RiddlerCharData = data;
-        info.PlayerSwitchPawn = body;
-        body.SharedBotController = bot;
-        pawn.SharedBotController = bot;
-        bot.Possess(body, false);
-        body.AddDefaultInventory();
         CapesApart(body, pawn);
+        LoadDoorMove();
 
         _body = body;
         _bot = bot;
@@ -997,6 +1131,20 @@ static class Sidekick
         Keep();
         Log.Info($"{_name} joined as a sidekick from slot {_slot}. {ObjectTable.Headroom} objects are free.");
         return Outcome.Done(_standardSuit ? "ARRIVED IN STANDARD SUIT" : _rejoining ? "BACK WITH YOU" : "ARRIVED");
+    }
+
+    // The character's own starting gadgets. Most playable classes have no binding of their own in
+    // BmSDK, and a binding always runs its own class's version, so the call goes through the
+    // closest class that defines it.
+    static void GiveKit(RPawnPlayer body)
+    {
+        for (var kind = body.Class as Struct; kind is { IsValid: true }; kind = kind.SuperStruct)
+        {
+            if (ScriptCall.Run(body, kind.GetPathName() + ".AddDefaultInventory"))
+            {
+                return;
+            }
+        }
     }
 
     static Outcome GiveUp(string why)
@@ -1454,6 +1602,7 @@ static class Sidekick
         _ownsSlot = false;
         _arriving = false;
         _leaving = false;
+        _doorOpening = false;
         _farSince = -1f;
         _lookedAt = -100f;
         _rejoinAt = Stopwatch.GetTimestamp() + (long)(RejoinAfterSeconds * Stopwatch.Frequency);
@@ -1690,7 +1839,7 @@ static class Sidekick
         try
         {
             Adopt();
-            if (!force && !_trading && Present && (_leaving || !ButtonSwaps.On))
+            if (!force && !_trading && Present && (_leaving || !ButtonSwaps.On || World.Driving is not null))
             {
                 return false;
             }
@@ -1700,7 +1849,68 @@ static class Sidekick
             Log.Error("sidekick.swap", "The sidekick's swap rule failed", error);
         }
 
-        return Redirects.RunOriginal<bool>();
+        var before = self.Pawn?.Ptr ?? 0;
+        var swapped = Redirects.RunOriginal<bool>();
+        try
+        {
+            if (Present && self.Pawn is RPawnPlayer taken && taken.Ptr != before && (taken.Ptr == _body!.Ptr || taken.Ptr == _caller?.Ptr))
+            {
+                TakeOver(taken);
+            }
+            else if (!swapped && !force && Present)
+            {
+                Refused(self);
+            }
+        }
+        catch (Exception error)
+        {
+            Log.Error("sidekick.swap", "The sidekick's swap clean-up failed", error);
+        }
+
+        return swapped;
+    }
+
+    // The partner AI leaves its body aiming, looking and facing at the player, and the game's
+    // swap only lets go of the aim. A body taken over from it would keep turning to face the
+    // other one instead of running. Its gadget is the one the save names, which is often one
+    // this character doesn't carry, so they get their own first one then.
+    static void TakeOver(RPawnPlayer taken)
+    {
+        taken.StopAimAt();
+        taken.StopLookAt();
+        taken.StopFaceAt();
+        taken.bIsBot = false;
+        if (taken.InvManager is RInventoryManager inventory && inventory.CurrentGadget is not { IsValid: true })
+        {
+            for (var item = inventory.InventoryChain; item is not null; item = item._Inventory)
+            {
+                if (item is RInventoryGadget { IsValid: true } gadget && gadget is not RGrappleGun)
+                {
+                    inventory.SetCurrentGadget(gadget, false);
+                    inventory.DisplayedGadget = gadget;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Why the game said no to a swap, once per reason, for the support log.
+    static string _refusedFor = "";
+
+    static void Refused(RPlayerController controller)
+    {
+        var gadget = controller.GetCurrentGadget();
+        var why = World.Info is { bDualPlayerSwitchingDisabledBySeq: true } ? "the story locked it"
+            : World.Info is { bDualPlayerSwitchingDisabled: true } ? "a team move had it switched off"
+            : gadget is { IsValid: true, bAiming: true } ? "aiming"
+            : gadget is { IsValid: true } held && held.IsGadgetAttachedToHand() ? $"{held.Class.Name} in hand"
+            : controller.CombatPawn?.CurrentSpecialMove is { } move ? $"in {move.Class.Name}"
+            : "";
+        if (why.Length > 0 && why != _refusedFor)
+        {
+            _refusedFor = why;
+            Log.Info($"The game refused a swap with {_name}: {why}.");
+        }
     }
 
     // The loader has no use for this call itself. It only tells us the character is in.
