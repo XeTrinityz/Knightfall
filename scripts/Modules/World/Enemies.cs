@@ -31,7 +31,7 @@ static class Enemies
     static readonly Held<RPopulationManager, int> PatrolCut = new(
         "militia patrols", people => people.VehicleCountReduction, (people, cut) => people.VehicleCountReduction = cut);
 
-    static readonly int[] Cuts = { 0, 100, -6 };
+    static readonly int[] Cuts = { 100, 0, -6 };
 
     public static readonly Toggle NoAttacks = new(
         "world.enemies.cant_attack", "ENEMIES CAN'T ATTACK",
@@ -79,7 +79,7 @@ static class Enemies
     public static readonly Choice Patrols = new(
         "world.enemies.militia_patrols", "MILITIA PATROLS",
         "How many drone, tank and APC patrols the militia sends out. NONE stops new ones, and the ones already out stay.",
-        new[] { ("normal", "NORMAL"), ("none", "NONE"), ("more", "MORE") })
+        new[] { ("none", "NONE"), ("normal", "NORMAL"), ("more", "MORE") }, index: 1)
     {
         Tick = HoldPatrols,
         Restore = PatrolCut.Release,

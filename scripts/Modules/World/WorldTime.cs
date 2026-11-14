@@ -19,8 +19,8 @@ static class WorldTime
     static readonly Held<RGameInfoBase, float> DebugSpeed = new(
         "game speed", game => game.DebugGameSpeed, (game, speed) => game.SetDebugGameSpeed(speed));
 
-    static readonly (string Id, string Label)[] SlowSteps = { ("off", "OFF"), ("half", "50%"), ("quarter", "25%"), ("tenth", "10%") };
-    static readonly float[] SlowFactors = { 1f, 0.5f, 0.25f, 0.1f };
+    static readonly (string Id, string Label)[] SlowSteps = { ("off", "OFF"), ("tenth", "10%"), ("quarter", "25%"), ("half", "50%") };
+    static readonly float[] SlowFactors = { 1f, 0.1f, 0.25f, 0.5f };
 
     static float _slow = 1f;
     static long _easedAt;
