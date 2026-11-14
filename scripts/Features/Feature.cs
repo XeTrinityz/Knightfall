@@ -73,6 +73,10 @@ abstract class Feature
     // Runs on the next game tick after the menu opens. For lists that come from the game.
     public Action? Opening { get; init; }
 
+    // Fills in where the row would act in the world, worked out the way pressing it would.
+    // WORLD MARKERS draws it while the row is highlighted.
+    public Action<List<WorldMarks.Sign>>? Preview { get; init; }
+
     // When the player last changed it, as a Stopwatch timestamp.
     public long TouchedAt { get; set; }
 

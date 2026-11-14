@@ -57,30 +57,40 @@ static class Moving
         GoToSelected)
     {
         Block = static () => Editor.Selected is null ? "NOTHING SELECTED" : null,
+        Preview = static signs =>
+        {
+            var (refused, mover, at, yaw, floor) = Beside();
+            signs.Add(refused is { } why ? WorldMarks.Refused(why, at, "GO TO IT")
+                : floor ? WorldMarks.Stand(mover!, at, yaw, "GO TO IT", "BESIDE IT")
+                : WorldMarks.Air(mover!, at, 0f, "GO TO IT", "BESIDE IT"));
+        },
     };
 
     public static readonly Command Bring = new(
         "editor.move.bring", "BRING IT TO ME",
         "Puts the selected object on the ground in front of you.",
-        BringSelected)
+        static () => Go(Bringing()))
     {
         Block = Unmovable,
+        Preview = Shows(Bringing, "BRING IT TO ME"),
     };
 
     public static readonly Command AtCrosshair = new(
         "editor.move.crosshair", "PLACE AT CROSSHAIR",
         "Puts the selected object where you're aiming. It stands on a floor, sits against a wall or hangs under a ceiling.",
-        PlaceAtCrosshair)
+        static () => Go(Aiming()))
     {
         Block = Unmovable,
+        Preview = Shows(Aiming, "PLACE AT CROSSHAIR"),
     };
 
     public static readonly Command Drop = new(
         "editor.move.drop", "DROP TO GROUND",
         "Sets the selected object down on the floor beneath it.",
-        DropSelected)
+        static () => Go(Dropping()))
     {
         Block = Unmovable,
+        Preview = Shows(Dropping, "DROP TO GROUND"),
     };
 
     public static readonly Toggle Grab = new(
@@ -459,6 +469,28 @@ static class Moving
         return Stuck(actor) is { } why ? Outcome.Failed(why) : Outcome.Done();
     }
 
+    // Where a PUT row would move the selected object's pivot. A refused plan has the reason and
+    // the spot it tried.
+    readonly record struct Put(Actor? Actor, Vector3 To, string Note, Outcome? Refused = null);
+
+    static Put Refuse(Outcome why, Vector3 at) => new(null, at, "", why);
+
+    static Outcome Go(Put put) => put.Refused ?? Moved(put.Actor!, put.To);
+
+    // The selected object's box where the plan puts it, with a line from where it is now.
+    static Action<List<WorldMarks.Sign>> Shows(Func<Put> plan, string title) => signs =>
+    {
+        var put = plan();
+        if (put.Refused is { } why)
+        {
+            signs.Add(WorldMarks.Refused(why, put.To, title));
+            return;
+        }
+
+        var shape = Things.ShapeOf(put.Actor!);
+        signs.Add(WorldMarks.Ghost(shape with { Middle = shape.Middle + put.To - put.Actor!.Location }, shape.Middle, title, put.Note));
+    };
+
     // The carry would take it straight back, so a grab lets go first.
     static Outcome Moved(Actor actor, Vector3 at)
     {
@@ -510,35 +542,42 @@ static class Moving
 
     static Outcome GoToSelected()
     {
+        var (refused, mover, at, yaw, floor) = Beside();
+        return refused ?? Teleport.Hop(mover!, at, new Rotator(0f, yaw, 0f), floor);
+    }
+
+    // Where GO TO IT puts you: on the floor beside the selected object, or in the air there.
+    static (Outcome? Refused, Pawn? Mover, Vector3 At, float Yaw, bool Floor) Beside()
+    {
         if (Editor.Selected is not { } actor)
         {
-            return Outcome.Failed("NOTHING SELECTED");
+            return (Outcome.Failed("NOTHING SELECTED"), null, default, 0f, false);
         }
 
         if (Teleport.Mover is not { } mover)
         {
-            return Outcome.NoPlayer;
+            return (Outcome.NoPlayer, null, actor.Location, 0f, false);
         }
 
         Things.Box(actor, out var middle, out var half);
         var toward = Teleport.Flat(middle - mover.Location);
         var beside = middle - toward * (MathF.Max(half.X, half.Y) + Gap);
-        var facing = new Rotator(0f, MathF.Atan2(toward.Y, toward.X) * 180f / MathF.PI, 0f);
+        var yaw = MathF.Atan2(toward.Y, toward.X) * 180f / MathF.PI;
         return Teleport.Floor(mover, beside, beside.Z + 500f, beside.Z - FloorReach, out var floor)
-            ? Teleport.Hop(mover, floor, facing, true)
-            : Teleport.Hop(mover, beside, facing, false);
+            ? (null, mover, floor, yaw, true)
+            : (null, mover, beside, yaw, false);
     }
 
-    static Outcome BringSelected()
+    static Put Bringing()
     {
         if (Movable(out var actor) is { Kind: OutcomeKind.Failed } refused)
         {
-            return refused;
+            return Refuse(refused, default);
         }
 
         if (Teleport.Mover is not { } mover)
         {
-            return Outcome.NoPlayer;
+            return Refuse(Outcome.NoPlayer, default);
         }
 
         Things.Box(actor, out var middle, out var half);
@@ -546,29 +585,29 @@ static class Moving
         var spot = mover.Location + ahead * (MathF.Max(half.X, half.Y) + Gap + 100f);
         if (!Teleport.Floor(mover, spot, spot.Z + 300f, spot.Z - FloorReach, out var floor))
         {
-            return Outcome.Failed("NO GROUND THERE");
+            return Refuse(Outcome.Failed("NO GROUND THERE"), spot);
         }
 
         var across = middle - actor.Location;
-        return Moved(actor, new Vector3(floor.X - across.X, floor.Y - across.Y, floor.Z + Lift(actor) + 2f));
+        return new Put(actor, new Vector3(floor.X - across.X, floor.Y - across.Y, floor.Z + Lift(actor) + 2f), "IN FRONT OF YOU");
     }
 
-    static Outcome PlaceAtCrosshair()
+    static Put Aiming()
     {
         if (Movable(out var actor) is { Kind: OutcomeKind.Failed } refused)
         {
-            return refused;
+            return Refuse(refused, default);
         }
 
         if (World.Controller is null)
         {
-            return Outcome.NoPlayer;
+            return Refuse(Outcome.NoPlayer, default);
         }
 
         // It never lands on itself, and people are aimed through.
         if (!Crosshair.Surface(Reach, out var hit, Crosshair.Meets.Solid, actor))
         {
-            return Outcome.Failed("AIM AT SOMETHING");
+            return Refuse(Outcome.Failed("AIM AT SOMETHING"), WorldMarks.AimedAt());
         }
 
         Things.Box(actor, out var middle, out var half);
@@ -576,18 +615,19 @@ static class Moving
         var spot = hit.Spot;
         if (hit.Normal.Z >= Floorish)
         {
-            return Moved(actor, new Vector3(spot.X - across.X, spot.Y - across.Y, spot.Z + Lift(actor) + 2f));
+            return new Put(actor, new Vector3(spot.X - across.X, spot.Y - across.Y, spot.Z + Lift(actor) + 2f), "ON THE FLOOR");
         }
 
         // Against a wall or under a ceiling, by how far its box reaches that way.
-        return Moved(actor, spot + hit.Normal * (Vector3.Dot(Vector3.Abs(hit.Normal), half) + 5f) - across);
+        var against = spot + hit.Normal * (Vector3.Dot(Vector3.Abs(hit.Normal), half) + 5f) - across;
+        return new Put(actor, against, hit.Normal.Z <= -Floorish ? "UNDER IT" : "AGAINST IT");
     }
 
-    static Outcome DropSelected()
+    static Put Dropping()
     {
         if (Movable(out var actor) is { Kind: OutcomeKind.Failed } refused)
         {
-            return refused;
+            return Refuse(refused, default);
         }
 
         // Looked for from its middle down, so one sunk into the ground comes back up onto it.
@@ -595,9 +635,9 @@ static class Moving
         var bottom = middle.Z - half.Z;
         if (!Teleport.Floor(actor, middle, middle.Z, bottom - FloorReach, out var floor))
         {
-            return Outcome.Failed("NO GROUND BELOW");
+            return Refuse(Outcome.Failed("NO GROUND BELOW"), middle with { Z = bottom });
         }
 
-        return Moved(actor, actor.Location with { Z = floor.Z + Lift(actor) + 2f });
+        return new Put(actor, actor.Location with { Z = floor.Z + Lift(actor) + 2f }, "ON THE GROUND");
     }
 }

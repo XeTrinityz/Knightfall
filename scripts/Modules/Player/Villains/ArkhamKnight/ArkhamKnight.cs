@@ -37,7 +37,7 @@ static partial class ArkhamKnight
 
     public static readonly Toggle Option = new(
         "player.villains.arkham_knight", "ARKHAM KNIGHT",
-        "Become the Arkham Knight. He can't glide. 1 and 2 pick his sniper rifle or twin pistols. Secondary fire with the rifle calls a drone strike.")
+        "Become the Arkham Knight. He can't glide. 1 and 2 pick his sniper rifle or twin pistols. With the rifle, hold secondary fire to see where a drone strike lands, and let go to call it.")
     {
         Tick = Keep,
         Restore = Stop,
@@ -133,6 +133,7 @@ static partial class ArkhamKnight
         Pose(player);
         Shoot(player, controller);
         Strike(player);
+        Watch(player);
         ShowHud();
     }
 

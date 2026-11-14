@@ -160,7 +160,23 @@ static partial class Disguise
     public static readonly Command WearAimed = new(
         "player.character.disguise_wear_aimed", "WEAR AIMED CHARACTER",
         "Wears the exact look of the person in the middle of the screen, their hat and colours included. It stays at the top of LOOK until you aim at someone else.",
-        WearAimedLook);
+        WearAimedLook)
+    {
+        Preview = WorldMarks.Picks(ToWear, "WEAR THIS LOOK", "THEIR EXACT LOOK"),
+    };
+
+    // Whose look WEAR AIMED CHARACTER would take.
+    static WorldMarks.Picked ToWear()
+    {
+        if (World.Player is null)
+        {
+            return new WorldMarks.Picked(Outcome.NoPlayer, null);
+        }
+
+        return Editor.Aimed(null, static kind => kind is Things.Kind.Enemy or Things.Kind.Friendly) is Pawn person && Things.Alive(person)
+            ? new WorldMarks.Picked(null, person)
+            : new WorldMarks.Picked(Outcome.Failed("AIM AT A PERSON"), null);
+    }
 
     public static readonly Command Shuffle = new(
         "player.character.disguise_random", "RANDOM LOOK",
@@ -955,15 +971,13 @@ static partial class Disguise
     // use is kept loaded, since the person can walk off and be cleaned up while it's worn.
     static Outcome WearAimedLook()
     {
-        if (World.Player is null)
+        var pick = ToWear();
+        if (pick.Refused is { } why)
         {
-            return Outcome.NoPlayer;
+            return why;
         }
 
-        if (Editor.Aimed(null, kind => kind is Things.Kind.Enemy or Things.Kind.Friendly) is not Pawn person || !Things.Alive(person))
-        {
-            return Outcome.Failed("AIM AT A PERSON");
-        }
+        var person = (Pawn)pick.Who!;
 
         var sources = PawnSources(person);
         var body = sources.FindIndex(Person);

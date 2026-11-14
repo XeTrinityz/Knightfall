@@ -49,7 +49,28 @@ static class Lightning
     public static readonly Command StrikeAim = new(
         "world.weather.strike_at_crosshair", "STRIKE AT CROSSHAIR",
         "Lightning strikes whatever the crosshair is on: an enemy, a car, a street or a roof.",
-        StrikeAimed);
+        StrikeAimed)
+    {
+        Preview = static signs =>
+        {
+            if (Sky() is null)
+            {
+                signs.Add(WorldMarks.Refused(Outcome.Failed("NO LIGHTNING HERE"), WorldMarks.AimedAt(), "STRIKE"));
+            }
+            else if (Target() is { } target)
+            {
+                signs.Add(WorldMarks.Target(target, "STRIKE", "HITS THEM"));
+            }
+            else
+            {
+                signs.Add(WorldMarks.Pin(WorldMarks.AimedAt(), "STRIKE", "LANDS NEAR HERE"));
+            }
+        },
+    };
+
+    // A person or a vehicle under the crosshair gets the bolt right on them.
+    static Pawn? Target() =>
+        Crosshair.Pick(Reach, wanted: static kind => kind is Things.Kind.Enemy or Things.Kind.Friendly or Things.Kind.Vehicle) as Pawn;
 
     public static readonly Slider Frequency = new(
         "world.weather.lightning_frequency", "LIGHTNING FREQUENCY",
@@ -180,7 +201,7 @@ static class Lightning
         }
 
         // A person or a vehicle gets the bolt right on them. Anything else gets one at that distance.
-        if (Crosshair.Pick(Reach, wanted: static kind => kind is Things.Kind.Enemy or Things.Kind.Friendly or Things.Kind.Vehicle) is Pawn target)
+        if (Target() is { } target)
         {
             sky.NextStrikeIntensity = 1f;
             sky.ManualTriggerLightningTargetActor(target);

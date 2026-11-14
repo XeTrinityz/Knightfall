@@ -148,12 +148,31 @@ static class Objects
     public static readonly Command Spawn = new(
         "spawner.objects.spawn", "SPAWN OBJECT",
         "Spawns the object picked in OBJECT, HOW MANY times, the way this tab and PLACE say.",
-        SpawnPicked);
+        SpawnPicked)
+    {
+        Preview = static signs => Placing.Show(signs, _recipes.Find(static recipe => recipe.Key == Object.CurrentId) is { } picked ? RoomFor(picked.Radius) : 0f, "SPAWN"),
+    };
 
     public static readonly Command SpawnAimed = new(
         "spawner.objects.spawn_aimed", "SPAWN WHAT YOU AIM AT",
         "Copies the piece of the world under your crosshair, like a bench, a lamp post or a wreck, with its look and size.",
-        CopyAimed);
+        CopyAimed)
+    {
+        Preview = static signs =>
+        {
+            var piece = Copying();
+            if (piece.Refused is { } why)
+            {
+                signs.Add(WorldMarks.Refused(why, piece.At, "COPY"));
+                return;
+            }
+
+            var part = piece.Part!;
+            var bounds = part.Bounds;
+            var box = Things.Model(part) ?? new Things.Shape(bounds.Origin, Vector3.UnitX * bounds.BoxExtent.X, Vector3.UnitY * bounds.BoxExtent.Y, Vector3.UnitZ * bounds.BoxExtent.Z);
+            signs.Add(WorldMarks.Ghost(box, null, "COPY", "THIS PIECE"));
+        },
+    };
 
     public static readonly Catalog.Section[] Sections =
     {
@@ -436,24 +455,36 @@ static class Objects
 
     static Outcome CopyAimed()
     {
+        var piece = Copying();
+        return piece.Refused ?? Make(RecipeOf(piece.Part!, piece.Holder!, piece.Part!.StaticMesh));
+    }
+
+    // The piece SPAWN WHAT YOU AIM AT would copy, or why it can't at the spot it tried.
+    readonly record struct Piece(Outcome? Refused, StaticMeshComponent? Part, Actor? Holder, Vector3 At);
+
+    static Piece Copying()
+    {
         if (Teleport.Mover is null)
         {
-            return Outcome.NoPlayer;
+            return new Piece(Outcome.NoPlayer, null, null, default);
         }
 
         if (!Crosshair.Surface(Reach, out var hit))
         {
-            return Outcome.Failed("AIM AT SOMETHING");
+            return new Piece(Outcome.Failed("AIM AT SOMETHING"), null, null, WorldMarks.AimedAt());
         }
 
         var part = hit.Part is StaticMeshComponent { IsValid: true } direct ? direct : PartAt(hit.Actor, hit.Spot);
-        if (part?.StaticMesh is not { IsValid: true } mesh || HolderOf(part) is not { } holder)
+        if (part?.StaticMesh is not { IsValid: true } || HolderOf(part) is not { } holder)
         {
-            return Outcome.Failed(hit.Actor is Vehicle ? "THAT'S A VEHICLE" : "NOT A MESH");
+            return new Piece(Outcome.Failed(hit.Actor is Vehicle ? "THAT'S A VEHICLE" : "NOT A MESH"), null, null, hit.Spot);
         }
 
-        return Make(RecipeOf(part, holder, mesh));
+        return new Piece(null, part, holder, hit.Spot);
     }
+
+    // The room kept round each copy of something this big.
+    static float RoomFor(float radius) => MathF.Min(radius * 2f * (float)Size.Value, MostRoom);
 
     // When the hit doesn't say which piece it was: the actor's own mesh, or else the smallest
     // piece of the world whose box holds the spot. A breakable prop or a vehicle is never taken
@@ -517,7 +548,7 @@ static class Objects
     static Outcome Make(Recipe recipe)
     {
         var size = (float)Size.Value;
-        if (Placing.Plan(MathF.Min(recipe.Radius * 2f * size, MostRoom), out _, out var spots) is { } refused)
+        if (Placing.Plan(RoomFor(recipe.Radius), out _, out var spots) is { } refused)
         {
             return refused;
         }

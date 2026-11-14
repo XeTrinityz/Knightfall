@@ -36,6 +36,14 @@ static class Fetch
         ToCar)
     {
         Block = static () => Car.InCar() ?? Teleport.Away ?? (Teleport.HasCar ? null : "NO CAR"),
+        Preview = static signs =>
+        {
+            if (Beside() is { Refused: null } plan && World.Player is { IsValid: true } player && Car.Find() is { } car)
+            {
+                var toward = car.Location - plan.At;
+                signs.Add(WorldMarks.Stand(player, plan.At, MathF.Atan2(toward.Y, toward.X) * 180f / MathF.PI, "GO TO THE BATMOBILE", "BESIDE IT"));
+            }
+        },
     };
 
     public static readonly Command BringCar = new(
@@ -44,25 +52,42 @@ static class Fetch
         Bring)
     {
         Block = static () => Car.InCar() ?? (Teleport.HasCar ? null : "NO CAR"),
+        Preview = static signs =>
+        {
+            // The car is put there at once, so there's no trail from wherever it is now.
+            var plan = Parking();
+            signs.Add(plan.Refused is { } why ? WorldMarks.Refused(why, plan.At, "BRING THE BATMOBILE")
+                : WorldMarks.Stand(plan.Car!, plan.At, plan.Yaw, "BRING THE BATMOBILE", "PARKS HERE") with { From = null });
+        },
     };
+
+    // Where a car row would put you or the car, or why it can't, at the spot it tried.
+    readonly record struct Plan(Outcome? Refused, Vector3 At, float Yaw = 0f, RVehicleBatmobileBase? Car = null);
 
     public static readonly Catalog.Section Section = new("BATMOBILE", GoToCar, BringCar);
 
     static Outcome ToCar()
     {
-        if (World.Driving is not null)
+        var plan = Beside();
+        return plan.Refused ?? Teleport.Start(GoToCar!, plan.At, true);
+    }
+
+    // Where GO TO THE BATMOBILE puts you.
+    static Plan Beside()
+    {
+        if (World.Driving is { } driving)
         {
-            return Outcome.Unchanged("IN THE CAR");
+            return new Plan(Outcome.Unchanged("IN THE CAR"), driving.Location);
         }
 
         if (World.Player is not { IsValid: true } player)
         {
-            return Outcome.NoPlayer;
+            return new Plan(Outcome.NoPlayer, default);
         }
 
         if (Car.Find() is not { } car)
         {
-            return Outcome.Failed("NO CAR");
+            return new Plan(Outcome.Failed("NO CAR"), player.Location);
         }
 
         // Where the ground isn't loaded yet, the right side is taken on trust.
@@ -79,34 +104,47 @@ static class Fetch
             }
         }
 
-        return Teleport.Start(GoToCar!, target, true);
+        return new Plan(null, target);
     }
 
     static Outcome Bring()
     {
-        if (World.Driving is not null)
+        var plan = Parking();
+        if (plan.Refused is { } why)
         {
-            return Outcome.Unchanged("IN THE CAR");
+            return why;
         }
 
-        if (World.Player is not { IsValid: true } player || World.Controller is not { } controller)
+        var outcome = Teleport.Hop(plan.Car!, plan.At, new Rotator(0f, plan.Yaw, 0f), true);
+        return outcome.Kind == OutcomeKind.Done ? Outcome.Done("HERE") : outcome;
+    }
+
+    // Where BRING THE BATMOBILE puts the car, facing the way you look.
+    static Plan Parking()
+    {
+        if (World.Driving is { } driving)
         {
-            return Outcome.NoPlayer;
+            return new Plan(Outcome.Unchanged("IN THE CAR"), driving.Location);
         }
 
+        if (World.Player is not { IsValid: true } player || !Crosshair.View(out _, out var way))
+        {
+            return new Plan(Outcome.NoPlayer, default);
+        }
+
+        var feet = player.Location.Z - Teleport.Lift(player);
         if (Car.Find() is not { } car)
         {
-            return Outcome.Failed("NO CAR");
+            return new Plan(Outcome.Failed("NO CAR"), player.Location with { Z = feet });
         }
 
         if (Vector3.Distance(car.Location, player.Location) < AlreadyNear)
         {
-            return Outcome.Unchanged("ALREADY HERE");
+            return new Plan(Outcome.Unchanged("ALREADY HERE"), car.Location - Vector3.UnitZ * Teleport.Lift(car));
         }
 
-        controller.GetPlayerViewPoint(out _, out var view);
-        var look = Teleport.Flat(view.ToDirection());
-        var feet = player.Location.Z - Teleport.Lift(player);
+        var look = Teleport.Flat(way);
+        var yaw = MathF.Atan2(look.Y, look.X) * 180f / MathF.PI;
         foreach (var ring in CarRings)
         {
             foreach (var turn in CarTurns)
@@ -114,13 +152,12 @@ static class Fetch
                 var at = (player.Location + Turn(look, turn) * ring) with { Z = feet };
                 if (Fits(player, at, look, out var floor) && Teleport.Dry(floor))
                 {
-                    var outcome = Teleport.Hop(car, floor, new Rotator(0f, view.Yaw, 0f), true);
-                    return outcome.Kind == OutcomeKind.Done ? Outcome.Done("HERE") : outcome;
+                    return new Plan(null, floor, yaw, car);
                 }
             }
         }
 
-        return Outcome.Failed("NO ROOM");
+        return new Plan(Outcome.Failed("NO ROOM"), (player.Location + look * CarRings[0]) with { Z = feet });
     }
 
     // Level ground with room for the car, in sight of the player so it isn't round a corner.

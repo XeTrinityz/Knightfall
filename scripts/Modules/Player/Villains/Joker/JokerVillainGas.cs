@@ -136,12 +136,19 @@ static partial class JokerVillain
         return true;
     }
 
+    // Holding secondary fire shows where the canister will land, and letting go while still
+    // aiming launches it. The gas is loaded as the hold starts, so its mark knows its size.
     static void Gas(RPawnPlayer player)
     {
-        var pressed = Aim.Secondary && !_secondaryWas;
+        var released = !Aim.Secondary && _secondaryWas && Aim.On;
+        if (Aim.Secondary && !_secondaryWas)
+        {
+            LoadGas();
+        }
+
         _secondaryWas = Aim.Secondary;
         Fly(player);
-        if (!pressed || World.Now < _nextGas || _flightStart >= 0f || Arms.Raised < 0.9f || Barrel() is not { } barrel)
+        if (!released || World.Now < _nextGas || _flightStart >= 0f || Arms.Raised < 0.9f || Barrel() is not { } barrel)
         {
             return;
         }

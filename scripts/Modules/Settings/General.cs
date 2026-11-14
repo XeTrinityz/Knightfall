@@ -46,7 +46,7 @@ static class General
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("MENU", SlowTime, Toasts.On, Toasts.Corner),
+        new("MENU", SlowTime, Toasts.On, Toasts.Corner, WorldMarks.On),
         new("OPTIONS", AllOff),
         new("SETTINGS FILE", Reload, ResetAll),
     };

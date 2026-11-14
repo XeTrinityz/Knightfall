@@ -7,7 +7,7 @@ using BmSDK.Engine;
 
 namespace Knightfall;
 
-// The Arkham Knight's drone strike. Secondary fire while aiming calls a barrage of heavy tank
+// The Arkham Knight's drone strike. Letting go of secondary fire while aiming calls a barrage of heavy tank
 // mortar shells down on whatever his laser is on. The shells whistle down from high above, spread
 // about the spot, and each lands in a tank missile's blast with an explosive gel's bang, throws
 // the thugs near it and breaks what is there. The mortar's own burst is small and its bang barely
@@ -47,11 +47,13 @@ static partial class ArkhamKnight
     static float _nextStrike;
     static bool _strikeWas;
 
+    // Holding secondary fire shows where the strike will land, and letting go while still aiming
+    // calls it.
     static void Strike(RPawnPlayer player)
     {
-        var pressed = Aim.Secondary && !_strikeWas;
+        var released = !Aim.Secondary && _strikeWas && Aim.On;
         _strikeWas = Aim.Secondary;
-        if (pressed && World.Now >= _nextStrike && _markAt is { } at)
+        if (released && World.Now >= _nextStrike && _markAt is { } at)
         {
             _nextStrike = World.Now + StrikeEvery;
             for (var i = 0; i < Shells; i++)

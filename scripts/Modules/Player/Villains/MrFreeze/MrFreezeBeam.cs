@@ -143,11 +143,7 @@ static partial class MrFreeze
             }
         }
 
-        var from = Muzzle(player, out _);
-        var way = Aim.Target - from;
-        var along = way.LengthSquared() > 1f ? Vector3.Normalize(way) : Teleport.Flat(player.Rotation.ToDirection());
-        var end = from + along * MathF.Min(way.Length(), BeamReach);
-        _beamEnd = Crosshair.Line(player, from, end, Crosshair.Meets.Level, out var wall) ? wall.Spot : end;
+        var from = BeamLine(player, out var along, out _beamEnd, out _);
 
         BeamSound(player, true);
         if (now >= _nextHit)
@@ -215,6 +211,28 @@ static partial class MrFreeze
         return false;
     }
 
+    // Where the beam would leave his blaster, the way it goes and where it stops: at the first
+    // wall, or at its full reach, short of what the crosshair is on.
+    static Vector3 BeamLine(RPawnPlayer player, out Vector3 along, out Vector3 end, out bool falls)
+    {
+        var from = Muzzle(player, out _);
+        var way = Aim.Target - from;
+        var length = way.Length();
+        along = length > 1f ? way / length : Teleport.Flat(player.Rotation.ToDirection());
+        falls = length > BeamReach;
+        var reach = from + along * MathF.Min(length, BeamReach);
+        end = Crosshair.Line(player, from, reach, Crosshair.Meets.Level, out var wall) ? wall.Spot : reach;
+        return from;
+    }
+
+    // Whether the beam along this line touches a thug, and he can be seen from the blaster.
+    static bool InBeam(RPawnPlayer player, RPawnVillain thug, Vector3 from, Vector3 along, float length)
+    {
+        var ahead = Vector3.Dot(thug.Location - from, along);
+        return ahead >= 0f && ahead <= length + BeamTouch && Vector3.DistanceSquared(thug.Location, from + along * ahead) <= BeamTouch * BeamTouch
+            && player.FastTrace(thug.Location, from, Vector3.Zero, false);
+    }
+
     // Where the beam leaves his blaster. Without the muzzle it leaves his right hand.
     static Vector3 Muzzle(RPawnPlayer player, out Rotator turn)
     {
@@ -234,10 +252,7 @@ static partial class MrFreeze
         var now = World.Now;
         foreach (var thug in Crowd.StandingEnemies())
         {
-            var off = thug.Location - from;
-            var ahead = Vector3.Dot(off, along);
-            if (ahead < 0f || ahead > length + BeamTouch || Vector3.DistanceSquared(thug.Location, from + along * ahead) > BeamTouch * BeamTouch
-                || !player.FastTrace(thug.Location, from, Vector3.Zero, false))
+            if (!InBeam(player, thug, from, along, length))
             {
                 continue;
             }

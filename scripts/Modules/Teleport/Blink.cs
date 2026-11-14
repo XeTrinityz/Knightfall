@@ -8,7 +8,8 @@ using BmSDK.Engine;
 namespace Knightfall;
 
 // TELEPORT > MOVE, the short moves. They stay inside ground that's already loaded, so they happen
-// straight away with no fade, and they never go through a wall.
+// straight away with no fade, and they never go through a wall. Each move is planned first, and
+// the same plan is what WORLD MARKERS shows while its row is highlighted.
 static class Blink
 {
     const float Metre = Teleport.UnitsPerMetre;
@@ -23,6 +24,11 @@ static class Blink
 
     // Nearer than this isn't worth a blink.
     const float Shortest = 100f;
+
+    // BLINK TO CROSSHAIR goes to whatever you aim at, as far off as the world is loaded. Aimed at
+    // the sky, the cross that says so stands this far out.
+    const float Reach = 200000f;
+    const float Nothing = 3000f;
 
     // BLINK FORWARD follows the ground this far up, and drops any distance down to it.
     const float StepUp = 200f;
@@ -40,27 +46,44 @@ static class Blink
     public static readonly Command ToCrosshair = new(
         "teleport.move.to_crosshair", "BLINK TO CROSSHAIR",
         "Takes you to where the camera is aimed, on foot or in the Batmobile. Aim at a wall to land at its foot, or on top when the top is just above where you aimed. You can land on cars and props too.",
-        AtCrosshair);
+        static () => Go(AtCrosshair()))
+    {
+        Preview = Shows(AtCrosshair, "BLINK"),
+    };
 
     public static readonly Command Forward = new(
         "teleport.move.forward", "BLINK FORWARD",
-        "Moves you ahead the way you face and stops short of any wall. In the air you stay in the air and keep gliding. The Batmobile keeps its speed.",
-        Ahead);
+        "Moves you ahead the way you face, BLINK DISTANCE away, and stops short of any wall. In the air you stay in the air and keep gliding. The Batmobile keeps its speed.",
+        static () => Go(Ahead()))
+    {
+        Preview = Shows(Ahead, "BLINK FORWARD"),
+    };
 
     public static readonly Slider Range = new(
-        "teleport.move.range", "BLINK RANGE",
-        "How far both blinks reach.",
-        min: 25, max: 500, step: 25, value: 100, unit: " M")
+        "teleport.move.range", "BLINK DISTANCE",
+        "How far BLINK FORWARD takes you.",
+        min: 5, max: 500, step: 5, value: 100, unit: " M")
     {
         Preference = true,
+        Preview = static signs => Forward.Preview!(signs),
     };
 
     public static readonly Command SkyDrop = new(
         "teleport.move.sky_drop", "SKY DROP",
         "Lifts you straight up so you can glide away. Not in the Batmobile.",
-        Up)
+        static () =>
+        {
+            var outcome = Go(Up());
+            if (outcome.Kind == OutcomeKind.Done && World.Player is { IsValid: true } player)
+            {
+                player.Velocity = Vector3.Zero;
+            }
+
+            return outcome;
+        })
     {
         Block = Car.InCar,
+        Preview = Shows(Up, "SKY DROP"),
     };
 
     public static readonly Slider DropHeight = new(
@@ -69,22 +92,32 @@ static class Blink
         min: 25, max: 300, step: 25, value: 100, unit: " M")
     {
         Preference = true,
+        Preview = static signs => SkyDrop.Preview!(signs),
     };
 
     public static readonly Command ToRoof = new(
         "teleport.move.to_roof", "TO THE ROOF",
         "Puts you on the highest ground where you stand.",
-        Roof);
+        static () => Go(Roof()))
+    {
+        Preview = Shows(Roof, "TO THE ROOF"),
+    };
 
     public static readonly Command ToGround = new(
         "teleport.move.to_ground", "DROP TO GROUND",
         "Puts you on the first ground below you, from a glide or a fall too. In the Batmobile as well.",
-        Ground);
+        static () => Go(Ground()))
+    {
+        Preview = Shows(Ground, "DROP TO GROUND"),
+    };
 
     public static readonly Command ToStreet = new(
         "teleport.move.to_street", "TO THE STREET",
         "Puts you on the lowest open ground near you. Never inside a building or in the water.",
-        Street);
+        static () => Go(Street()))
+    {
+        Preview = Shows(Street, "TO THE STREET"),
+    };
 
     public static readonly Catalog.Section[] Sections =
     {
@@ -92,27 +125,51 @@ static class Blink
         new("UP AND DOWN", SkyDrop, DropHeight, ToRoof, ToGround, ToStreet),
     };
 
-    static Outcome AtCrosshair()
+    // Where a move would take you: the floor, or a point in the air when OnFloor is false. Note
+    // says what kind of spot it is. A refused plan has the reason and the spot it tried.
+    readonly record struct Trip(Pawn? Mover, Vector3 To, float Yaw, bool OnFloor, string Note, Outcome? Refused = null, bool KeepMotion = false);
+
+    static Trip No(Outcome why, Vector3 at) => new(null, at, 0f, false, "", why);
+
+    static Outcome Go(Trip trip) =>
+        trip.Refused ?? Teleport.Hop(trip.Mover!, trip.To, new Rotator(0f, trip.Yaw, 0f), trip.OnFloor, trip.KeepMotion);
+
+    static Action<List<WorldMarks.Sign>> Shows(Func<Trip> plan, string title) => signs =>
+    {
+        var trip = plan();
+        if (trip.Refused is { } why)
+        {
+            signs.Add(WorldMarks.Refused(why, trip.To, title));
+        }
+        else if (trip.OnFloor)
+        {
+            signs.Add(WorldMarks.Stand(trip.Mover!, trip.To, trip.Yaw, title, trip.Note));
+        }
+        else
+        {
+            var drop = Teleport.Floor(trip.Mover!, trip.To, trip.To.Z, Teleport.Deep, out var under) ? trip.To.Z - under.Z : 0f;
+            signs.Add(WorldMarks.Air(trip.Mover!, trip.To, drop, title, trip.Note));
+        }
+    };
+
+    static Trip AtCrosshair()
     {
         if (Teleport.Mover is not { } mover || !Crosshair.View(out var eye, out var aim))
         {
-            return Outcome.NoPlayer;
+            return No(Outcome.NoPlayer, default);
         }
 
-        var end = eye + aim * ((float)Range.Value * Metre + Vector3.Distance(eye, mover.Location));
-        var facing = new Rotator(0f, MathF.Atan2(aim.Y, aim.X) * 180f / MathF.PI, 0f);
-
-        // Nothing in reach, so down to the ground under the far end.
-        if (!Crosshair.Line(mover, eye, end, Crosshair.Meets.Solid, out var hit))
+        var yaw = MathF.Atan2(aim.Y, aim.X) * 180f / MathF.PI;
+        if (!Crosshair.Line(mover, eye, eye + aim * Reach, Crosshair.Meets.Solid, out var hit))
         {
-            return Down(mover, end, end.Z, facing);
+            return No(Outcome.Failed("AIM AT SOMETHING"), eye + aim * Nothing);
         }
 
         var spot = hit.Spot;
         var normal = hit.Normal;
         if (hit.Floor)
         {
-            return Land(mover, spot, facing);
+            return Land(mover, spot, yaw, "WHERE YOU AIM");
         }
 
         // A wall, or the underside of something.
@@ -123,17 +180,17 @@ static class Blink
         var outside = (spot + outward * room) with { Z = top };
         if (mover.FastTrace(inside, outside, Vector3.Zero, false) && Teleport.Floor(mover, inside, top, spot.Z, out var ledge))
         {
-            return Land(mover, ledge, facing);
+            return Land(mover, ledge, yaw, "ON TOP");
         }
 
-        return Down(mover, spot + outward * room, spot.Z, facing);
+        return Down(mover, spot + outward * room, spot.Z, yaw, "AT ITS FOOT");
     }
 
-    static Outcome Ahead()
+    static Trip Ahead()
     {
         if (Teleport.Mover is not { } mover)
         {
-            return Outcome.NoPlayer;
+            return No(Outcome.NoPlayer, default);
         }
 
         var car = mover is RVehicleBatmobileBase;
@@ -144,96 +201,89 @@ static class Blink
         if (Crosshair.Line(mover, eyes, eyes + way * (length + room), Crosshair.Meets.Level, out var wall))
         {
             length = wall.Distance - room;
-        }
-
-        if (length < Shortest)
-        {
-            return Outcome.Failed("WALL AHEAD");
+            if (length < Shortest)
+            {
+                return No(Outcome.Failed("WALL AHEAD"), wall.Spot);
+            }
         }
 
         var to = mover.Location + way * length;
-        var facing = new Rotator(0f, mover.Rotation.Yaw, 0f);
+        var yaw = mover.Rotation.Yaw;
         if (!car && InAir(mover))
         {
-            return Teleport.Hop(mover, to, facing, false, keepMotion: true);
+            return new Trip(mover, to, yaw, false, "KEEP GLIDING", KeepMotion: true);
         }
 
         return Teleport.Floor(mover, to, mover.Location.Z + StepUp, mover.Location.Z - StepDown, out var floor)
-            ? Land(mover, floor, facing)
-            : Outcome.Failed("NO GROUND");
+            ? Land(mover, floor, yaw, "AHEAD")
+            : No(Outcome.Failed("NO GROUND"), to);
     }
 
-    static Outcome Up()
+    static Trip Up()
     {
-        if (World.Driving is not null)
+        if (World.Driving is { } driving)
         {
-            return Outcome.Unchanged("NOT IN THE CAR");
+            return No(Outcome.Unchanged("NOT IN THE CAR"), driving.Location);
         }
 
         if (World.Player is not { IsValid: true } player)
         {
-            return Outcome.NoPlayer;
+            return No(Outcome.NoPlayer, default);
         }
 
         var to = player.Location + new Vector3(0f, 0f, (float)DropHeight.Value * Metre);
         if (!player.FastTrace(to, player.Location, Vector3.Zero, false))
         {
-            return Outcome.Failed("ROOF ABOVE");
+            return No(Outcome.Failed("ROOF ABOVE"), Feet(player));
         }
 
-        var outcome = Teleport.Hop(player, to, new Rotator(0f, player.Rotation.Yaw, 0f), false);
-        if (outcome.Kind == OutcomeKind.Done)
-        {
-            player.Velocity = Vector3.Zero;
-        }
-
-        return outcome;
+        return new Trip(player, to, player.Rotation.Yaw, false, "GLIDE FROM HERE");
     }
 
-    static Outcome Roof()
+    static Trip Roof()
     {
         if (Teleport.Mover is not { } mover)
         {
-            return Outcome.NoPlayer;
+            return No(Outcome.NoPlayer, default);
         }
 
         if (!Teleport.Floor(mover, mover.Location, Teleport.Sky, Teleport.Deep, out var floor))
         {
-            return Outcome.Failed("NO GROUND");
+            return No(Outcome.Failed("NO GROUND"), Feet(mover));
         }
 
-        return floor.Z <= Feet(mover) + SameLevel
-            ? Outcome.Unchanged("ALREADY ON TOP")
-            : Land(mover, floor, new Rotator(0f, mover.Rotation.Yaw, 0f));
+        return floor.Z <= Feet(mover).Z + SameLevel
+            ? No(Outcome.Unchanged("ALREADY ON TOP"), Feet(mover))
+            : Land(mover, floor, mover.Rotation.Yaw, "HIGHEST GROUND");
     }
 
-    static Outcome Ground()
+    static Trip Ground()
     {
         if (Teleport.Mover is not { } mover)
         {
-            return Outcome.NoPlayer;
+            return No(Outcome.NoPlayer, default);
         }
 
         if (!Teleport.Floor(mover, mover.Location, mover.Location.Z, Teleport.Deep, out var floor))
         {
-            return Outcome.Failed("NO GROUND");
+            return No(Outcome.Failed("NO GROUND"), Feet(mover));
         }
 
-        return floor.Z >= Feet(mover) - SameLevel
-            ? Outcome.Unchanged("ALREADY DOWN")
-            : Land(mover, floor, new Rotator(0f, mover.Rotation.Yaw, 0f));
+        return floor.Z >= Feet(mover).Z - SameLevel
+            ? No(Outcome.Unchanged("ALREADY DOWN"), Feet(mover))
+            : Land(mover, floor, mover.Rotation.Yaw, "FIRST GROUND BELOW");
     }
 
     // The lowest open ground round you wins, and the nearest of those about as low, since the
     // rings go outward.
-    static Outcome Street()
+    static Trip Street()
     {
         if (Teleport.Mover is not { } mover)
         {
-            return Outcome.NoPlayer;
+            return No(Outcome.NoPlayer, default);
         }
 
-        var highest = Feet(mover) - StreetDrop;
+        var highest = Feet(mover).Z - StreetDrop;
         Vector3? best = null;
         foreach (var floor in Teleport.FloorsAround(mover, mover.Location, StreetRings, Teleport.Spokes, spot => spot.Z <= highest && Teleport.Dry(spot)))
         {
@@ -243,19 +293,21 @@ static class Blink
             }
         }
 
-        return best is { } street ? Land(mover, street, new Rotator(0f, mover.Rotation.Yaw, 0f)) : Outcome.Unchanged("ALREADY DOWN");
+        return best is { } street
+            ? Land(mover, street, mover.Rotation.Yaw, "LOWEST OPEN GROUND")
+            : No(Outcome.Unchanged("ALREADY DOWN"), Feet(mover));
     }
 
-    static Outcome Down(Pawn mover, Vector3 at, float top, Rotator facing) =>
-        Teleport.Floor(mover, at, top, Teleport.Deep, out var floor) ? Land(mover, floor, facing) : Outcome.Failed("NO GROUND");
+    static Trip Down(Pawn mover, Vector3 at, float top, float yaw, string note) =>
+        Teleport.Floor(mover, at, top, Teleport.Deep, out var floor) ? Land(mover, floor, yaw, note) : No(Outcome.Failed("NO GROUND"), at);
 
-    static Outcome Land(Pawn mover, Vector3 floor, Rotator facing) =>
-        Teleport.Dry(floor) ? Teleport.Hop(mover, floor, facing, true) : Outcome.Failed("WATER");
+    static Trip Land(Pawn mover, Vector3 floor, float yaw, string note) =>
+        Teleport.Dry(floor) ? new Trip(mover, floor, yaw, true, note) : No(Outcome.Failed("WATER"), floor);
 
     static float Room(Pawn mover) =>
         mover is RVehicleBatmobileBase ? CarRoom : (mover.CylinderComponent is { IsValid: true } body ? body.CollisionRadius : 35f) + FootRoom;
 
-    static float Feet(Pawn mover) => mover.Location.Z - Teleport.Lift(mover);
+    static Vector3 Feet(Pawn mover) => mover.Location - Vector3.UnitZ * Teleport.Lift(mover);
 
-    static bool InAir(Pawn mover) => !Teleport.Floor(mover, mover.Location, mover.Location.Z, Feet(mover) - 60f, out _);
+    static bool InAir(Pawn mover) => !Teleport.Floor(mover, mover.Location, mover.Location.Z, Feet(mover).Z - 60f, out _);
 }

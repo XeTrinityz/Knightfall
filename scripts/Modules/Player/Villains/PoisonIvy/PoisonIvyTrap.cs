@@ -115,10 +115,13 @@ static partial class PoisonIvy
 
     static void Plant(RPawnPlayer player)
     {
-        var pressed = Aim.Secondary && !_secondaryWas;
+        // Holding secondary fire shows where the flytrap will grow, and letting go while still
+        // aiming plants it.
+        var released = !Aim.Secondary && _secondaryWas && Aim.On;
         _secondaryWas = Aim.Secondary;
         var now = World.Now;
-        if (pressed && now >= _nextTrap && _trapClass is not null && Aim.Ground(player, TrapReach, out var at))
+        _trapSpot = Aim.Secondary && _trapClass is not null && Aim.Ground(player, TrapReach, out var spot) ? spot : null;
+        if (released && now >= _nextTrap && _trapClass is not null && Aim.Ground(player, TrapReach, out var at))
         {
             var facing = Teleport.Flat(player.Location - at);
             var turn = facing.LengthSquared() > 1e-4f ? Rotator.FromDirection(facing) : new Rotator(0f, 0f, 0f);

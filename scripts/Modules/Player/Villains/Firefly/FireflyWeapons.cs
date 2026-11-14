@@ -47,10 +47,21 @@ static partial class Firefly
     // The grenade starts this far out from his hands, clear of his own body.
     const float ThrowAhead = 150f;
 
-    // The grenade's throw, its wait between throws, and the reach of its fire.
+    // The grenade's throw, its wait between throws, and the reach of its fire. A lob takes at
+    // least the shortest time, so a near one still arcs. One thrown at the sky goes the way he
+    // aims, lifted a little.
     const float ThrowSpeed = 2500f;
+    const float ShortestThrow = 0.25f;
     const float ThrowLift = 0.15f;
     const float ThrowWait = 1.5f;
+
+    // Where a throw at the sky comes down is found by following its arc in steps this long, for
+    // this long at most.
+    const float FallStep = 0.1f;
+    const float FallLongest = 6f;
+
+    // How fast a grenade falls, read off each one thrown. The player falls as fast until one has.
+    static float _grenadeFall = -1000f;
     // His own grenade's blast, damage and push, as his chase sets them on each one.
     const float BlastRadius = 220f;
     const float BlastImpulse = 15000f;
@@ -215,13 +226,17 @@ static partial class Firefly
         var target = Aim.Target;
 
         Flame(player, Aim.Fire, target);
-        if (secondary && !_secondaryWas && now >= _nextThrow)
+
+        // Holding secondary fire shows where the grenade will burst, and letting go while still
+        // aiming throws it.
+        if (!secondary && _secondaryWas && Aim.On && now >= _nextThrow)
         {
-            Throw(player, target);
+            Throw(player);
             _nextThrow = now + ThrowWait;
         }
 
         _secondaryWas = secondary;
+        Watch(player);
         Burning(player);
         CarFires();
     }
@@ -476,28 +491,27 @@ static partial class Firefly
         car.TakeDamage(ParkedDamage, player.Controller, car.Location, push * 100f, RDmgType_Explosion.StaticClass(), default, player);
     }
 
-    static void Throw(RPawnPlayer player, Vector3 target)
+    static void Throw(RPawnPlayer player)
     {
-        if (_grenadeClass is not { IsValid: true } kind)
+        if (_grenadeClass is not { IsValid: true } kind || Tossing(player) is not { } toss)
         {
             return;
         }
 
         Voice.Speak("dropped");
 
-        var from = Nozzle(player, target);
-        target = Aim.PointFor(from);
-        var way = target - from;
-        if (way.LengthSquared() < 1f)
+        // He is its thrower, so it passes through him instead of bursting on his own body.
+        if (player.Spawn(kind, player, FName.None, toss.From, Rotator.FromDirection(toss.Velocity), null!, true) is not { IsValid: true } grenade)
         {
             return;
         }
 
-        // He is its thrower, so it passes through him instead of bursting on his own body.
-        var heading = Vector3.Normalize(Vector3.Normalize(way) + Vector3.UnitZ * ThrowLift);
-        if (player.Spawn(kind, player, FName.None, from + heading * ThrowAhead, Rotator.FromDirection(heading), null!, true) is not { IsValid: true } grenade)
+        // A grenade that falls at another speed than was thought is thrown again with its own.
+        var fall = MathF.Abs(grenade.Acceleration.Z) > 1f ? grenade.Acceleration.Z : grenade.GetGravityZ();
+        if (MathF.Abs(fall - _grenadeFall) > 1f)
         {
-            return;
+            _grenadeFall = fall;
+            toss = Tossing(player) ?? toss;
         }
 
         grenade.Instigator = player;
@@ -508,12 +522,16 @@ static partial class Firefly
             bomb.BlastRadiusOuter = BlastRadius;
             bomb.MinExplosionImpulse = BlastImpulse;
             bomb.MaxExplosionImpulse = BlastImpulse;
-            bomb.SetInitialThrow(heading * ThrowSpeed, target);
+            // The game's grenade stops dead where it starts when told it lands higher up. Given a
+            // spot far below instead, it flies the same arc, and where the game then moves it on
+            // landing it is put back where it hit.
+            bomb.SetInitialThrow(toss.Velocity, toss.Lands.Z < toss.From.Z ? toss.Lands : toss.Lands with { Z = Teleport.Deep });
         }
         else
         {
-            grenade.Velocity = heading * ThrowSpeed;
+            grenade.Velocity = toss.Velocity;
         }
+
         if (_launchSound is { IsValid: true } launch)
         {
             player.StartAudioEvent(launch, default, default);
@@ -521,6 +539,55 @@ static partial class Firefly
 
         Grenades.Add(new Thrown { Grenade = grenade });
         Threw();
+    }
+
+    // Where a grenade thrown now would go: where it starts, the speed it leaves with, where it
+    // comes down and how long it takes. On something solid within his aim it is lobbed to land
+    // right there. Aimed at the sky it is thrown the way he aims, and comes down wherever its arc
+    // meets the world, since the game puts a grenade where it was told it would land.
+    readonly record struct Toss(Vector3 From, Vector3 Velocity, Vector3 Lands, float Seconds);
+
+    static Toss? Tossing(RPawnPlayer player)
+    {
+        var from = Nozzle(player, Aim.Target);
+        var aimed = Aim.PointFor(from);
+        var way = aimed - from;
+        if (way.LengthSquared() < 1f)
+        {
+            return null;
+        }
+
+        var heading = Vector3.Normalize(way);
+        var start = from + heading * ThrowAhead;
+        if (Vector3.DistanceSquared(aimed, Aim.Eye + Aim.Look * Aim.Reach) > 1f)
+        {
+            var seconds = MathF.Max(Vector3.Distance(start, aimed) / ThrowSpeed, ShortestThrow);
+            return new Toss(start, (aimed - start) / seconds - Vector3.UnitZ * (0.5f * _grenadeFall * seconds), aimed, seconds);
+        }
+
+        var velocity = Vector3.Normalize(heading + Vector3.UnitZ * ThrowLift) * ThrowSpeed;
+        var (lands, flight) = Fall(player, start, velocity);
+        return new Toss(start, velocity, lands, flight);
+    }
+
+    // Where an arc from here meets the world, followed a step at a time, and how long it takes.
+    static (Vector3 Lands, float Seconds) Fall(RPawnPlayer player, Vector3 from, Vector3 velocity)
+    {
+        var at = from;
+        var gravity = Vector3.UnitZ * _grenadeFall;
+        for (var time = 0f; time < FallLongest; time += FallStep)
+        {
+            var next = at + velocity * FallStep + gravity * (0.5f * FallStep * FallStep);
+            if (Crosshair.Line(player, at, next, Crosshair.Meets.Solid, out var hit))
+            {
+                return (hit.Spot, time + FallStep * hit.Distance / MathF.Max(Vector3.Distance(at, next), 1f));
+            }
+
+            at = next;
+            velocity += gravity * FallStep;
+        }
+
+        return (at, FallLongest);
     }
 
     // Each grenade is watched for its fire bursting out. That blast knocks down every thug near

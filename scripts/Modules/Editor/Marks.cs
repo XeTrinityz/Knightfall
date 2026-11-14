@@ -35,7 +35,8 @@ static class Marks
         }
 
         var reticle = EditorMode.Active && !Menu.Showing;
-        if ((selected is null && preview is null && !reticle && !Markings.Showing && !Threats.Showing && !GuardMarks.Showing && !Sidekick.ShowingMarks) || World.Paused || World.Controller is not { } controller || !Draw.Begin(canvas))
+        var planned = WorldMarks.Ready();
+        if ((selected is null && preview is null && !reticle && !planned && !Markings.Showing && !Threats.Showing && !GuardMarks.Showing && !Sidekick.ShowingMarks) || World.Paused || World.Controller is not { } controller || !Draw.Begin(canvas))
         {
             return;
         }
@@ -77,6 +78,7 @@ static class Marks
             GuardMarks.Render(time);
             Threats.Render(time);
             Sidekick.RenderMarks(time);
+            WorldMarks.Render(time);
         }
         finally
         {

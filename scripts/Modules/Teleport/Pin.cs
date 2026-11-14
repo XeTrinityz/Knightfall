@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Numerics;
 using BmSDK;
 using BmSDK.BmScript;
 using BmSDK.Framework;
@@ -12,6 +13,9 @@ static class Pin
 {
     // How far WAYPOINT AT CROSSHAIR looks, which is past anything that's loaded.
     const float Reach = 200000f;
+
+    // Aimed at the sky, the cross that says so stands this far out.
+    const float Nothing = 3000f;
 
     // Game seconds to wait once the map has shut, so the trip doesn't start under its fade.
     const float Settle = 0.3f;
@@ -30,7 +34,20 @@ static class Pin
     public static readonly Command AtCrosshair = new(
         "teleport.waypoint.at_crosshair", "WAYPOINT AT CROSSHAIR",
         "Sets your map waypoint wherever you are aiming, with its compass marker and route.",
-        Mark);
+        Mark)
+    {
+        Preview = static signs =>
+        {
+            if (Crosshair.Surface(Reach, out var hit))
+            {
+                signs.Add(WorldMarks.Pin(hit.Spot, "WAYPOINT", "SETS IT HERE"));
+            }
+            else if (Crosshair.View(out var eye, out var way))
+            {
+                signs.Add(WorldMarks.Refused(Outcome.Failed("NOTHING THERE"), eye + way * Nothing, "WAYPOINT"));
+            }
+        },
+    };
 
     public static readonly Command Clear = new(
         "teleport.waypoint.clear", "CLEAR WAYPOINT",

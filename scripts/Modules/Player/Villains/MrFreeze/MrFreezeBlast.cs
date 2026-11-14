@@ -71,7 +71,9 @@ static partial class MrFreeze
     {
         var secondary = Aim.Secondary;
         var now = World.Now;
-        if (secondary && !_secondaryWas && !_blastPending && now >= _nextBlast && Aim.Ground(player, BlastReach, out var at))
+        // Holding secondary fire shows where the spire will burst, and letting go while still
+        // aiming bursts it.
+        if (!secondary && _secondaryWas && Aim.On && !_blastPending && now >= _nextBlast && Aim.Ground(player, BlastReach, out var at))
         {
             _nextBlast = now + BlastWait;
             _blastPending = true;
@@ -102,24 +104,31 @@ static partial class MrFreeze
         }
     }
 
+    // Whether a spire at this spot reaches a thug, seen from its middle. Speared is the spike
+    // itself, the rest are frozen.
+    static bool InBlast(RPawnPlayer player, RPawnVillain thug, Vector3 at, out bool speared)
+    {
+        var off = thug.Location - at;
+        var flat = off.X * off.X + off.Y * off.Y;
+        speared = flat <= SpikeReach * SpikeReach;
+        return flat <= BlastRadius * BlastRadius && MathF.Abs(off.Z) <= BlastHeight
+            && player.FastTrace(thug.Location, at + Vector3.UnitZ * GroundAbove, Vector3.Zero, false);
+    }
+
     static void Burst(RPawnPlayer player, Vector3 at)
     {
         Effect(_spireLook, _spireSound, at);
-        var middle = at + Vector3.UnitZ * GroundAbove;
         var frozen = 0;
         var taken = 0;
         foreach (var thug in Crowd.StandingEnemies())
         {
-            var off = thug.Location - at;
-            var flat = off.X * off.X + off.Y * off.Y;
-            if (flat > BlastRadius * BlastRadius || MathF.Abs(off.Z) > BlastHeight
-                || !player.FastTrace(thug.Location, middle, Vector3.Zero, false))
+            if (!InBlast(player, thug, at, out var speared))
             {
                 continue;
             }
 
-            var away = Teleport.Flat(off);
-            if (flat <= SpikeReach * SpikeReach)
+            var away = Teleport.Flat(thug.Location - at);
+            if (speared)
             {
                 Villains.Knock(player, thug, SpikeDamage, Vector3.Normalize(away * 0.5f + Vector3.UnitZ), SpikeForce, fall: true);
                 taken++;

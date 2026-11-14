@@ -131,7 +131,10 @@ static class People
     public static readonly Command Spawn = new(
         "spawner.characters.spawn", "SPAWN CHARACTER",
         "Spawns the character picked in WHO, HOW MANY times, the way this tab and PLACE say.",
-        SpawnPicked);
+        SpawnPicked)
+    {
+        Preview = static signs => Placing.Show(signs, 0f, "SPAWN"),
+    };
 
     public static readonly Catalog.Section[] Sections =
     {

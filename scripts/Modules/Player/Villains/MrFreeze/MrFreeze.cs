@@ -30,7 +30,7 @@ static partial class MrFreeze
 
     public static readonly Toggle Option = new(
         "player.villains.mr_freeze", "MR. FREEZE",
-        "Become Mr. Freeze. He is slow and can't glide. Hold aim and fire for his cryo beam, which runs on coolant. Secondary fire bursts an ice spire where you aim.")
+        "Become Mr. Freeze. He is slow and can't glide. Hold aim and fire for his cryo beam, which runs on coolant. Hold secondary fire to see where an ice spire will burst, and let go to burst it.")
     {
         Tick = Keep,
         Restore = Stop,
@@ -93,6 +93,7 @@ static partial class MrFreeze
         Pose(player);
         Beam(player);
         Blast(player);
+        Watch(player);
         if (!_firing && Voice.Quiet("quiet", QuietEvery))
         {
             Logged();

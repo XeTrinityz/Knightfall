@@ -59,12 +59,24 @@ static class Arms
     public static readonly Command Drop = new(
         "spawner.weapons.drop", "DROP ON THE GROUND",
         "Lays the weapon above on the ground, HOW MANY times, the way PLACE says. Thugs nearby pick them up and use them.",
-        DropPicked);
+        DropPicked)
+    {
+        Preview = static signs => Placing.Show(signs, 0f, "DROP"),
+    };
 
     public static readonly Command GiveAimed = new(
         "spawner.weapons.give_aimed", "GIVE TO WHO I AIM AT",
         "Puts the weapon above in the hands of the person in the middle of your screen, spawned or not.",
-        () => Editor.Aimed(null, static kind => kind is Things.Kind.Enemy or Things.Kind.Friendly) is RBMPawnAI body ? GiveTo(body) : Outcome.Failed("AIM AT A PERSON"));
+        static () => Receiver() is { Refused: null, Who: RBMPawnAI body } ? GiveTo(body) : Outcome.Failed("AIM AT A PERSON"))
+    {
+        Preview = WorldMarks.Picks(Receiver, "GIVE WEAPON", "GETS IT"),
+    };
+
+    // Who GIVE TO WHO I AIM AT would arm.
+    static WorldMarks.Picked Receiver() =>
+        Editor.Aimed(null, static kind => kind is Things.Kind.Enemy or Things.Kind.Friendly) is RBMPawnAI body
+            ? new WorldMarks.Picked(null, body)
+            : new WorldMarks.Picked(Outcome.Failed("AIM AT A PERSON"), null);
 
     public static readonly Command Give = new(
         "spawner.weapons.give", "GIVE TO PICKED SPAWN",

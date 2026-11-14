@@ -136,7 +136,7 @@ static partial class Firefly
 
     public static readonly Toggle Option = new(
         "player.villains.firefly", "FIREFLY",
-        "Become Firefly, with his own flight, jets and sound. Hold aim and press fire for his flamethrower, or secondary fire for a grenade. His flight keys are below.")
+        "Become Firefly, with his own flight, jets and sound. Hold aim and press fire for his flamethrower. Hold secondary fire to see where a grenade will burst, and let go to throw it. His flight keys are below.")
     {
         Tick = Fly,
         Restore = Stop,

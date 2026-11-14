@@ -76,6 +76,28 @@ static class Placing
 
     public readonly record struct Spot(Vector3 Floor, Rotator Facing);
 
+    static readonly string[] HowMany = Enumerable.Range(0, 13).Select(static count => count == 1 ? "1 HERE" : $"{count} HERE").ToArray();
+
+    // What a SPAWN row with this much room would do, for WORLD MARKERS: a ring at each spot, or
+    // why it can't.
+    public static void Show(List<WorldMarks.Sign> signs, float room, string title)
+    {
+        if (Plan(room, out _, out var spots) is { } refused)
+        {
+            signs.Add(WorldMarks.Refused(refused, WorldMarks.AimedAt(), title));
+            return;
+        }
+
+        var radius = MathF.Max(45f, room / 2f);
+        var random = Facing.Index == 2;
+        for (var i = 0; i < spots.Count; i++)
+        {
+            var first = i == 0;
+            signs.Add(WorldMarks.Spot(spots[i].Floor, random ? float.NaN : spots[i].Facing.Yaw, radius,
+                first ? title : "", first ? HowMany[Math.Min(spots.Count, HowMany.Length - 1)] : ""));
+        }
+    }
+
     // Works out where the next SPAWN goes. Gives back why not when nothing can be spawned now,
     // and null with at least one spot when it can. There are HOW MANY spots, fewer when MOST AT
     // ONCE or the ground leaves less room. Room keeps big spawns at least that far from you,

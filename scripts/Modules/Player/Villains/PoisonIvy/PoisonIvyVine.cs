@@ -219,41 +219,84 @@ static partial class PoisonIvy
     static T? Kept<T>(T? thing)
         where T : GameObject => Borrowed.KeepFound(thing, Lender);
 
+    // What a vine cast now would do: seize a small tank, carry off a car, spear a thug, or burst
+    // up out of the ground under the crosshair.
+    enum Lunge
+    {
+        Tank,
+        Car,
+        Thug,
+        Ground,
+    }
+
+    readonly record struct Cast(Lunge Kind, Actor? Target, Vector3 At, FName Move = default, AnimSet? Moves = null);
+
+    // The thug the crosshair itself is on, by the shared picker. He comes before any vehicle, so
+    // one standing by a car isn't passed over for it. Vehicles are picked too, so one in front of
+    // him hides him.
+    static RPawnVillain? Speared(RPawnPlayer player) =>
+        Crosshair.Pick(VineReach, wanted: static kind => kind is Things.Kind.Enemy or Things.Kind.Vehicle) is RPawnVillain thug
+        && Crowd.IsEnemy(thug) && Crowd.Standing(thug) && thug.DrivenVehicle is not { IsValid: true } && thug.Base is not Vehicle
+        && Vector3.DistanceSquared(thug.Location, player.Location) <= VineReach * VineReach
+            ? thug
+            : null;
+
+    // Null when there's nowhere the vine can reach.
+    static Cast? Casting(RPawnPlayer player)
+    {
+        if (Speared(player) is { } aimed)
+        {
+            return new Cast(Lunge.Thug, aimed, aimed.Location);
+        }
+
+        if (Grabbable(player) is { } grab)
+        {
+            return new Cast(Lunge.Tank, grab.Tank, grab.Tank.Location, grab.Move, grab.Moves);
+        }
+
+        if (Wreckable(player) is { } car)
+        {
+            return new Cast(Lunge.Car, car, car.Location);
+        }
+
+        if (Seizable(player) is { } thug)
+        {
+            return new Cast(Lunge.Thug, thug, thug.Location);
+        }
+
+        return Aim.Ground(player, VineReach, out var at) ? new Cast(Lunge.Ground, null, at) : null;
+    }
+
     static void Lash(RPawnPlayer player)
     {
         var fire = Aim.Fire;
         var now = World.Now;
-        if (fire && !_fireWas && now >= _nextVine && _vineMesh is not null && _vineMoves is not null)
+        // Holding fire shows where the vine will go, and letting go while still aiming casts it.
+        if (!fire && _fireWas && Aim.On && now >= _nextVine && _vineMesh is not null && _vineMoves is not null && Casting(player) is { } cast)
         {
-            if (Grabbable(player) is { } grab)
+            _nextVine = now + VineWait;
+            _castUntil = now + CastSeconds;
+            switch (cast.Kind)
             {
-                _nextVine = now + VineWait;
-                _castUntil = now + CastSeconds;
-                Grab(player, grab.Tank, grab.Move, grab.Moves);
-            }
-            else if (Wreckable(player) is { } car)
-            {
-                _nextVine = now + VineWait;
-                _castUntil = now + CastSeconds;
-                Wrap(player, car);
-            }
-            else if (Seizable(player) is { } thug)
-            {
-                _nextVine = now + VineWait;
-                _castUntil = now + CastSeconds;
-                Seize(player, thug);
-                Say(player, "vine");
-            }
-            else if (Aim.Ground(player, VineReach, out var at))
-            {
-                _nextVine = now + VineWait;
-                _castUntil = now + CastSeconds;
-                Burst(player, at, Rotator.FromDirection(Teleport.Flat(at - player.Location)));
-                Say(player, "vine");
+                case Lunge.Tank:
+                    Grab(player, (RVehicleNPC)cast.Target!, cast.Move, cast.Moves!);
+                    break;
+                case Lunge.Car:
+                    Wrap(player, cast.Target!);
+                    break;
+                case Lunge.Thug:
+                    Seize(player, (RPawnVillain)cast.Target!);
+                    Say(player, "vine");
+                    break;
+                default:
+                    Burst(player, cast.At, Rotator.FromDirection(Teleport.Flat(cast.At - player.Location)));
+                    Say(player, "vine");
+                    break;
             }
         }
 
         _fireWas = fire;
+        Watch(player);
         Grow(player);
     }
 

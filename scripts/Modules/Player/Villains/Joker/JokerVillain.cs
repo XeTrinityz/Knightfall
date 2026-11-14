@@ -30,7 +30,7 @@ static partial class JokerVillain
 
     public static readonly Toggle Option = new(
         "player.villains.joker", "JOKER",
-        "Become the Joker. He can't glide. Hold aim and fire for his shotgun. Secondary fire launches laughing gas where you aim.")
+        "Become the Joker. He can't glide. Hold aim and fire for his shotgun. Hold secondary fire to see where his laughing gas will land, and let go to launch it.")
     {
         Tick = Keep,
         Restore = Stop,
@@ -118,6 +118,7 @@ static partial class JokerVillain
         Pose(player);
         Shoot(player, controller);
         Gas(player);
+        Watch(player);
         Talk(player, controller);
         Fight(player, controller);
         KeepGoons();

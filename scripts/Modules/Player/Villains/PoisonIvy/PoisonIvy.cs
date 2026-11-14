@@ -29,7 +29,7 @@ static partial class PoisonIvy
 
     public static readonly Toggle Option = new(
         "player.villains.poison_ivy", "POISON IVY",
-        "Become Poison Ivy. She can't glide. Hold aim and fire for her vine, which seizes thugs and tears small tanks apart. Secondary fire plants a flytrap that eats the next enemy to come close.")
+        "Become Poison Ivy. She can't glide. Hold aim, then hold fire to see where her vine will strike and let go to cast it. It seizes thugs and tears small tanks apart. Hold and let go of secondary fire the same way to plant a flytrap that eats the next enemy to come close.")
     {
         Tick = Keep,
         Restore = Stop,

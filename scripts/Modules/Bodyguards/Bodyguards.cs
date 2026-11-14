@@ -83,7 +83,10 @@ static class Bodyguards
     public static readonly Command Recruit = new(
         "spawner.bodyguards.recruit", "RECRUIT WHO I AIM AT",
         "Turns the enemy in the middle of your screen into a bodyguard. DISMISS puts them back how they were.",
-        RecruitAimed);
+        RecruitAimed)
+    {
+        Preview = WorldMarks.Picks(ToRecruit, "RECRUIT", "JOINS YOU"),
+    };
 
     public static readonly Choice Orders = new(
         "spawner.bodyguards.orders", "ORDERS",
@@ -96,6 +99,7 @@ static class Bodyguards
         AttackAimed)
     {
         Block = static () => NoTeam() ?? (StoodDown ? "THEY'RE STOOD DOWN" : null),
+        Preview = WorldMarks.Picks(ToAttack, "ATTACK", "ALL GO AFTER THEM"),
     };
 
     public static readonly Command Regroup = new(
@@ -120,6 +124,7 @@ static class Bodyguards
         DismissOne)
     {
         Block = NoTeam,
+        Preview = WorldMarks.Picks(ToDismiss, "DISMISS", "LETS THEM GO"),
     };
 
     public static readonly Command Dismiss = new(
@@ -335,51 +340,74 @@ static class Bodyguards
         GuardBrain.Release(guard, hostile);
     }
 
-    static Outcome RecruitAimed()
+    // Who RECRUIT WHO I AIM AT would take, or why not.
+    static WorldMarks.Picked ToRecruit()
     {
         if (World.Player is null)
         {
-            return Outcome.NoPlayer;
+            return new WorldMarks.Picked(Outcome.NoPlayer, null);
         }
 
         if (Room == 0)
         {
-            return Outcome.Failed($"AT MOST {Most}");
+            return new WorldMarks.Picked(Outcome.Failed($"AT MOST {Most}"), null);
         }
 
         if (Editor.Aimed(Things.Kind.Enemy) is not RPawnVillain thug)
         {
-            return Outcome.Failed("AIM AT AN ENEMY");
+            return new WorldMarks.Picked(Outcome.Failed("AIM AT AN ENEMY"), null);
         }
 
         if (Is(thug))
         {
-            return Outcome.Unchanged("ALREADY YOURS");
+            return new WorldMarks.Picked(Outcome.Unchanged("ALREADY YOURS"), thug);
         }
 
-        if (!Fight.Standing(thug) || thug.Base is Vehicle)
+        return !Fight.Standing(thug) || thug.Base is Vehicle
+            ? new WorldMarks.Picked(Outcome.Failed("THEY CAN'T JOIN NOW"), thug)
+            : new WorldMarks.Picked(null, thug);
+    }
+
+    static Outcome RecruitAimed()
+    {
+        var pick = ToRecruit();
+        if (pick.Refused is { } why)
         {
-            return Outcome.Failed("THEY CAN'T JOIN NOW");
+            return why;
         }
 
+        var thug = (RPawnVillain)pick.Who!;
         var label = Things.NameOf(thug);
         Adopt(thug, label, true, Math.Max(thug.HealthMax, thug.Health));
         Log.Info($"Bodyguards: recruited {label} ({thug.Class.Name}). {Team.Count} of {Most} in the team.");
         return Outcome.Done("RECRUITED");
     }
 
-    static Outcome DismissOne()
+    // Which bodyguard DISMISS WHO I AIM AT would let go, or why not.
+    static WorldMarks.Picked ToDismiss()
     {
         if (Team.Count == 0)
         {
-            return Outcome.Unchanged("NO BODYGUARDS");
+            return new WorldMarks.Picked(Outcome.Unchanged("NO BODYGUARDS"), null);
         }
 
-        if (Editor.Aimed(Things.Kind.Enemy) is not RPawnVillain thug || GuardOf(thug) is not { } guard)
+        if (Editor.Aimed(Things.Kind.Enemy) is not RPawnVillain thug)
         {
-            return Outcome.Failed("AIM AT A BODYGUARD");
+            return new WorldMarks.Picked(Outcome.Failed("AIM AT A BODYGUARD"), null);
         }
 
+        return GuardOf(thug) is null ? new WorldMarks.Picked(Outcome.Failed("NOT A BODYGUARD"), thug) : new WorldMarks.Picked(null, thug);
+    }
+
+    static Outcome DismissOne()
+    {
+        var pick = ToDismiss();
+        if (pick.Refused is { } why)
+        {
+            return why;
+        }
+
+        var guard = GuardOf((RPawnVillain)pick.Who!)!;
         SendOff(guard);
         Log.Info($"Bodyguards: dismissed {guard.Label}. {Team.Count} left in the team.");
         return Outcome.Done("DISMISSED");
@@ -412,27 +440,36 @@ static class Bodyguards
         guard.Benched = true;
     }
 
-    static Outcome AttackAimed()
+    // Who ATTACK WHO I AIM AT would send them after, or why not.
+    static WorldMarks.Picked ToAttack()
     {
         if (Team.Count == 0)
         {
-            return Outcome.Failed("NO BODYGUARDS");
+            return new WorldMarks.Picked(Outcome.Failed("NO BODYGUARDS"), null);
         }
 
         if (StoodDown)
         {
-            return Outcome.Failed("THEY'RE STOOD DOWN");
+            return new WorldMarks.Picked(Outcome.Failed("THEY'RE STOOD DOWN"), null);
         }
 
         if (Editor.Aimed(Things.Kind.Enemy) is not RPawnVillain thug || !Fight.Standing(thug))
         {
-            return Outcome.Failed("AIM AT AN ENEMY");
+            return new WorldMarks.Picked(Outcome.Failed("AIM AT AN ENEMY"), null);
         }
 
-        if (Is(thug))
+        return Is(thug) ? new WorldMarks.Picked(Outcome.Failed("THAT'S A BODYGUARD"), thug) : new WorldMarks.Picked(null, thug);
+    }
+
+    static Outcome AttackAimed()
+    {
+        var pick = ToAttack();
+        if (pick.Refused is { } why)
         {
-            return Outcome.Failed("THAT'S A BODYGUARD");
+            return why;
         }
+
+        var thug = (RPawnVillain)pick.Who!;
 
         var sent = 0;
         foreach (var guard in Team)

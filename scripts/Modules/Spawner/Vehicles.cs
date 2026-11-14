@@ -96,7 +96,10 @@ static class Vehicles
     public static readonly Command Spawn = new(
         "spawner.vehicles.spawn", "SPAWN VEHICLE",
         "Spawns the vehicle picked in VEHICLE, HOW MANY times, the way this tab and PLACE say. Drones appear in the air.",
-        SpawnPicked);
+        SpawnPicked)
+    {
+        Preview = static signs => Placing.Show(signs, Room, "SPAWN"),
+    };
 
     public static readonly Catalog.Section[] Sections =
     {

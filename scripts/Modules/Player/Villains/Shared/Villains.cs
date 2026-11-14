@@ -10,8 +10,10 @@ namespace Knightfall;
 
 // What the shared code needs from one villain: the switch that turns them on and their rows on
 // the tab. Fit is their say over the camera's view and BeforeCamera runs ahead of the game's
-// camera update, for one that moves the view. Keys adds the hotkeys they come with.
-sealed record Villain(Toggle Option, Catalog.Section[] Sections, Villain.Fitter? Fit = null, Action? BeforeCamera = null, Action? Keys = null)
+// camera update, for one that moves the view. Keys adds the hotkeys they come with. Marking says
+// whether they have marks in the world to show, which Marks draws in their own style.
+sealed record Villain(Toggle Option, Catalog.Section[] Sections, Villain.Fitter? Fit = null, Action? BeforeCamera = null, Action? Keys = null,
+    Func<bool>? Marking = null, Action<float>? Marks = null)
 {
     public delegate void Fitter(ref View view, float deltaTime);
 }
@@ -54,12 +56,12 @@ static class Villains
     // Made on first use, since each villain's own rows have to exist before it.
     static Villain[] Roster => _roster ??= new Villain[]
     {
-        new(Firefly.Option, Firefly.Sections, Firefly.AimView, Firefly.KeepAimFacing, Firefly.DefaultKeys),
+        new(Firefly.Option, Firefly.Sections, Firefly.AimView, Firefly.KeepAimFacing, Firefly.DefaultKeys, Firefly.Marking, Firefly.Marks),
         new(RiddlerMech.Option, RiddlerMech.Sections, RiddlerMech.Fit, Keys: RiddlerMech.DefaultKeys),
-        new(MrFreeze.Option, MrFreeze.Sections, MrFreeze.AimView, MrFreeze.KeepAimFacing),
-        new(JokerVillain.Option, JokerVillain.Sections, JokerVillain.AimView, JokerVillain.KeepAimFacing),
-        new(PoisonIvy.Option, PoisonIvy.Sections, PoisonIvy.AimView, PoisonIvy.KeepAimFacing),
-        new(ArkhamKnight.Option, ArkhamKnight.Sections, ArkhamKnight.AimView, ArkhamKnight.KeepAimFacing, ArkhamKnight.DefaultKeys),
+        new(MrFreeze.Option, MrFreeze.Sections, MrFreeze.AimView, MrFreeze.KeepAimFacing, Marking: MrFreeze.Marking, Marks: MrFreeze.Marks),
+        new(JokerVillain.Option, JokerVillain.Sections, JokerVillain.AimView, JokerVillain.KeepAimFacing, Marking: JokerVillain.Marking, Marks: JokerVillain.Marks),
+        new(PoisonIvy.Option, PoisonIvy.Sections, PoisonIvy.AimView, PoisonIvy.KeepAimFacing, Marking: PoisonIvy.Marking, Marks: PoisonIvy.Marks),
+        new(ArkhamKnight.Option, ArkhamKnight.Sections, ArkhamKnight.AimView, ArkhamKnight.KeepAimFacing, ArkhamKnight.DefaultKeys, ArkhamKnight.Marking, ArkhamKnight.Marks),
     };
 
     // PLAYER > VILLAINS, each villain's rows under their own heading.
@@ -95,6 +97,32 @@ static class Villains
         foreach (var villain in Roster)
         {
             villain.BeforeCamera?.Invoke();
+        }
+    }
+
+    // Whether the villain who is on has marks in the world to show, like where a move will land
+    // while they aim.
+    public static bool Marking()
+    {
+        foreach (var villain in Roster)
+        {
+            if (villain.Option.On && villain.Marking?.Invoke() == true)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static void Marks(float time)
+    {
+        foreach (var villain in Roster)
+        {
+            if (villain.Option.On && villain.Marking?.Invoke() == true)
+            {
+                villain.Marks?.Invoke(time);
+            }
         }
     }
 

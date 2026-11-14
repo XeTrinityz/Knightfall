@@ -304,7 +304,7 @@ static class Things
     static readonly Dictionary<nint, (Vector3 Middle, Vector3 Half)> MeshSizes = new();
 
     // The model's own box at rest, carried into the world by where the part is drawn.
-    static Shape? Model(MeshComponent part)
+    public static Shape? Model(MeshComponent part)
     {
         (Vector3 Middle, Vector3 Half)? rest = part switch
         {
