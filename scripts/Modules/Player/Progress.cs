@@ -71,7 +71,7 @@ static class Progress
 
     public static readonly Command Achievements = new(
         "player.progress.achievements", "UNLOCK ALL ACHIEVEMENTS",
-        "Unlocks every achievement on your Steam account, story pack ones included, skipping the ones you have. This can't be undone. Press twice to confirm.",
+        "Unlocks every achievement on your Steam account, story pack ones included, skipping the ones you have. This can't be undone.",
         UnlockAchievements);
 
     public static readonly Command SaveNow = new(
@@ -247,9 +247,14 @@ static class Progress
             return Outcome.Unchanged($"YOU HAVE ALL {list.Count}");
         }
 
-        if (!Confirm.Second("achievements"))
+        var ask = new Confirmation("CAN'T UNDO", "UNLOCK ALL ACHIEVEMENTS",
+            missing.Count == 1
+                ? "The one achievement you don't have unlocks on your Steam account. It can't be taken back off."
+                : $"The {missing.Count} achievements you don't have unlock on your Steam account. They can't be taken back off.",
+            "UNLOCK", "CANCEL");
+        if (!Confirm.Asked(Achievements, ask))
         {
-            return Outcome.Unchanged($"{missing.Count} TO GET, PRESS AGAIN");
+            return Outcome.Asking;
         }
 
         _unlocked = 0;

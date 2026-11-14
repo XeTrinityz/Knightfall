@@ -42,12 +42,12 @@ static class Saves
 
     public static readonly Command Restart = new(
         "settings.saves.restart", "RESTART FROM CHECKPOINT",
-        "Loads your last save, the same as the pause menu's restart. Press twice to confirm.",
+        "Loads your last save, the same as the pause menu's restart.",
         RestartNow);
 
     public static readonly Command NewGamePlus = new(
         "settings.saves.new_game_plus", "START NEW GAME + NOW",
-        "Starts a fresh New Game + run right here. It wipes any run under way and anything since your last save, but keeps a copy of your save first. Press twice.",
+        "Starts a fresh New Game + run right here. It wipes any run under way and anything since your last save, but keeps a copy of your save first.",
         StartPlus);
 
     public static readonly Choice Show = new(
@@ -218,9 +218,12 @@ static class Saves
             return Outcome.Unchanged("STILL SAVING");
         }
 
-        if (!Confirm.Second("restart"))
+        var ask = new Confirmation("UNSAVED PROGRESS", "RESTART FROM CHECKPOINT",
+            "The game loads your last save. Anything you did since then is lost.",
+            "RESTART", "KEEP PLAYING");
+        if (!Confirm.Asked(Restart, ask))
         {
-            return Outcome.Unchanged("PRESS AGAIN");
+            return Outcome.Asking;
         }
 
         Menu.Close();
@@ -263,9 +266,12 @@ static class Saves
             return Outcome.Unchanged("STILL SAVING");
         }
 
-        if (!Confirm.Second("new game plus"))
+        var ask = new Confirmation("UNSAVED PROGRESS", "START NEW GAME +",
+            "A fresh New Game + run starts at the story's opening. Any run under way and anything since your last save is wiped. A copy of your save is kept first.",
+            "START", "KEEP PLAYING");
+        if (!Confirm.Asked(NewGamePlus, ask))
         {
-            return Outcome.Unchanged("PRESS AGAIN");
+            return Outcome.Asking;
         }
 
         // The run is only wiped once there is a copy of the save to go back to.
@@ -303,7 +309,7 @@ static class Saves
         return Outcome.Done("STARTING");
     }
 
-    static Outcome Load(SaveFile file)
+    static Outcome Load(SaveFile file, Command row)
     {
         if (!file.Readable)
         {
@@ -348,9 +354,13 @@ static class Saves
             story = MainStory;
         }
 
-        if (!Confirm.Second("load " + file.Path))
+        var into = story == PlusStory ? "your New Game + run" : "your main story";
+        var ask = new Confirmation("UNSAVED PROGRESS", "LOAD THIS SAVE",
+            $"{Label(file)} from slot {file.Slot + 1} loads into {into}. Anything you did since your last save is lost.",
+            "LOAD", "KEEP PLAYING");
+        if (!Confirm.Asked(row, ask))
         {
-            return Outcome.Unchanged("PRESS AGAIN");
+            return Outcome.Asking;
         }
 
         var data = SaveFiles.Read(file.Path);
@@ -423,7 +433,7 @@ static class Saves
         Outcome outcome;
         try
         {
-            outcome = delete ? Delete(file) : KeepCopy(file);
+            outcome = delete ? Delete(file, row) : KeepCopy(file);
         }
         catch
         {
@@ -431,7 +441,10 @@ static class Saves
             throw;
         }
 
-        row.Report(outcome);
+        if (outcome != Outcome.Asking)
+        {
+            row.Report(outcome);
+        }
     }
 
     static Outcome KeepCopy(SaveFile file)
@@ -448,16 +461,19 @@ static class Saves
         return outcome;
     }
 
-    static Outcome Delete(SaveFile file)
+    static Outcome Delete(SaveFile file, Command row)
     {
         if (file.Kind != SaveKind.Kept)
         {
             return Outcome.Failed("NOT A KEPT COPY");
         }
 
-        if (!Confirm.Second("delete " + file.Path))
+        var ask = new Confirmation("CAN'T UNDO", "DELETE KEPT COPY",
+            $"Your kept copy {Label(file)} from slot {file.Slot + 1} is deleted for good.",
+            "DELETE", "KEEP IT");
+        if (!Confirm.Asked(row, ask, () => Ask(file, row, delete: true)))
         {
-            return Outcome.Unchanged("PRESS AGAIN");
+            return Outcome.Asking;
         }
 
         SaveFiles.Delete(file);
@@ -518,7 +534,7 @@ static class Saves
 
         Command? row = null;
         var kept = file.Kind == SaveKind.Kept;
-        row = new Command($"settings.saves.{file.Kind}_{Path.GetFileName(file.Path).Replace('.', '_')}", label, help, () => Load(file))
+        row = new Command($"settings.saves.{file.Kind}_{Path.GetFileName(file.Path).Replace('.', '_')}", label, help, () => Load(file, row!))
         {
             Passing = true,
             Cap = "LOAD",
@@ -585,7 +601,7 @@ static class Saves
 
         var saved = file.When.ToString("dddd d MMMM yyyy 'at' HH:mm:ss", CultureInfo.InvariantCulture);
         var about = facts.Count > 0 ? string.Join(", ", facts) + ". " : "";
-        return $"Slot {file.Slot + 1}, saved {saved}. {about}{what} Press twice to load it.";
+        return $"Slot {file.Slot + 1}, saved {saved}. {about}{what}";
     }
 
     // The name the map gives the area a save was made in.

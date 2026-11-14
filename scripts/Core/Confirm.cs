@@ -4,25 +4,41 @@ using System.Diagnostics;
 
 namespace Knightfall;
 
-// Rows that can't be undone take two presses. The second one counts for as long as the row still
-// says PRESS AGAIN, and pressing anything else that asks starts over.
+// Rows that can't be undone ask first, in a box over the menu. The row does its own checks, then
+// asks. A yes runs it again and that run goes through, so nothing happens on a yes the checks
+// would now refuse.
 static class Confirm
 {
-    static string _armed = "";
-    static long _at;
+    // How long a yes waits for its row to run again.
+    const double YesSeconds = 2;
 
-    // True on the second press of the same thing.
-    public static bool Second(string what)
+    static (Command Row, Confirmation Ask)? _yes;
+    static long _yesAt;
+
+    // True when the player just said yes to this same question for this row. Otherwise it asks,
+    // and a yes runs the row again, through again when it isn't a plain press.
+    public static bool Asked(Command row, Confirmation ask, Action? again = null)
     {
-        var now = Stopwatch.GetTimestamp();
-        if (_armed != what || Stopwatch.GetElapsedTime(_at, now).TotalSeconds > Command.ShowSeconds)
+        var yes = _yes;
+        _yes = null;
+        if (yes == (row, ask) && Stopwatch.GetElapsedTime(_yesAt).TotalSeconds <= YesSeconds)
         {
-            _armed = what;
-            _at = now;
-            return false;
+            return true;
         }
 
-        _armed = "";
-        return true;
+        Menu.Ask(ask, row, () =>
+        {
+            _yes = (row, ask);
+            _yesAt = Stopwatch.GetTimestamp();
+            if (again is null)
+            {
+                Catalog.Pressed(row);
+            }
+            else
+            {
+                again();
+            }
+        });
+        return false;
     }
 }

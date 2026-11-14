@@ -27,8 +27,10 @@ static class Menu
     static long _lastFrame;
     static long _arrivedAt;
 
-    // The command a question on screen is about, and how far the question has opened, 0 to 1.
+    // The row a question on screen is about, what a yes does, and how far the question has
+    // opened, 0 to 1.
     static Command? _asking;
+    static Action? _askYes;
     static float _askProgress;
     static Device _askDevice;
     static Pad.Style _askStyle;
@@ -379,18 +381,19 @@ static class Menu
 
     static bool Asking => View.Modal is { Leaving: false };
 
-    // Asks before a command runs. The menu opens for it if it was shut, so a hotkey can't run
-    // past the question.
-    public static void Ask(Confirmation ask, Command command)
+    // Asks before a row does something. The menu opens for it if it was shut, so a hotkey can't
+    // run past the question. It starts on the no button, so a stray press changes nothing.
+    public static void Ask(Confirmation ask, Command row, Action yes)
     {
         if (_asking is not null)
         {
             Answer(false);
         }
 
-        _asking = command;
+        _asking = row;
+        _askYes = yes;
         _askProgress = 0f;
-        View.Modal = new ModalView(ask);
+        View.Modal = new ModalView(ask) { Choice = 1 };
         _askDevice = (Device)(-1);
         if (!_wanted)
         {
@@ -429,29 +432,30 @@ static class Menu
         }
     }
 
-    // Yes runs the command. No tells the player nothing happened, the way the command's own
-    // result would.
+    // No tells the player nothing happened, the way the row's own result would.
     static void Answer(bool yes)
     {
-        var command = _asking;
+        var row = _asking;
+        var then = _askYes;
         _asking = null;
+        _askYes = null;
         if (View.Modal is { } modal)
         {
             modal.Leaving = true;
         }
 
-        if (command is null)
+        if (row is null)
         {
             return;
         }
 
         if (yes)
         {
-            Catalog.Pressed(command, true);
+            then?.Invoke();
         }
         else
         {
-            command.Report(Outcome.Unchanged("CANCELLED"));
+            row.Report(Outcome.Unchanged("CANCELLED"));
         }
     }
 

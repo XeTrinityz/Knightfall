@@ -28,13 +28,17 @@ static class KeySetup
 
     public static readonly Command ResetHotkeys = new(
         "settings.hotkeys.reset", "RESET HOTKEYS",
-        "Takes off every hotkey you added and puts back the ones Knightfall comes with. Press it twice.",
-        static () => Twice("reset hotkeys", Hotkeys.ResetAll));
+        "Takes off every hotkey you added and puts back the ones Knightfall comes with.",
+        static () => Asked(ResetHotkeys!, new Confirmation("CAN'T UNDO", "RESET HOTKEYS",
+            "Every hotkey you added comes off, and the ones Knightfall comes with go back on.",
+            "RESET", "KEEP THEM"), Hotkeys.ResetAll));
 
     public static readonly Command ClearHotkeys = new(
         "settings.hotkeys.clear", "CLEAR ALL HOTKEYS",
-        "Takes every hotkey off, the ones Knightfall comes with too. Press it twice. To add one, highlight a row anywhere in the menu, press the HOTKEY key shown at the bottom, then the keys you want.",
-        static () => Twice("clear hotkeys", Hotkeys.ClearAll));
+        "Takes every hotkey off, the ones Knightfall comes with too. To add one, highlight a row anywhere in the menu, press the HOTKEY key shown at the bottom, then the keys you want.",
+        static () => Asked(ClearHotkeys!, new Confirmation("CAN'T UNDO", "CLEAR ALL HOTKEYS",
+            "Every hotkey comes off, the ones Knightfall comes with too.",
+            "CLEAR", "KEEP THEM"), Hotkeys.ClearAll));
 
     static readonly Catalog.Section MenuRows = new("MENU", MenuKey, RadialKey, Pad.Prompts);
     static readonly Catalog.Section NoneYet = new("NO HOTKEYS YET");
@@ -79,11 +83,11 @@ static class KeySetup
     }
 
     // The list is built again after, since most of it has just lost its key.
-    static Outcome Twice(string what, Func<Outcome> run)
+    static Outcome Asked(Command row, Confirmation ask, Func<Outcome> run)
     {
-        if (!Confirm.Second(what))
+        if (!Confirm.Asked(row, ask))
         {
-            return Outcome.Unchanged("PRESS AGAIN");
+            return Outcome.Asking;
         }
 
         var outcome = run();

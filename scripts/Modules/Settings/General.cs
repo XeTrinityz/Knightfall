@@ -31,12 +31,15 @@ static class General
 
     public static readonly Command ResetAll = new(
         "settings.general.reset_all", "RESET EVERYTHING",
-        "Puts Knightfall back as it was when installed. Every option, the look, menu keys, hotkeys, favourites and saved spots. Press it twice.",
+        "Puts Knightfall back as it was when installed. Every option, the look, menu keys, hotkeys, favourites and saved spots.",
         static () =>
         {
-            if (!Confirm.Second("reset everything"))
+            var ask = new Confirmation("CAN'T UNDO", "RESET EVERYTHING",
+                "Knightfall goes back to how it was when installed. Every option, the look, menu keys, hotkeys, favourites and saved spots.",
+                "RESET", "KEEP IT ALL");
+            if (!Confirm.Asked(ResetAll!, ask))
             {
-                return Outcome.Unchanged("PRESS AGAIN");
+                return Outcome.Asking;
             }
 
             Reread(fromFile: false);

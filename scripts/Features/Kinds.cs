@@ -274,6 +274,9 @@ readonly record struct Outcome(OutcomeKind Kind, string Text)
 {
     public static readonly Outcome NoPlayer = Failed("NO PLAYER");
 
+    // A row that is asking first. Nothing is shown until the player answers.
+    public static readonly Outcome Asking = Unchanged("ASKING");
+
     public static Outcome Done(string text = "DONE") => new(OutcomeKind.Done, text);
 
     public static Outcome Unchanged(string text) => new(OutcomeKind.Unchanged, text);
@@ -281,12 +284,12 @@ readonly record struct Outcome(OutcomeKind Kind, string Text)
     public static Outcome Failed(string text) => new(OutcomeKind.Failed, text);
 }
 
-// A row that does something once when pressed. It has no value, and shows what happened for a
-// moment instead.
-// A question asked before a command runs, for one that can do something the player might not
-// expect. Tag names the kind of warning, Yes and No are the two buttons.
+// A question asked before a row does something that can't be undone. Tag names the kind of
+// warning, Yes and No are the two buttons.
 sealed record Confirmation(string Tag, string Title, string Text, string Yes, string No);
 
+// A row that does something once when pressed. It has no value, and shows what happened for a
+// moment instead.
 sealed class Command : Feature
 {
     public const double ShowSeconds = 2.5;
@@ -308,10 +311,6 @@ sealed class Command : Feature
     // Firefly's take off on the run key.
     public bool Quiet { get; init; }
 
-    // The question to ask before the command runs, or null to run it straight away. Asked each
-    // time it is pressed, so it can depend on what the command would do.
-    public Func<Confirmation?>? Confirm { get; init; }
-
     public void Execute()
     {
         Outcome outcome;
@@ -326,7 +325,10 @@ sealed class Command : Feature
             throw;
         }
 
-        Report(outcome);
+        if (outcome != Outcome.Asking)
+        {
+            Report(outcome);
+        }
     }
 
     // For a command whose work finishes later, like an autopilot arriving.

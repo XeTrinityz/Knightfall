@@ -119,17 +119,23 @@ static class Editor
 
     public static readonly Command RestoreAll = new(
         "editor.restore.all", "RESTORE EVERYTHING",
-        "Puts every object you've changed back the way it was. UNDO can't bring them back, so press it twice.",
+        "Puts every object you've changed back the way it was. UNDO can't bring them back.",
         () =>
         {
-            if (!Edits.All.Any())
+            var changed = Edits.All.Count();
+            if (changed == 0)
             {
                 return Outcome.Unchanged("NOTHING CHANGED");
             }
 
-            if (!Confirm.Second("restore everything"))
+            var ask = new Confirmation("CAN'T UNDO", "RESTORE EVERYTHING",
+                changed == 1
+                    ? "The object you changed goes back the way it was. UNDO can't bring your change back."
+                    : $"All {changed} objects you changed go back the way they were. UNDO can't bring your changes back.",
+                "RESTORE", "KEEP THEM");
+            if (!Confirm.Asked(RestoreAll!, ask))
             {
-                return Outcome.Unchanged("PRESS AGAIN");
+                return Outcome.Asking;
             }
 
             Moving.LetGo();

@@ -113,8 +113,19 @@ static class Radial
 
     public static readonly Command Clear = new(
         "settings.radial.clear", "CLEAR RADIAL",
-        "Takes every row off the radial. Press it twice.",
-        static () => Confirm.Second("clear radial") ? Favourites.Clear() : Outcome.Unchanged("PRESS AGAIN"));
+        "Takes every row off the radial.",
+        static () =>
+        {
+            if (Favourites.Count == 0)
+            {
+                return Outcome.Unchanged("NONE MARKED");
+            }
+
+            var ask = new Confirmation("CAN'T UNDO", "CLEAR RADIAL",
+                $"All {Favourites.Count} rows come off the radial. You'd have to add them back one by one.",
+                "CLEAR", "KEEP THEM");
+            return Confirm.Asked(Clear!, ask) ? Favourites.Clear() : Outcome.Asking;
+        });
 
     static readonly Catalog.Section Fixed = new("RADIAL", On, Mode, SlowTime, Speed, Slots, Size, Order);
     static readonly Catalog.Section Empty = new("NOTHING ON THE RADIAL YET");
