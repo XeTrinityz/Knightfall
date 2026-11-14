@@ -20,13 +20,6 @@ static class Locations
     sealed record Spot(string Id, string Label, params string[] Parts)
     {
         public string Family => Parts[0].Split('_')[0];
-
-        // The place's levels run their own story when they load, so going there can start a
-        // cutscene, a mission or a fight.
-        public bool Mission { get; init; }
-
-        // Where to arrive when the place's own start is somewhere odd, in its own coordinates.
-        public (Vector3 At, float Yaw)? Arrive { get; init; }
     }
 
     sealed record Home(Vector3 At, float Yaw);
@@ -47,27 +40,8 @@ static class Locations
         new("iceberg_lounge", "ICEBERG LOUNGE", "IcebergLounge_B1"),
         new("medical", "ARKHAM MEDICAL", "Medical_A"),
         new("monarch_theatre", "MONARCH THEATRE", "CPTheatre_S2"),
-        new("killer_croc", "KILLER CROC'S SHIP", "VPKillerCroc_B1", "VPKillerCroc_B2", "VPKillerCroc_C1") { Mission = true },
-        new("mad_hatter", "WONDERLAND", "VPMadHatter_A1") { Mission = true },
-        new("ras_al_ghul", "RA'S AL GHUL'S CHAMBER", "VPRasAlGhul_B1", "VPRasAlGhul_C1") { Mission = true },
-        new("lazarus_pit", "LAZARUS PIT", "LazarusPit_A1", "LazarusPit_C1") { Mission = true },
-        new("mr_freeze", "FREEZE'S LAIR", "VPFreeze_01") { Mission = true },
-        new("oil_rig", "SEAGATE OIL RIG", "DLCOilrig_A1", "DLCOilrig_B1", "DLCOilrig_C1", "DLCOilrig_C2", "DLCOilrig_D1", "DLCOilrig_E1",
-            "DLCOilrig_F1", "DLCOilrig_G1", "DLCOilrig_G2", "DLCOilrig_H1", "DLCOilrig_H2", "DLCOilrig_H3", "DLCOilrig_I1") { Mission = true },
-        new("red_hood_docks", "RED HOOD DOCKS", "DLCRedhoodDocks_A1") { Mission = true },
-        new("red_hood_mall", "RED HOOD MALL", "DLCRedhoodMall_B1") { Mission = true },
-        new("red_hood_office", "RED HOOD OFFICE", "DLCRedhoodOffice_B1") { Mission = true },
-        new("catwoman", "CATWOMAN'S REVENGE", "GSCatwomanDLC_01", "GSCatwomanDLC_02") { Mission = true },
-        new("gcpd_lockdown", "GCPD LOCKDOWN", "GSGCPD_01", "GSGCPD_02") { Mission = true, Arrive = (new Vector3(-76731f, -58822f, 2938f), 167f) },
-        new("two_face", "TWO-FACE DLC", "GSTwoFace_01", "GSTwoFace_02") { Mission = true },
         new("track_waynetech_1", "WAYNETECH TRACK 1", "RTWayneTech_01"),
         new("track_waynetech_2", "WAYNETECH TRACK 2", "RTWayneTech_02"),
-        new("joker_arkham", "JOKER'S ARKHAM", "JokerBoss_B1") { Mission = true, Arrive = (new Vector3(33477f, 30459f, 98f), 4f) },
-        new("joker_finale", "JOKER'S FINALE", "JokerBoss_B2") { Mission = true, Arrive = (new Vector3(-73376f, 58211f, 122f), -95f) },
-        new("stagg", "STAGG AIRSHIPS", "Stagg_A1", "Stagg_A2", "Stagg_B1", "Stagg_B2", "Stagg_B3", "Stagg_C1") { Mission = true, Arrive = (new Vector3(-10817f, -4161f, 2236f), 89f) },
-        new("panessa", "PANESSA STUDIOS", "Film_A1", "Film_A2", "Film_B1", "Film_B3", "Film_B4") { Mission = true },
-        new("sacrifice", "PANESSA SACRIFICE SET", "Sacrifice_C1") { Mission = true },
-        new("man_bat", "MAN-BAT LAB", "ManBat_B1") { Mission = true, Arrive = (new Vector3(1705f, 5061f, 610f), 138f) },
     };
 
     // Every place's middle goes here, under Bleake Island and far below anything the city has.
@@ -139,7 +113,7 @@ static class Locations
 
     public static readonly Choice Place = new(
         "teleport.locations.location", "LOCATION",
-        "Which place GO THERE takes you to: sets from the older Arkham games, DLC maps, villain lairs, race tracks and story sets.",
+        "Which place GO THERE takes you to: sets from the older Arkham games and the WayneTech race tracks.",
         Spots.Select(spot => (spot.Id, spot.Label)).ToArray())
     {
         Preference = true,
@@ -150,11 +124,6 @@ static class Locations
         "Takes you to the place picked above. The city waits as you left it. RETURN TO THE CITY brings you back to the same spot.",
         () => In(Go!))
     {
-        Confirm = static () => Picked.Mission
-            ? new Confirmation("MISSION AREA", Picked.Label,
-                "This place runs its own story. Going there may start a cutscene, a mission or a fight, and that can count towards your story progress.",
-                "GO THERE", "STAY HERE")
-            : null,
         Block = static () => !World.InCity ? "NOT IN THE CITY"
             : _inside is not null ? "ALREADY THERE"
             : Teleport.Away is { } away ? away
@@ -815,13 +784,12 @@ static class Locations
         return spot.Parts.All(showing.Contains);
     }
 
-    // Where the player arrives: the spot they saved for it or the one set for the place, else
-    // where the place's challenges
+    // Where the player arrives: the spot they saved for it, else where the place's challenges
     // start the player, else where its own story starts them, else the path point nearest its
     // middle.
     static (Vector3 At, float Yaw, string Kind, bool Exact)? Start(Spot spot)
     {
-        if ((Arrival(spot) ?? spot.Arrive) is { } chosen && Measure(spot) is { } placed)
+        if (Arrival(spot) is { } chosen && Measure(spot) is { } placed)
         {
             return (chosen.At + placed.Offset, chosen.Yaw, "arrival spot", true);
         }
