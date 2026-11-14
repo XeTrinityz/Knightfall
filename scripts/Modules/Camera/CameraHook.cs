@@ -70,9 +70,10 @@ static class CameraHook
         var game = cache.POV;
         var view = game;
         DisguiseFit.Fit(ref view, controller, deltaTime);
-        CameraView.Fit(ref view, controller, deltaTime, FreeCamera.HasView || FirstPerson.Replaces);
+        CameraView.Fit(ref view, controller, deltaTime, FreeCamera.HasView || FirstPerson.Replaces || Eyes.HasView);
         Villains.Fit(ref view, deltaTime);
         FirstPerson.Fit(ref view, controller, deltaTime);
+        Eyes.Fit(ref view, camera, controller);
         FreeCamera.Fit(ref view, controller);
         if (Same(view, game))
         {
@@ -83,6 +84,33 @@ static class CameraHook
         _gameView = game;
         _ourView = cache.POV;
         _viewOf = camera.Ptr;
+    }
+
+    // Turns the view the game steers Batman by, and not the one drawn, which is made again before
+    // it shows. Called in the game tick, before the player moves. The game's own view still goes
+    // back before its next update.
+    public static void Steer(float yaw)
+    {
+        if (World.Controller?.PlayerCamera is not R3rdPersonCamera { IsValid: true } camera)
+        {
+            return;
+        }
+
+        ref var cache = ref camera.CameraCache;
+        if (_viewOf != camera.Ptr)
+        {
+            _gameView = cache.POV;
+            _viewOf = camera.Ptr;
+        }
+        else if (!Same(cache.POV, _ourView))
+        {
+            return;
+        }
+
+        var steered = cache.POV;
+        steered.Rotation = new Rotator(steered.Rotation.Pitch, yaw, steered.Rotation.Roll);
+        cache.POV = steered;
+        _ourView = steered;
     }
 
     // An unload leaves the game its own view.

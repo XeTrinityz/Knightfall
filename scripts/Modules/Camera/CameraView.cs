@@ -281,7 +281,7 @@ static class CameraView
     // The game's camera has its own state for each gadget's aim and for zooming in. The name
     // only changes with the state, so it's read once per change. Aiming from a crouch or cover
     // reuses the plain crouch and cover states, so there the aim button tells.
-    static bool Aims(R3rdPersonCamera camera)
+    public static bool Aims(R3rdPersonCamera camera)
     {
         var state = camera.GetStateName();
         if (state.Index != _stateIndex)

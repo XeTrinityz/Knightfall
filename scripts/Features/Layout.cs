@@ -65,9 +65,10 @@ static class Layout
 
         Catalog.AddPage("CAMERA")
             .Add("VIEW", CameraView.Sections)
-            .Add("FREE CAMERA", FreeCamera.Sections);
+            .Add("FREE CAMERA", FreeCamera.Sections)
+            .Add("EYES", Eyes.Sections);
 
-        Catalog.Background("camera", static () => { }, CameraHook.Release);
+        Catalog.Background("camera", Eyes.Steer, CameraHook.Release);
 
         Catalog.AddPage("WORLD")
             .Add("CITY",

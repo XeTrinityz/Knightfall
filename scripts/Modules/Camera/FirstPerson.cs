@@ -91,8 +91,8 @@ static class FirstPerson
 
     public static void Fit(ref View view, RPlayerController controller, float deltaTime)
     {
-        // The free camera replaces the view after this anyway.
-        if (!OnFoot.On || World.Driving is not null || FreeCamera.HasView || !Allowed(controller))
+        // The free camera or someone else's eyes replace the view after this anyway.
+        if (!OnFoot.On || World.Driving is not null || FreeCamera.HasView || Eyes.HasView || !Allowed(controller))
         {
             _following = false;
             return;
@@ -123,8 +123,8 @@ static class FirstPerson
     // actually in it.
     static void HideHead()
     {
-        // The free camera sees Batman from outside, so he keeps his head then.
-        var want = World.Controller is { } controller && Allowed(controller) && World.Driving is null && World.Player is not null && !FreeCamera.Free.On;
+        // The free camera and someone else's eyes see Batman from outside, so he keeps his head then.
+        var want = World.Controller is { } controller && Allowed(controller) && World.Driving is null && World.Player is not null && !FreeCamera.Free.On && !Eyes.Watching;
         if (!want)
         {
             ShowHead();
