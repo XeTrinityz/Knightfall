@@ -35,7 +35,7 @@ static class Marks
         }
 
         var reticle = EditorMode.Active && !Menu.Showing;
-        if ((selected is null && preview is null && !reticle && !Markings.Showing && !Threats.Showing && !GuardMarks.Showing) || World.Paused || World.Controller is not { } controller || !Draw.Begin(canvas))
+        if ((selected is null && preview is null && !reticle && !Markings.Showing && !Threats.Showing && !GuardMarks.Showing && !Sidekick.ShowingOrders) || World.Paused || World.Controller is not { } controller || !Draw.Begin(canvas))
         {
             return;
         }
@@ -76,6 +76,7 @@ static class Marks
             // Last, since they draw flat on the screen and leave the hologram's framing behind.
             GuardMarks.Render(time);
             Threats.Render(time);
+            Sidekick.RenderOrders(time);
         }
         finally
         {

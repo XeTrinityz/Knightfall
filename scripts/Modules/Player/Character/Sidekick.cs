@@ -251,12 +251,29 @@ static partial class Sidekick
 
     static string? FightLock => Fights.On ? null : "FIGHTING IS OFF";
 
+    public static readonly Command Order = new(
+        "player.sidekick.order", "ORDER SIDEKICK",
+        "Press to show where your sidekick would go, then aim and left click, or press it again, to send them. Right click cancels. A spot on the floor they hold, facing the way you looked. An enemy they go for until it is down, then they follow you again. Aimed at them, they come back. SIDEKICK COME BACK leaves order mode.",
+        Issue)
+    {
+        Block = static () => Missing(),
+    };
+
+    public static readonly Command Recall = new(
+        "player.sidekick.recall", "SIDEKICK COME BACK",
+        "Ends a held spot or a target. Your sidekick follows you again. In order mode it leaves order mode instead.",
+        CallBack)
+    {
+        Block = static () => Ordered || Aiming ? null : "NO ORDERS GIVEN",
+    };
+
     public static readonly Catalog.Section[] Sections =
     {
         new("CALL", Who, SuitPick, Call, Bring, Dismiss, Rejoins),
         new("SWAP", Swap, ButtonSwaps),
         new("FOLLOWING", Follows, Distance, CatchesUp, Sneaks),
         new("FIGHTING", Fights, Hits, Presses, Covers, Talks),
+        new("ORDERS", Order, Recall),
         new("DUAL TAKEDOWNS", Combat.DualTakedowns) { Borrowed = true },
     };
 
@@ -798,6 +815,7 @@ static partial class Sidekick
         }
 
         _lost = false;
+        SteerFocus();
 
         if (World.Now >= _upkeepAt - UpkeepSeconds && World.Now < _upkeepAt)
         {
@@ -822,6 +840,7 @@ static partial class Sidekick
 
         if (_leaving)
         {
+            ClearHold();
             Leave(controller, follower);
             return;
         }
@@ -835,6 +854,12 @@ static partial class Sidekick
         ThroughDoor(controller, follower);
         FreeSwap(controller);
         Catch(controller, follower);
+        if (Ordered)
+        {
+            Hold(follower);
+            return;
+        }
+
         if (Follows.On && CatchesUp.On)
         {
             CatchUp(controller, follower);
@@ -866,6 +891,7 @@ static partial class Sidekick
         // over the sidekick first, or it would hand on an empty record and the next copy would
         // lose them.
         Adopt();
+        GiveClick();
         if (OnTheWay)
         {
             CancelLoad();
@@ -1639,6 +1665,7 @@ static partial class Sidekick
         _doorOpening = false;
         _farSince = -1f;
         _lookedAt = -100f;
+        ClearHold();
         _rejoinAt = Stopwatch.GetTimestamp() + (long)(RejoinAfterSeconds * Stopwatch.Frequency);
         Keep();
         Catalog.MenuOpening();
@@ -1749,7 +1776,7 @@ static partial class Sidekick
         {
             if (Ours(self))
             {
-                return Follows.On && !_leaving && Game.TryGetPlayerController(out var controller)
+                return Follows.On && !_leaving && !Ordered && Game.TryGetPlayerController(out var controller)
                     && (Following(controller) || (MidMove(controller) && !controller.IsInCombat(false)));
             }
         }
@@ -1914,6 +1941,7 @@ static partial class Sidekick
         taken.StopLookAt();
         taken.StopFaceAt();
         taken.bIsBot = false;
+        ClearHold();
         if (taken.InvManager is RInventoryManager inventory && inventory.CurrentGadget is not { IsValid: true })
         {
             for (var item = inventory.InventoryChain; item is not null; item = item._Inventory)

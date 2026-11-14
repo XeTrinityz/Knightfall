@@ -142,6 +142,31 @@ static partial class Sidekick
             return false;
         }
 
+        // Under orders they never run off on their own. Someone about to hit the player comes
+        // first, then the target they were given. A target the player is striking won't take
+        // their hits, so meanwhile they finish someone else in reach.
+        if (Ordered)
+        {
+            if (Covers.On && Cover(bot, body, player, game))
+            {
+                return true;
+            }
+
+            if (_focus is { } target)
+            {
+                if (target.IsTargettedBy(player))
+                {
+                    Finish(bot, body, player, game);
+                }
+                else
+                {
+                    Focused(bot, body, target);
+                }
+            }
+
+            return true;
+        }
+
         if (Covers.On && Cover(bot, body, player, game))
         {
             return true;

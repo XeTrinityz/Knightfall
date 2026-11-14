@@ -95,6 +95,7 @@ PLAYER > SIDEKICK
 - SIDEKICK PRESSES THE ATTACK. They run to the enemy nearest you, keep hitting and finish off whoever they have hurt, instead of walking to whoever is nearest them.
 - SIDEKICK COVERS YOU. They hit an enemy about to strike you when one is within their reach.
 - SIDEKICK TALKS. They say the game's partner lines when they join a fight, and praise a fight won with a big combo or without being hit. A line that names a hero only plays beside that hero, so nobody is called by the wrong name.
+- ORDER SIDEKICK and SIDEKICK COME BACK. Press ORDER to see where they would go: a ring on the floor, brackets on an enemy, or COME BACK over them. Aim and left click, or press ORDER again, to send them. Right click cancels. Neither click reaches the game. They path there, running when it is far, and hold the spot facing the way you looked, or go for an enemy until it is down and then follow you again. They let a target go after 30 seconds, after 6 seconds without landing a hit or getting closer, or once it is more than 30 m from you, and someone about to hit you always comes first. A spot they cannot find a way to, they reach out of sight. COME BACK ends a hold, or leaves order mode. A held sidekick does not follow you, and DISMISS or a swap ends the hold.
 
 PLAYER > PROGRESS
 
