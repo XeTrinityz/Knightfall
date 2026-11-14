@@ -27,12 +27,48 @@ static class Streets
         Restore = Refill,
     };
 
+    public static readonly Toggle Quiet = new(
+        "world.city.no_chatter", "NO STREET CHATTER",
+        "Stops the thug talk you overhear around the city, plus the chopper chatter and the Riddler and Scarecrow billboards. Story scenes, radio calls and fight shouts still play.")
+    {
+        Tick = KeepQuiet,
+        Restore = EndQuiet,
+    };
+
     public static readonly Command Flip = new(
         "world.city.flip_enemy_cars", "FLIP ENEMY CARS",
         "Turns every thug car, militia tank and APC around you upside down. Police cars, drones and the Batmobile are left alone.",
         FlipAll);
 
-    public static readonly Catalog.Section Section = new("STREETS", Empty, Flip);
+    public static readonly Catalog.Section Section = new("STREETS", Empty, Quiet, Flip);
+
+    // The game keeps chatter quiet while any object is on its suppression list, one per reason.
+    // A class default object never goes away and is never one the game adds, so our entry is
+    // easy to find again after a hot reload and taking it off leaves the game's own reasons alone.
+    static GameObject QuietToken => RNoChatterVolume.DefaultObject;
+
+    static RGameInfo? _quieted;
+
+    static void KeepQuiet()
+    {
+        if (World.Info is not { IsValid: true } game || ReferenceEquals(_quieted, game))
+        {
+            return;
+        }
+
+        game.SetChatterSuppression(true, QuietToken);
+        _quieted = game;
+    }
+
+    static void EndQuiet()
+    {
+        if (_quieted is { IsValid: true } game)
+        {
+            game.SetChatterSuppression(false, QuietToken);
+        }
+
+        _quieted = null;
+    }
 
     static void KeepEmpty()
     {
