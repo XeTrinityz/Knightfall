@@ -211,6 +211,14 @@ static partial class Sidekick
         Block = static () => Follows.On ? null : "FOLLOWING IS OFF",
     };
 
+    public static readonly Toggle Climbs = new(
+        "player.sidekick.climbs", "SIDEKICK CLIMBS AND GRAPPLES",
+        "Your sidekick vaults low fences and walls in their way, and grapples up to a roof you stand on when they have no other way up. Off, they find their own way round or catch up out of sight.", on: true)
+    {
+        Preference = true,
+        Block = static () => Follows.On ? null : "FOLLOWING IS OFF",
+    };
+
     public static readonly Toggle Fights = new(
         "player.sidekick.fights", "SIDEKICK FIGHTS",
         "Your sidekick joins your fights and dual takedowns. Off, they stand back and leave the fight to you.", on: true)
@@ -267,11 +275,18 @@ static partial class Sidekick
         Block = static () => Ordered || Aiming ? null : "NO ORDERS GIVEN",
     };
 
+    public static readonly Toggle Marker = new(
+        "player.sidekick.marker", "SIDEKICK MARKER",
+        "A marker over your sidekick with their name and what they are doing, and an arrow on the edge of the screen when they are out of sight. A spot they hold keeps a ring and an enemy they go after keeps its brackets. Order mode shows its own marker either way.", on: true)
+    {
+        Preference = true,
+    };
+
     public static readonly Catalog.Section[] Sections =
     {
-        new("CALL", Who, SuitPick, Call, Bring, Dismiss, Rejoins),
+        new("CALL", Who, SuitPick, Call, Bring, Dismiss, Rejoins, Marker),
         new("SWAP", Swap, ButtonSwaps),
-        new("FOLLOWING", Follows, Distance, CatchesUp, Sneaks),
+        new("FOLLOWING", Follows, Distance, CatchesUp, Sneaks, Climbs),
         new("FIGHTING", Fights, Hits, Presses, Covers, Talks),
         new("ORDERS", Order, Recall),
         new("DUAL TAKEDOWNS", Combat.DualTakedowns) { Borrowed = true },
@@ -816,6 +831,7 @@ static partial class Sidekick
 
         _lost = false;
         SteerFocus();
+        FlyGrapple();
 
         if (World.Now >= _upkeepAt - UpkeepSeconds && World.Now < _upkeepAt)
         {
@@ -854,6 +870,11 @@ static partial class Sidekick
         ThroughDoor(controller, follower);
         FreeSwap(controller);
         Catch(controller, follower);
+        if (Traverse(controller, follower))
+        {
+            return;
+        }
+
         if (Ordered)
         {
             Hold(follower);
@@ -892,6 +913,7 @@ static partial class Sidekick
         // lose them.
         Adopt();
         GiveClick();
+        EndGrapple();
         if (OnTheWay)
         {
             CancelLoad();
@@ -1776,7 +1798,7 @@ static partial class Sidekick
         {
             if (Ours(self))
             {
-                return Follows.On && !_leaving && !Ordered && Game.TryGetPlayerController(out var controller)
+                return Follows.On && !_leaving && !Ordered && !Approaching && Game.TryGetPlayerController(out var controller)
                     && (Following(controller) || (MidMove(controller) && !controller.IsInCombat(false)));
             }
         }

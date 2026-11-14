@@ -90,7 +90,9 @@ PLAYER > SIDEKICK
 - SIDEKICK SUIT. Picks the suit they arrive in from the ones you have unlocked for them. STORY SUIT is the one picked in the showcase. Your own picks are left as they were.
 - SWAP WITH SIDEKICK, BRING SIDEKICK HERE and DISMISS SIDEKICK. SWAP ON CALL BUTTON picks whether the call Batmobile button swaps you with them or calls the car. In a fight the button never calls the car, and in the car it always gets you out.
 - SIDEKICK REJOINS. A sidekick the game takes away comes back once you are free. That covers scenes, restarts, loading a save and the story bringing in a partner of its own.
+- SIDEKICK MARKER. A marker over your sidekick with their name and what they are doing, and an arrow on the edge of the screen when they are out of sight.
 - SIDEKICK FOLLOWS YOU, SIDEKICK FOLLOW DISTANCE, SIDEKICK CATCHES UP and SIDEKICK SNEAKS WITH YOU set how they keep up. SIDEKICK FIGHTS keeps them in or out of your fights. A fight that starts while they are far off brings them over.
+- SIDEKICK CLIMBS AND GRAPPLES. They vault low fences and walls in their way with the player's own vault, and grapple up to a roof you stand on when they have no other way up, landing with the game's own grapple finish.
 - SIDEKICK HITS HURT. Their hits knock enemies out and land harder as your combo grows. The story's partners only stagger them.
 - SIDEKICK PRESSES THE ATTACK. They run to the enemy nearest you, keep hitting and finish off whoever they have hurt, instead of walking to whoever is nearest them.
 - SIDEKICK COVERS YOU. They hit an enemy about to strike you when one is within their reach.

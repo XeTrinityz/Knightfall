@@ -489,13 +489,14 @@ static partial class Sidekick
     static readonly Rgba OrderWhite = new(255, 255, 255);
     static readonly Rgba OrderEnemy = new(255, 178, 70);
 
-    public static bool ShowingOrders => Aiming || (Ordered && Present);
+    public static bool ShowingMarks => Aiming || (Present && Marker.On);
 
-    // Drawn by the editor's mark pass, flat on the screen once the hologram's framing is off. In
-    // order mode it shows what the order would do. A held spot keeps a faint ring.
-    public static void RenderOrders(float time)
+    // Drawn by the editor's mark pass, flat on the screen once the hologram's framing is off. The
+    // sidekick's marker, the ring on a spot they hold, the brackets on their target, and in order
+    // mode what the order would do.
+    public static void RenderMarks(float time)
     {
-        if (!ShowingOrders)
+        if (!ShowingMarks)
         {
             return;
         }
@@ -504,14 +505,22 @@ static partial class Sidekick
         Draw.Place(0f, 0f, 1f);
         Draw.Fade(1f);
         var accent = Knightfall.Look.AccentOr(Theme.Current.Accent);
-        if (_hold is { } held)
+        if (Marker.On)
         {
-            Ring(held, accent with { A = 90 }, 1f);
-        }
+            if (_hold is { } held)
+            {
+                Ring(held, accent with { A = 90 }, 1f);
+            }
 
-        if (_focus is { IsValid: true, bDeleteMe: false } chased)
-        {
-            Brackets(chased, Height(chased), OrderEnemy with { A = 120 }, 1f);
+            if (_focus is { IsValid: true, bDeleteMe: false } chased)
+            {
+                Brackets(chased, Height(chased), OrderEnemy with { A = 120 }, 1f);
+            }
+
+            if (_bot?.BotPawn is { IsValid: true, bDeleteMe: false, bHidden: false } marked)
+            {
+                Mark(marked, accent, time);
+            }
         }
 
         if (!Aiming || Pick() is not { } target || _bot?.BotPawn is not { IsValid: true } follower)
@@ -625,13 +634,72 @@ static partial class Sidekick
         }
 
         var spot = pixels / Draw.Scale;
+        Card(spot.X, spot.Y - 10f, title, note, color);
+        Draw.Triangle(spot.X - 4f, spot.Y - 9f, spot.X + 4f, spot.Y - 9f, spot.X, spot.Y - 3f, color);
+    }
+
+    // A card centred on x, its bottom edge at y.
+    static void Card(float x, float bottom, string title, string note, Rgba color)
+    {
         var width = MathF.Max(Draw.TrackedWidth(title, TagText, 1.5f), Draw.TextWidth(note, TagText)) + 12f;
-        var top = spot.Y - 10f - Threats.TagHeight;
-        var left = spot.X - width / 2f;
+        var top = bottom - Threats.TagHeight;
+        var left = x - width / 2f;
         Draw.Rect(left, top, width, Threats.TagHeight, OrderInk with { A = 170 });
         Draw.Rect(left, top, 2f, Threats.TagHeight, color);
         Draw.Tracked(title, left + 6f, top + 3f, TagText, 1.5f, OrderWhite);
         Draw.Text(note, left + 6f, top + 12f, TagText, color);
-        Draw.Triangle(spot.X - 4f, spot.Y - 9f, spot.X + 4f, spot.Y - 9f, spot.X, spot.Y - 3f, color);
     }
+
+    // How far over the sidekick's head the marker floats, and from how far off their card and the
+    // edge arrow show.
+    const float MarkAbove = 40f;
+    const float MarkNamed = Metre * 30f;
+    const float MarkArrow = Metre * 120f;
+
+    // A pointer over them with their name and what they are doing when near, and an arrow on the
+    // screen's edge when they are out of view.
+    static void Mark(RPawnPlayer body, Rgba accent, float time)
+    {
+        var head = HeadOf(body) + Vector3.UnitZ * MarkAbove;
+        var you = Teleport.Mover is { IsValid: true } mover ? mover.Location : Hologram.Eye;
+        var away = Vector3.Distance(body.Location, you);
+        var (state, color) = Doing(accent);
+        var name = Waiting is null ? Array.Find(Known, known => known.Name == _name).Label ?? "SIDEKICK" : body.CharacterName.ToString().ToUpperInvariant();
+        if (Hologram.Screen(head, out var pixels))
+        {
+            var spot = pixels / Draw.Scale;
+            if (spot.X >= Threats.Edge && spot.X <= Draw.ScreenWidth - Threats.Edge && spot.Y >= Threats.Edge && spot.Y <= Draw.ScreenHeight - Threats.Edge)
+            {
+                var y = spot.Y + MathF.Sin(time * 3f) * 1.5f;
+                Draw.Triangle(spot.X - 6f, y - 8f, spot.X + 6f, y - 8f, spot.X, y, color);
+                if (away <= MarkNamed)
+                {
+                    Card(spot.X, y - 12f, name, state, color);
+                }
+
+                return;
+            }
+        }
+
+        if (away <= MarkArrow)
+        {
+            Threats.Arrow(Hologram.Direction(head), name, Threats.Distance(away), color);
+        }
+    }
+
+    // Their collision is shorter than they stand, so the marker goes over the head bone.
+    static readonly FName HeadBone = new("Bip01_Head");
+
+    static Vector3 HeadOf(RPawnPlayer body) =>
+        body.Mesh is { IsValid: true } mesh && mesh.MatchRefBone(HeadBone) >= 0
+            ? mesh.GetBoneLocation(HeadBone, 0)
+            : body.Location + Vector3.UnitZ * body.GetCollisionHeight();
+
+    static (string State, Rgba Color) Doing(Rgba accent) =>
+        _grappling ? ("GRAPPLING", accent)
+        : _focus is not null ? ("GOING AFTER IT", OrderEnemy)
+        : Holding ? ("HOLDING", accent)
+        : Fights.On && World.Controller is { } controller && controller.IsInCombat(false) ? ("FIGHTING", OrderEnemy)
+        : !Follows.On ? ("WAITING", accent)
+        : ("WITH YOU", accent);
 }
