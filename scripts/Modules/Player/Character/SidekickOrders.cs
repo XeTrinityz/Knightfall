@@ -199,6 +199,7 @@ static partial class Sidekick
 
     static void Stand(Vector3 at, float yaw)
     {
+        Rethink();
         _hold = at;
         _holdYaw = yaw;
         _focus = null;
@@ -242,7 +243,7 @@ static partial class Sidekick
     {
         try
         {
-            if (Ordered && Ours(self))
+            if ((Ordered || Traversing) && Ours(self))
             {
                 return;
             }
@@ -270,6 +271,7 @@ static partial class Sidekick
     static void ClearHold()
     {
         var had = Ordered;
+        Rethink();
         _hold = null;
         _focus = null;
         _steering = false;
@@ -347,6 +349,7 @@ static partial class Sidekick
 
     static void Pursue(RRobinBotController bot, RPawnVillain enemy)
     {
+        Rethink();
         ResetPath(bot);
         bot.StopAllLookAtPlayer();
         _focus = enemy;
@@ -696,7 +699,7 @@ static partial class Sidekick
             : body.Location + Vector3.UnitZ * body.GetCollisionHeight();
 
     static (string State, Rgba Color) Doing(Rgba accent) =>
-        _grappling ? ("GRAPPLING", accent)
+        TraversalNote is { } note ? (note, Stranded ? OrderEnemy : accent)
         : _focus is not null ? ("GOING AFTER IT", OrderEnemy)
         : Holding ? ("HOLDING", accent)
         : Fights.On && World.Controller is { } controller && controller.IsInCombat(false) ? ("FIGHTING", OrderEnemy)

@@ -78,7 +78,8 @@ static partial class Sidekick
 
         // The move plays its second half on the game's switch partner, whichever body that is.
         // It ends any move of theirs itself, so only a fight move keeps them out.
-        if (info.PlayerSwitchPawn is not RPawnPlayer partner || partner.Controller is not { } driver || driver.Ptr != _bot!.Ptr || partner.CombatMove is not null)
+        if (info.PlayerSwitchPawn is not RPawnPlayer partner || partner.Controller is not { } driver || driver.Ptr != _bot!.Ptr || partner.CombatMove is not null
+            || Traversing)
         {
             return null;
         }

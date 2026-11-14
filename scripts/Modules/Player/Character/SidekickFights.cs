@@ -106,6 +106,12 @@ static partial class Sidekick
             if (Ours(self) && self.BotPawn is RPawnPlayerCombat { IsValid: true } mine && Game.TryGetPlayerController(out var controller)
                 && controller.Pawn is RPawnPlayerCombat { IsValid: true } player)
             {
+                // A strike from the air or half way up a ledge would leave them hanging there.
+                if (Traversing)
+                {
+                    return;
+                }
+
                 body = mine;
                 if (Pressed(self, mine, player))
                 {

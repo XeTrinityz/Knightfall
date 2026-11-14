@@ -92,7 +92,7 @@ PLAYER > SIDEKICK
 - SIDEKICK REJOINS. A sidekick the game takes away comes back once you are free. That covers scenes, restarts, loading a save and the story bringing in a partner of its own.
 - SIDEKICK MARKER. A marker over your sidekick with their name and what they are doing, and an arrow on the edge of the screen when they are out of sight.
 - SIDEKICK FOLLOWS YOU, SIDEKICK FOLLOW DISTANCE, SIDEKICK CATCHES UP and SIDEKICK SNEAKS WITH YOU set how they keep up. SIDEKICK FIGHTS keeps them in or out of your fights. A fight that starts while they are far off brings them over.
-- SIDEKICK CLIMBS AND GRAPPLES. They vault low fences and walls in their way with the player's own vault, and grapple up to a roof you stand on when they have no other way up, landing with the game's own grapple finish.
+- SIDEKICK CLIMBS AND GRAPPLES. When they have no other way to you, or to a spot you sent them to, they vault low fences and walls with the player's own vault, climb ledges within reach, grapple up to a roof or across a gap, and drop down off an edge with the game's own jump for partners. Their marker shows what they are doing. After two tries that fail they stop for a while, the marker says CAN'T REACH YOU, and catch-up or BRING SIDEKICK HERE brings them.
 - SIDEKICK HITS HURT. Their hits knock enemies out and land harder as your combo grows. The story's partners only stagger them.
 - SIDEKICK PRESSES THE ATTACK. They run to the enemy nearest you, keep hitting and finish off whoever they have hurt, instead of walking to whoever is nearest them.
 - SIDEKICK COVERS YOU. They hit an enemy about to strike you when one is within their reach.

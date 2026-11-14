@@ -1,4 +1,4 @@
 name = "Knightfall"
 author = "XeTrinityz"
-version = "1.4.0"
+version = "1.5.0"
 description = "In-game menu for Batman: Arkham Knight. F1 opens it. On a controller, click both sticks. Your choices are saved in settings.toml."

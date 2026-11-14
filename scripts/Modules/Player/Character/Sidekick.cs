@@ -213,7 +213,7 @@ static partial class Sidekick
 
     public static readonly Toggle Climbs = new(
         "player.sidekick.climbs", "SIDEKICK CLIMBS AND GRAPPLES",
-        "Your sidekick vaults low fences and walls in their way, and grapples up to a roof you stand on when they have no other way up. Off, they find their own way round or catch up out of sight.", on: true)
+        "Your sidekick vaults low fences and walls in their way, climbs ledges, grapples up to a roof or across a gap, and drops down after you, when they have no other way to you or to a spot you sent them to. Their marker shows what they are doing, and says so when they can't reach you. Off, they find their own way round or catch up out of sight.", on: true)
     {
         Preference = true,
         Block = static () => Follows.On ? null : "FOLLOWING IS OFF",
@@ -684,6 +684,11 @@ static partial class Sidekick
             return Outcome.Failed("LOCKED BY THE STORY");
         }
 
+        if (Traversing)
+        {
+            return Outcome.Failed("THEY ARE BUSY");
+        }
+
         // Not forced, so the game's own rules apply. It won't swap mid-move, while aiming or
         // when the story has locked it.
         bool swapped;
@@ -831,7 +836,7 @@ static partial class Sidekick
 
         _lost = false;
         SteerFocus();
-        FlyGrapple();
+        Advance();
 
         if (World.Now >= _upkeepAt - UpkeepSeconds && World.Now < _upkeepAt)
         {
@@ -869,7 +874,11 @@ static partial class Sidekick
         Sneak(controller, follower);
         ThroughDoor(controller, follower);
         FreeSwap(controller);
-        Catch(controller, follower);
+        if (!Traversing)
+        {
+            Catch(controller, follower);
+        }
+
         if (Traverse(controller, follower))
         {
             return;
@@ -913,7 +922,7 @@ static partial class Sidekick
         // lose them.
         Adopt();
         GiveClick();
-        EndGrapple();
+        SettleTraversal();
         if (OnTheWay)
         {
             CancelLoad();
@@ -1185,6 +1194,7 @@ static partial class Sidekick
                 pawn.SharedBotController = bot;
                 bot.Possess(body, false);
                 GiveKit(body);
+                PutAway(body);
             }
         }
 
@@ -1288,6 +1298,7 @@ static partial class Sidekick
     // Stands them on a floor point with nowhere left to walk to.
     static void Place(RPawnPlayer follower, Vector3 floor, float yaw)
     {
+        StopTraversal(follower);
         follower.SetLocationIgnoringCollision(floor + new Vector3(0f, 0f, follower.GetCollisionHeight() + 5f));
         follower.SetRotation(new Rotator(0f, yaw, 0f));
         follower.Velocity = Vector3.Zero;
@@ -1687,6 +1698,7 @@ static partial class Sidekick
         _doorOpening = false;
         _farSince = -1f;
         _lookedAt = -100f;
+        ForgetTraversal();
         ClearHold();
         _rejoinAt = Stopwatch.GetTimestamp() + (long)(RejoinAfterSeconds * Stopwatch.Frequency);
         Keep();
@@ -1798,7 +1810,7 @@ static partial class Sidekick
         {
             if (Ours(self))
             {
-                return Follows.On && !_leaving && !Ordered && !Approaching && Game.TryGetPlayerController(out var controller)
+                return Follows.On && !_leaving && !Ordered && !Traversing && Game.TryGetPlayerController(out var controller)
                     && (Following(controller) || (MidMove(controller) && !controller.IsInCombat(false)));
             }
         }
@@ -1922,9 +1934,14 @@ static partial class Sidekick
         try
         {
             Adopt();
-            if (!force && !_trading && Present && (_leaving || !ButtonSwaps.On || World.Driving is not null))
+            if (!force && Present && (Traversing || (!_trading && (_leaving || !ButtonSwaps.On || World.Driving is not null))))
             {
                 return false;
+            }
+
+            if (force && Present)
+            {
+                SettleTraversal();
             }
         }
         catch (Exception error)

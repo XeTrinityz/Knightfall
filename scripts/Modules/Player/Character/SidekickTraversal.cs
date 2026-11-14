@@ -8,14 +8,20 @@ using Pace = BmSDK.Engine.RAutomaticTransitions.EMovementSpeed;
 
 namespace Knightfall;
 
-// Vaults and grapples. The story's partners have neither, so a fence or a roof stopped them. Any
-// hero can play the player's own vault, and fires their own grapple gun the way the player
-// does. The player's controller finishes a grapple onto the ledge, and a sidekick has none, so
-// that last part is done here with the game's own landing move.
+// Getting to where the partner AI has no path. The story's partners only walk, so a fence, a
+// ledge or a roof stopped them. Ours vaults what is in the way, climbs a ledge within reach,
+// fires their own grapple gun up to a roof or across a gap, and drops off an edge with the game's
+// own jump for partners. The player's controller finishes a grapple onto the ledge, and a
+// sidekick has none, so that last part is done here with the gun's own landing move.
+//
+// The upkeep asks Traverse, which picks what to do and starts it. Advance runs every tick and
+// sees it through. While any of it is under way Traversing is true, and the follow, the fight
+// moves, orders and catch-up all leave them alone.
 static partial class Sidekick
 {
     const string ClimbSet = "Anim_Batman_Climb.Code.BM_Climb";
     const string VaultAnim = "Run_Climb_Over_128";
+
     const string GrappleLanding = "Batman_Gadget_Moves.GrappleGun.Grapple_End_Climb_Flat";
 
     // A vault is for something between knee and chest high, with floor on the far side.
@@ -23,16 +29,42 @@ static partial class Sidekick
     const float VaultHighest = 150f;
     const float VaultLook = 110f;
     const float VaultOver = 260f;
+    const float VaultMost = 3f;
     const float BlockedSpeed = 40f;
     const float BlockedSeconds = 0.4f;
-    const float TraverseRest = 1.5f;
 
-    // A grapple is for a player standing at least this far above them, this near, when they have
-    // stood blocked this long.
+    // How far past the front of what is in the way its top is looked for. A thin fence has
+    // hardly any top to find.
+    static readonly float[] VaultTops = { 4f, 24f };
+
+    // After a move they stand a moment before the next one is thought about, longer after one
+    // that failed. After this many tries at the same place came to nothing they stop trying for
+    // a while, so catch-up gets its turn. A goal that moves this far is a new place.
+    const float ArrivedRest = 0.4f;
+    const float TraverseRest = 1.5f;
+    const int GiveUpAfter = 2;
+    const float GiveUpRest = 10f;
+    const float GoalMoved = Metre * 5f;
+    const float JoinedRest = 5f;
+
+    // They wait this long standing still before anything but a vault, in case the partner AI
+    // finds its own way. It looks for a path a few times a second. The partner AI walks up from
+    // this much further off than it stops at, so nearer than that on the level is near enough.
+    const float ReachWait = 0.8f;
+    const float ReachShort = 300f;
+
+    // A goal this much higher needs a climb. An edge within arm's reach is climbed by hand, a
+    // higher one with the gun. The game's landing move pulls them onto the edge from this far.
+    const float ClimbRise = 130f;
     const float GrappleRise = 250f;
     const float GrappleNear = Metre * 40f;
-    const float GrappleWait = 1.5f;
+    const float MantleReach = 300f;
+    const float MantleStand = 100f;
+    const float UnderEdge = 200f;
+
+    // How an edge is looked for: steps along the floor until it falls away.
     const float EdgeStep = 50f;
+    const float EdgeRise = 80f;
     const float EdgeDrop = 200f;
     const float EdgeStepDown = 120f;
     const float EdgeSearchPast = 600f;
@@ -40,127 +72,246 @@ static partial class Sidekick
 
     static readonly (float Out, float Up)[] SightPoints = { (60f, 60f), (60f, 150f), (120f, 250f), (0f, 250f) };
 
-    // The flight stops short of the ledge, and the landing move covers the rest. Pulled in to
-    // this far first at this speed, so the landing doesn't jump.
+    // The flight stops short of the ledge, and the landing move covers the rest. They are pulled
+    // in to this far first at this speed, so the landing doesn't jump.
     const float LandFrom = 200f;
+    const float PullSpeed = 2500f;
+
+    // The pull aims at where they will hang, this far out from the wall and under the edge, so
+    // neither is in the way. Blocked all round for this long, they land from where they are.
+    const float HangOut = 90f;
+    const float HangUnder = 40f;
+    const float HungSeconds = 0.4f;
 
     // Within this far, a flight that turns away from the ledge or into a fall lands at once.
     const float LandFar = Metre * 12f;
     const float LandPassing = 50f;
 
-    static bool _flown;
-    static float _nearest = float.MaxValue;
-    const float PullSpeed = 2500f;
+    // The longest a shot may take to turn into a flight, a grapple to reach its ledge, and a
+    // landing or a drop to end. A long grapple gets more time, a second for every so far.
+    const float FireMost = 3f;
     const float GrappleGiveUp = 6f;
+    const float GrappleSecondEvery = Metre * 15f;
+    const float LandingMost = 5f;
+    const float DropGiveUp = 6f;
 
-    static float _blockedSince = -1f;
-    static float _restUntil = -100f;
-    static float _lowSince = -1f;
+    // A gap between roofs is grappled across, from near their own edge, when the far side is no
+    // wider off or further down than this. A line this high over both edges has to be clear, so
+    // a wall isn't taken for a gap.
+    const float CrossFrom = Metre * 3f;
+    const float CrossDrop = Metre * 10f;
+    const float CrossLeast = Metre * 1.5f;
+    const float CrossBack = 40f;
+    const float GrappleAcross = Metre * 35f;
+    const float AirHeight = 150f;
 
-    static bool _grappling;
-    static Vector3 _grappleTo;
-    static Vector3 _grappleOut;
+    // A goal this much lower is dropped down to, off an edge no higher than the most. The floor
+    // they land on may lie this far under the goal, like a dip before it.
+    const float DropLeast = 200f;
+    const float DropMost = Metre * 20f;
+    const float DropUnder = 300f;
+    const float DropFrom = 110f;
+    const float DropBack = 25f;
+    const float DropArrive = 40f;
+    const float DropTook = 80f;
+
+    // A run of their own to somewhere the partner AI has no path to, like the foot of a wall or
+    // the edge of their roof. It may take this long plus the time the distance takes at a slow
+    // walk, and ends early when they stand blocked. This near counts as there.
+    const float RunMost = 2f;
+    const float RunSlowest = 180f;
+    const float RunStalled = 0.75f;
+    const float RunArrive = 100f;
+
+    // The last stretch is walked. An edge further off than this is run to in two goes, the
+    // first one stopping this far short of it.
+    const float WalkWithin = 400f;
+    const int RunsMost = 3;
+    const float EdgeRunFrom = 500f;
+    const float EdgeRunShort = 250f;
+
+    // A partner AI still waiting on a move this long after the move ended is woken.
+    const float ParkedSeconds = 1f;
+
+    static readonly FName GrapplePose = new("Grapple");
+    static readonly FName WaitsOnMove = new("SpecialMove");
+    static readonly FName WaitsOnFall = new("FallingState");
+    static readonly FName NoState = new("None");
+
+    // The part of a traversal they are on.
+    enum Leg
+    {
+        None,
+        Run,
+        Fire,
+        Flight,
+        Landing,
+        Vault,
+        Drop,
+    }
+
+    // How long something has gone on without a break. Game time starts over in a new world, so a
+    // start that lies ahead is from the old one.
+    struct Spell
+    {
+        bool _on;
+        float _from;
+
+        public void Stop() => _on = false;
+
+        public bool Lasted(float seconds)
+        {
+            if (!_on || World.Now < _from)
+            {
+                _on = true;
+                _from = World.Now;
+            }
+
+            return World.Now - _from >= seconds;
+        }
+    }
+
+    static Leg _leg;
+    static float _legSince;
+    static bool _aloft;
+    static bool _byHand;
+
+    static Vector3 _ledge;
+    static Vector3 _ledgeOut;
     static float _grappleSince;
-    static long _flewAt;
+    static float _grappleFor;
+    static float _nearest = float.MaxValue;
+    static Vector3 _runTo;
+    static float _runFor;
+    static float _runWithin = RunArrive;
+    static float _dropFrom;
+
+    static Spell _still;
+    static Spell _blocked;
+    static Spell _stalled;
+    static Spell _parked;
+    static Spell _hung;
+    static bool _ready;
+    static int _runs;
+
+    static float _restFrom;
+    static float _restFor;
+    static int _tries;
+    static bool _gaveUp;
+    static Vector3 _triedFor;
+    static string _refused = "";
 
     static AnimSet? _climbSet;
     static RSpecialMoveConfig? _landing;
 
-    static bool Grappling => _grappling;
+    // In the middle of a run-up, a vault, a climb, a grapple or a drop.
+    static bool Traversing => _leg != Leg.None;
 
-    // A new world starts game time over, so a rest that reaches further ahead than one could is
-    // from the old world.
-    static bool Resting => World.Now < _restUntil && _restUntil - World.Now <= TraverseRest;
+    // The body the partner AI has, while both are still in the world.
+    static RPawnPlayer? Follower =>
+        _bot is { IsValid: true, bDeleteMe: false } bot && bot.BotPawn is { IsValid: true, bDeleteMe: false } body ? body : null;
 
-    // From the upkeep. True while a grapple is under way, when nothing else should move them.
+    static bool Resting => World.Now >= _restFrom && World.Now - _restFrom < _restFor;
+
+    // What the marker says while they are at it, or once they have given up on a place.
+    static string? TraversalNote => _leg switch
+    {
+        Leg.Run => "FINDING A WAY",
+        Leg.Fire or Leg.Flight => "GRAPPLING",
+        Leg.Landing => _byHand ? "CLIMBING" : "GRAPPLING",
+        Leg.Vault => "VAULTING",
+        Leg.Drop => "DROPPING DOWN",
+        _ => Stranded ? Holding ? "CAN'T GET THERE" : "CAN'T REACH YOU" : null,
+    };
+
+    static bool Stranded => _gaveUp && Resting;
+
+    // Who or what they are trying to get to, for the log.
+    static string Where => Holding ? "the spot they hold" : "you";
+
+    // From the upkeep. True while a traversal is under way, when nothing else should move them.
     static bool Traverse(RPlayerController controller, RPawnPlayer follower)
     {
-        if (_grappling || Approach(follower))
+        if (_leg == Leg.Run)
+        {
+            Run(controller, follower);
+        }
+
+        if (_leg != Leg.None)
         {
             return true;
         }
 
         Untangle(follower);
-        if (!Climbs.On || controller.IsInCombat(false) || follower.CurrentSpecialMove is not null || follower.CombatMove is not null
-            || follower.Physics != Actor.EPhysics.PHYS_Walking || Resting)
+        if (!Climbs.On || controller.IsInCombat(false) || Switcher.InScene(controller) || follower.CurrentSpecialMove is not null || follower.CombatMove is not null
+            || follower.Physics != Actor.EPhysics.PHYS_Walking)
         {
-            _blockedSince = -1f;
-            _lowSince = -1f;
+            Idle();
             return false;
         }
 
-        var speed = new Vector2(follower.Velocity.X, follower.Velocity.Y).Length();
-        if (Goal(controller, out var goal, out var facing) && (Overhead(follower, goal, facing, speed) || Across(follower, goal, speed)))
+        var bound = Goal(controller, out var goal, out var facing);
+        if (bound && Vector3.DistanceSquared(goal, _triedFor) > GoalMoved * GoalMoved)
         {
-            return true;
+            NewPlace(goal);
         }
 
-        if (speed > BlockedSpeed || !Trying(follower))
+        if (Resting)
         {
-            _blockedSince = -1f;
+            Idle();
             return false;
         }
 
-        if (_blockedSince < 0f || World.Now < _blockedSince)
+        // Further off than a grapple reaches is left to catch-up.
+        var feet = Feet(follower);
+        var slow = Slow(follower);
+        if (bound && (slow || _ready) && Apart(feet, goal) && Flat(goal, feet) <= GrappleNear * GrappleNear)
         {
-            _blockedSince = World.Now;
+            if (_ready || _still.Lasted(ReachWait))
+            {
+                if (!_ready)
+                {
+                    _runs = 0;
+                }
+
+                Idle();
+                return goal.Z - feet.Z >= ClimbRise ? Up(follower, feet, goal, facing) : Over(follower, feet, goal);
+            }
+        }
+        else
+        {
+            _still.Stop();
+            _ready = false;
         }
 
-        if (World.Now - _blockedSince >= BlockedSeconds && Vault(follower))
+        if (!slow || !Trying(follower))
         {
-            _blockedSince = -1f;
-            _restUntil = World.Now + TraverseRest;
-        }
-
-        return false;
-    }
-
-    // A player standing on a roof above them, with the sidekick standing still below for a
-    // moment, is grappled up to.
-    static bool Overhead(RPawnPlayer follower, Vector3 goal, float facing, float speed)
-    {
-        if (goal.Z - Feet(follower).Z < GrappleRise || Flat(goal, follower.Location) > GrappleNear * GrappleNear || speed > BlockedSpeed)
-        {
-            _lowSince = -1f;
+            _blocked.Stop();
             return false;
         }
 
-        if (_lowSince < 0f || World.Now < _lowSince)
-        {
-            _lowSince = World.Now;
-        }
-
-        if (World.Now - _lowSince < GrappleWait)
+        if (!_blocked.Lasted(BlockedSeconds) || !Vault(follower))
         {
             return false;
         }
 
-        _lowSince = -1f;
-        if (!GrappleUp(follower, goal, facing))
-        {
-            _restUntil = World.Now + TraverseRest;
-            return false;
-        }
-
+        Idle();
         return true;
     }
 
-    // Why a grapple didn't happen, once per reason, for the support log.
-    static string _grappleRefused = "";
+    static bool Slow(RPawnPlayer follower) =>
+        follower.Velocity.X * follower.Velocity.X + follower.Velocity.Y * follower.Velocity.Y <= BlockedSpeed * BlockedSpeed;
 
-    static bool Refuse(string why)
+    static void Idle()
     {
-        if (why != _grappleRefused)
-        {
-            _grappleRefused = why;
-            Log.Info($"{_name} can't reach you: {why}.");
-        }
-
-        return false;
+        _still.Stop();
+        _blocked.Stop();
+        _ready = false;
     }
 
     // Where they are trying to get to: a spot they were ordered to hold, or the player on their
-    // feet. Nowhere while they go after a target.
+    // feet while they follow. Nowhere while they go after a target, and nowhere the story keeps
+    // its partners out of.
     static bool Goal(RPlayerController controller, out Vector3 goal, out float facing)
     {
         goal = default;
@@ -174,182 +325,418 @@ static partial class Sidekick
         {
             goal = held;
             facing = _holdYaw;
-            return true;
+            return !_arrived;
         }
 
-        if (controller.Pawn is not RPawnPlayer player || player.Physics != Actor.EPhysics.PHYS_Walking)
+        if (!Follows.On || !Following(controller) || controller.Pawn is not RPawnPlayer { Physics: Actor.EPhysics.PHYS_Walking } player || player.Base is Pawn)
         {
             return false;
         }
 
         goal = Feet(player);
         facing = player.Rotation.Yaw;
-        return true;
+        return _bot!.BotExclusionVolume is not { IsValid: true, bDeleteMe: false } keptOut || !keptOut.EncompassesPoint(player.Location);
     }
 
-    // A run of their own to somewhere the partner AI has no path to, like the foot of a wall or
-    // the edge of their roof. The follow and a held spot wait until they are there, or a few
-    // seconds have gone.
-    const float UnderEdge = 200f;
-    const float ApproachMost = 4f;
-
-    static Vector3 _approachTo;
-    static float _approachUntil = -100f;
-
-    static bool Approaching => World.Now < _approachUntil && _approachUntil - World.Now <= ApproachMost;
-
-    static void RunTo(RPawnPlayer follower, Vector3 at)
+    // Out of the reach the partner AI stands at: well above, well below or a good way off. A
+    // spot they were sent to is out of reach until they stand on it.
+    static bool Apart(Vector3 feet, Vector3 goal)
     {
-        _bot!.ClearNavigation();
-        _bot.bWasMoving = false;
-        _walkedAt = -100f;
-        _approachTo = at;
-        _approachUntil = World.Now + ApproachMost;
-        follower.SetMovementSpeed(Pace.MS_Run, 1f, default);
-        follower.MoveTo(at);
-    }
-
-    static bool Approach(RPawnPlayer follower)
-    {
-        if (!Approaching)
-        {
-            return false;
-        }
-
-        if (Flat(_approachTo, follower.Location) > HoldClose * HoldClose)
+        if (Holding)
         {
             return true;
         }
 
-        _approachUntil = -100f;
-        follower.StopMoveTo();
+        var rise = goal.Z - feet.Z;
+        var near = _bot!.StandBehindDist + ReachShort;
+        return rise >= ClimbRise || rise <= -DropLeast || Flat(goal, feet) > near * near;
+    }
+
+    static void NewPlace(Vector3 goal)
+    {
+        _triedFor = goal;
+        _tries = 0;
+        _refused = "";
+        _gaveUp = false;
+        _restFor = 0f;
+    }
+
+    static void Rest(float seconds)
+    {
+        _restFrom = World.Now;
+        _restFor = seconds;
+    }
+
+    static void Begin(Leg leg)
+    {
+        _leg = leg;
+        _legSince = World.Now;
+        _aloft = false;
+    }
+
+    // A move that got them somewhere.
+    static void Arrived(RPawnPlayer follower)
+    {
+        _leg = Leg.None;
+        _tries = 0;
+        _runs = 0;
+        Rest(ArrivedRest);
+        if (_bot is not { IsValid: true, bDeleteMe: false } bot)
+        {
+            return;
+        }
+
+        ResetPath(bot);
+        if (bot.bCrouched && follower.Physics == Actor.EPhysics.PHYS_Walking && follower.CurrentSpecialMove is null)
+        {
+            Stance(bot, follower, true);
+        }
+    }
+
+    // A try that came to nothing. After a few at the same place they stop for a while.
+    static void Missed()
+    {
+        _leg = Leg.None;
+        _runs = 0;
+        if (++_tries < GiveUpAfter)
+        {
+            Rest(TraverseRest);
+            return;
+        }
+
+        Rest(GiveUpRest);
+        if (!_gaveUp)
+        {
+            _gaveUp = true;
+            Log.Info($"{_name} gave up getting to {Where} after {_tries} tries. Catch-up or BRING SIDEKICK HERE brings them.");
+        }
+    }
+
+    // Nothing to climb or cross, so it is the partner AI's to walk. Looked at again in a while.
+    static bool Joined()
+    {
+        _leg = Leg.None;
+        Rest(JoinedRest);
         return false;
     }
 
-    // Walks out from a point until the floor drops away. The last floor before the drop, or
-    // null when the floor runs on that far.
-    static Vector3? EdgeToward(Actor tracer, Vector3 feet, Vector3 toward, float reach)
+    // Why a traversal didn't happen, once per reason, for the support log.
+    static bool Refuse(string why)
     {
-        var last = feet;
-        for (var step = EdgeStep; step <= reach; step += EdgeStep)
+        if (why != _refused)
         {
-            if (!Teleport.Floor(tracer, feet + toward * step, feet.Z + 80f, feet.Z - EdgeDrop, out var floor) || floor.Z < last.Z - EdgeStepDown)
-            {
-                return last;
-            }
-
-            last = floor;
+            _refused = why;
+            Log.Info($"{_name} can't get to {Where}: {why}.");
         }
 
-        return null;
-    }
-
-    // The first gap on the line between two floors: the last floor before it and the first
-    // floor after it. Anything more than a short drop below both floors counts as the gap.
-    static bool GapBetween(Actor tracer, Vector3 from, Vector3 to, Vector3 toward, float apart, out Vector3 mine, out Vector3 other)
-    {
-        mine = from;
-        other = to;
-        var top = MathF.Max(from.Z, to.Z) + 80f;
-        var low = MathF.Min(from.Z, to.Z) - EdgeDrop;
-        var last = from;
-        var open = false;
-        for (var step = EdgeStep; step <= apart; step += EdgeStep)
-        {
-            if (!Teleport.Floor(tracer, from + toward * step, top, low, out var floor))
-            {
-                if (!open)
-                {
-                    open = true;
-                    mine = last;
-                }
-
-                continue;
-            }
-
-            if (open)
-            {
-                other = floor;
-                return true;
-            }
-
-            last = floor;
-        }
-
+        Missed();
         return false;
     }
 
-    // A player on another roof across a gap, level with them or lower, is grappled across to. The
-    // story's partners only follow paths, and no path crosses a gap between roofs.
-    const float CrossFrom = Metre * 3f;
-    const float CrossDrop = Metre * 10f;
-
-    static float _gapSince = -1f;
-
-
-    static bool Across(RPawnPlayer follower, Vector3 goal, float speed)
+    // New orders or a swap change where they are going, so a run-up ends and old tries are
+    // forgotten.
+    static void Rethink()
     {
-        var bot = _bot!;
-        if (speed > BlockedSpeed)
+        if (_leg == Leg.Run)
         {
-            _gapSince = -1f;
-            return false;
+            _leg = Leg.None;
+            Follower?.StopMoveTo();
         }
 
-        var rise = goal.Z - Feet(follower).Z;
-        var gap = Flat(goal, follower.Location);
-        var near = bot.StandBehindDist + StuckShort;
-        if (rise >= GrappleRise || rise < -CrossDrop || gap > GrappleNear * GrappleNear || gap < near * near)
-        {
-            _gapSince = -1f;
-            return false;
-        }
-
-        if (_gapSince < 0f || World.Now < _gapSince)
-        {
-            _gapSince = World.Now;
-        }
-
-        if (World.Now - _gapSince < GrappleWait)
-        {
-            return false;
-        }
-
-        _gapSince = -1f;
-        if (!Cross(follower, goal))
-        {
-            _restUntil = World.Now + TraverseRest;
-            return false;
-        }
-
-        return true;
+        Idle();
+        _tries = 0;
+        _runs = 0;
+        _gaveUp = false;
+        _restFor = 0f;
+        _refused = "";
     }
 
-    static bool Cross(RPawnPlayer follower, Vector3 theirs)
+    // The sidekick is gone or about to be stood somewhere else.
+    static void ForgetTraversal()
     {
-        var feet = Feet(follower);
-        var toward = theirs - feet;
+        Rethink();
+        _leg = Leg.None;
+        _aloft = false;
+        _byHand = false;
+        _nearest = float.MaxValue;
+        _parked.Stop();
+        _stalled.Stop();
+    }
+
+    // They are about to be stood somewhere else, so whatever they were in the middle of is over.
+    static void StopTraversal(RPawnPlayer follower)
+    {
+        var flying = _leg is Leg.Fire or Leg.Flight || follower.Physics == Actor.EPhysics.PHYS_Flying;
+        ForgetTraversal();
+        if (flying)
+        {
+            Untangle(follower, force: true);
+        }
+    }
+
+    // A reload forgets a grapple under way, and a forced swap hands the body over as it is. The
+    // follow would then take over in mid-air with the rope still out. So a grapple is ended and
+    // they are put on the ledge.
+    static void SettleTraversal()
+    {
+        var leg = _leg;
+        var ledge = _ledge - _ledgeOut * 80f;
+        if (leg == Leg.None || Follower is not { } follower)
+        {
+            ForgetTraversal();
+            return;
+        }
+
+        if (leg is Leg.Fire or Leg.Flight)
+        {
+            Place(follower, ledge, Heading(-_ledgeOut, follower.Rotation.Yaw));
+        }
+
+        ForgetTraversal();
+    }
+
+    // The edge of the goal's floor on the sidekick's side, found by walking out from the goal
+    // until the floor drops away. Within arm's reach they climb it. Higher up they grapple to it,
+    // from where they can see it.
+    static bool Up(RPawnPlayer follower, Vector3 feet, Vector3 goal, float facing)
+    {
+        var toward = feet - goal;
+        toward.Z = 0f;
+        var apart = toward.Length();
+        toward = apart > 1f ? toward / apart : -Flat(facing);
+
+        switch (Edge(follower, goal, feet, toward, apart, out var ledge, out _))
+        {
+            case Ground.Joined:
+                return Joined();
+            case Ground.Endless:
+                return Refuse("no edge was found on the way up");
+        }
+
+        var up = ledge.Z - feet.Z;
+        if (up < ClimbRise)
+        {
+            return Refuse("the edge isn't above them");
+        }
+
+        var seen = Sees(follower, ledge, toward);
+        if (seen && Vector3.DistanceSquared(follower.Location, ledge) <= MantleReach * MantleReach)
+        {
+            return Mantle(follower, ledge, toward, up);
+        }
+
+        // A low edge is climbed from the floor right under it, when that is the floor they are
+        // on. Across a gap it is grappled to like a high one.
+        if (up < GrappleRise && Foot(follower, feet, ledge, toward, MantleStand, out var foot))
+        {
+            return RunTo(follower, foot);
+        }
+
+        if (GrappleShot(follower) is not { } shot)
+        {
+            return Refuse("they have no grapple gun");
+        }
+
+        if (seen)
+        {
+            return Fire(follower, shot, ledge, toward, "up");
+        }
+
+        // From the floor under the edge they can see it, so they run there first.
+        return Foot(follower, feet, ledge, toward, UnderEdge, out var under) ? RunTo(follower, under) : Refuse("they can't see the edge");
+    }
+
+    // The floor under an edge, a little way out from it, when it is the floor they stand on and
+    // they aren't there yet. A floor further down is the bottom of a gap, not somewhere to run to.
+    static bool Foot(RPawnPlayer follower, Vector3 feet, Vector3 ledge, Vector3 outward, float away, out Vector3 foot) =>
+        Teleport.Floor(follower, ledge + outward * away, ledge.Z, feet.Z - EdgeStepDown, out foot) && foot.Z < feet.Z + EdgeRise
+        && Flat(foot, feet) > RunArrive * RunArrive;
+
+    // A goal level with them or lower. Their own edge on the way is found first. With floor
+    // right under it they drop down. With open air under it they grapple across to the far side.
+    static bool Over(RPawnPlayer follower, Vector3 feet, Vector3 goal)
+    {
+        var toward = goal - feet;
         toward.Z = 0f;
         var apart = toward.Length();
         if (apart < 1f)
         {
-            return false;
+            return Refuse("you are straight under them");
         }
 
         toward /= apart;
-        if (!GapBetween(follower, feet, theirs, toward, apart, out var mine, out var other))
+        switch (Edge(follower, feet, goal, toward, apart, out var mine, out var past))
         {
-            return Refuse("there is no gap between you");
+            case Ground.Joined:
+                return Joined();
+            case Ground.Endless:
+                return Refuse("no edge was found on the way down");
+        }
+
+        // A dip with the goal's floor on its far side is crossed, not climbed down into and out
+        // of. Floor under their edge is dropped to when the goal is below, or there is no far
+        // side to cross to.
+        var back = MathF.Sqrt(Flat(mine, feet));
+        var top = mine.Z - EdgeStepDown;
+        var bottom = MathF.Min(goal.Z, mine.Z) - DropUnder;
+        var landed = Teleport.Floor(follower, past, top, bottom, out var landing) || Teleport.Floor(follower, past + toward * EdgeStep, top, bottom, out landing);
+        var far = FarSide(follower, mine, goal, toward, apart - back + EdgeStep, out var other);
+        var width = far ? MathF.Sqrt(Flat(mine, other)) : 0f;
+        if (landed && (!far || width < CrossLeast || goal.Z - feet.Z <= -DropLeast))
+        {
+            var drop = mine.Z - landing.Z;
+            if (drop > DropMost)
+            {
+                return Refuse($"it is too far to drop ({drop / Metre:0} m)");
+            }
+
+            if (!Teleport.Dry(landing))
+            {
+                return Refuse("they would land in water");
+            }
+
+            // The jump only carries them a step, so it starts from the very edge.
+            var brink = Brink(follower, mine, past);
+            back = MathF.Sqrt(Flat(brink, feet));
+            return back > DropFrom ? ToEdge(follower, brink, toward, back, DropBack, DropArrive) : Drop(follower, brink, toward, drop);
+        }
+
+        if (goal.Z - feet.Z < -CrossDrop)
+        {
+            return Refuse("you are too far below to grapple across to");
+        }
+
+        if (!far)
+        {
+            return Refuse("no floor was found on the far side");
+        }
+
+        if (width < CrossLeast || width > GrappleAcross)
+        {
+            return Refuse($"the gap is too {(width < CrossLeast ? "small to grapple" : "wide to cross")} ({width / Metre:0.#} m)");
+        }
+
+        var air = Vector3.UnitZ * AirHeight;
+        if (!follower.FastTrace(other + air, mine + air, Vector3.Zero, false))
+        {
+            return Refuse("something solid is in the way");
+        }
+
+        if (GrappleShot(follower) is not { } shot)
+        {
+            return Refuse("they have no grapple gun");
         }
 
         // From well back from their own edge they can't see the far side, so they run up first.
-        if (Flat(mine, feet) > CrossFrom * CrossFrom)
+        if (back > CrossFrom)
         {
-            RunTo(follower, mine - toward * 40f);
-            return true;
+            return ToEdge(follower, mine, toward, back, CrossBack);
         }
 
-        return GrappleAcrossTo(follower, other, -toward, MathF.Sqrt(Flat(mine, other)));
+        return Sees(follower, other, -toward) ? Fire(follower, shot, other, -toward, "across") : Refuse("they can't see the other side");
+    }
+
+    // What the floor does on the way from one of them to the other.
+    enum Ground
+    {
+        // It falls away at an edge.
+        Edge,
+
+        // It runs all the way, like a slope or stairs, so the partner AI can walk it.
+        Joined,
+
+        // It runs on over or under the other one with no edge near.
+        Endless,
+    }
+
+    // The edge can lie past the other one, when one stands close under or over it. So with no
+    // edge between them, and the floor not ending at the other's height, the search goes on a
+    // little further.
+    static Ground Edge(Actor tracer, Vector3 from, Vector3 to, Vector3 toward, float apart, out Vector3 lip, out Vector3 past)
+    {
+        if (Lip(tracer, from, toward, apart, out lip, out past))
+        {
+            return Ground.Edge;
+        }
+
+        if (MathF.Abs(lip.Z - to.Z) < ClimbRise)
+        {
+            return Ground.Joined;
+        }
+
+        return Lip(tracer, from, toward, MathF.Min(apart + EdgeSearchPast, EdgeSearchMost), out lip, out past) ? Ground.Edge : Ground.Endless;
+    }
+
+    // Walks out from a floor point until the floor falls away. Lip is the last floor before
+    // that, and past is the first place with none. False when the floor runs on that far.
+    static bool Lip(Actor tracer, Vector3 from, Vector3 toward, float reach, out Vector3 lip, out Vector3 past)
+    {
+        lip = from;
+        past = from;
+        for (var step = EdgeStep; step <= reach; step += EdgeStep)
+        {
+            past = from + toward * step;
+            if (!Teleport.Floor(tracer, past, lip.Z + EdgeRise, lip.Z - EdgeStepDown, out var floor))
+            {
+                return true;
+            }
+
+            lip = floor;
+        }
+
+        return false;
+    }
+
+    // The edge itself, between the last floor found and the first place with none.
+    static Vector3 Brink(Actor tracer, Vector3 lip, Vector3 past)
+    {
+        for (var i = 0; i < 3; i++)
+        {
+            var middle = (lip + past) / 2f;
+            if (Teleport.Floor(tracer, middle, lip.Z + EdgeRise, lip.Z - EdgeStepDown, out var floor))
+            {
+                lip = floor;
+            }
+            else
+            {
+                past = middle;
+            }
+        }
+
+        return lip;
+    }
+
+    // The first floor past their edge on the way to the goal, about level with either of them.
+    static bool FarSide(Actor tracer, Vector3 mine, Vector3 goal, Vector3 toward, float reach, out Vector3 other)
+    {
+        var top = MathF.Max(mine.Z, goal.Z) + EdgeRise;
+        var low = MathF.Min(mine.Z, goal.Z) - EdgeDrop;
+        for (var step = EdgeStep; step <= reach; step += EdgeStep)
+        {
+            if (Teleport.Floor(tracer, mine + toward * step, top, low, out other))
+            {
+                return true;
+            }
+        }
+
+        other = default;
+        return false;
+    }
+
+    // The edge found is the last floor before the drop, a little inside the roof, and a parapet
+    // can stand on it. So a few points out over the edge and higher up are tried.
+    static bool Sees(RPawnPlayer follower, Vector3 ledge, Vector3 outward)
+    {
+        var eye = follower.Location + Vector3.UnitZ * 60f;
+        foreach (var (over, up) in SightPoints)
+        {
+            if (follower.FastTrace(ledge + outward * over + Vector3.UnitZ * up, eye, Vector3.Zero, false))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Whether the partner AI or an order is trying to move them right now.
@@ -361,8 +748,74 @@ static partial class Sidekick
             return true;
         }
 
-        return Game.TryGetPlayerController(out var controller) && controller.Pawn is { } player && Following(controller) && !Ordered
+        return Game.TryGetPlayerController(out var controller) && controller.Pawn is { } player && Follows.On && Following(controller) && !Ordered
             && Flat(player.Location, follower.Location) > MathF.Pow(bot.StandBehindDist + StuckShort, 2f);
+    }
+
+    // To their own edge. From far off they run to a little short of it first and walk the rest,
+    // so they don't run off it.
+    static bool ToEdge(RPawnPlayer follower, Vector3 mine, Vector3 toward, float back, float stop, float within = RunArrive) =>
+        back > EdgeRunFrom ? RunTo(follower, mine - toward * EdgeRunShort) : RunTo(follower, mine - toward * stop, within);
+
+    // Run-ups that only lead to more run-ups haven't lined them up, so that counts as a try
+    // that failed. The last stretch is walked, since a run carries on past where it should stop.
+    static bool RunTo(RPawnPlayer follower, Vector3 at, float within = RunArrive)
+    {
+        if (_runs >= RunsMost)
+        {
+            return Refuse("their run-up didn't line them up");
+        }
+
+        var bot = _bot!;
+        bot.ClearNavigation();
+        bot.bWasMoving = false;
+        _walkedAt = -100f;
+        var far = MathF.Sqrt(Flat(at, follower.Location));
+        _runTo = at;
+        _runWithin = within;
+        _runFor = RunMost + far / RunSlowest;
+        _runs++;
+        _stalled.Stop();
+        follower.SetMovementSpeed(far > WalkWithin ? Pace.MS_Run : Pace.MS_Walk, 1f, default);
+        follower.MoveTo(at);
+        Begin(Leg.Run);
+        return true;
+    }
+
+    // From the upkeep while they run up. Once there, the next thing is done at once. A fight or
+    // the row going off ends the run. Standing blocked or taking too long is a try that failed.
+    static void Run(RPlayerController controller, RPawnPlayer follower)
+    {
+        var spent = World.Now - _legSince;
+        var left = Flat(_runTo, follower.Location);
+        var slow = Slow(follower);
+        if (!slow)
+        {
+            _stalled.Stop();
+        }
+
+        // Stopped a little short of the spot counts as there.
+        var stalled = slow && _stalled.Lasted(RunStalled);
+        if (left <= _runWithin * _runWithin || (stalled && left <= _runWithin * _runWithin * 4f))
+        {
+            follower.StopMoveTo();
+            _leg = Leg.None;
+            _ready = true;
+            return;
+        }
+
+        if (!Climbs.On || controller.IsInCombat(false) || follower.CurrentSpecialMove is not null || follower.Physics != Actor.EPhysics.PHYS_Walking)
+        {
+            follower.StopMoveTo();
+            _leg = Leg.None;
+            return;
+        }
+
+        if (spent < 0f || spent > _runFor || stalled)
+        {
+            follower.StopMoveTo();
+            Refuse("something was in the way of their run-up");
+        }
     }
 
     // Something low across the way they face, with clear air over it and floor beyond.
@@ -378,18 +831,20 @@ static partial class Sidekick
         way = Vector3.Normalize(way);
         var feet = Feet(follower);
         var knee = feet + Vector3.UnitZ * 50f;
-        if (follower.FastTrace(knee + way * VaultLook, knee, Vector3.Zero, false))
+        if (!Crosshair.Line(follower, knee, knee + way * VaultLook, Crosshair.Meets.Level, out var wall))
         {
             return false;
         }
 
-        var above = feet + way * (VaultLook * 0.7f);
-        if (!Teleport.Floor(follower, above, feet.Z + VaultHighest + 40f, feet.Z, out var top))
+        var height = 0f;
+        foreach (var past in VaultTops)
         {
-            return false;
+            if (Teleport.Floor(follower, feet + way * (wall.Distance + past), feet.Z + VaultHighest + 40f, feet.Z, out var top))
+            {
+                height = MathF.Max(height, top.Z - feet.Z);
+            }
         }
 
-        var height = top.Z - feet.Z;
         var over = feet + Vector3.UnitZ * (height + 60f);
         if (height < VaultLowest || height > VaultHighest || !follower.FastTrace(over + way * VaultOver, over, Vector3.Zero, false)
             || !Teleport.Floor(follower, feet + way * VaultOver, feet.Z + 60f, feet.Z - 300f, out _)
@@ -405,6 +860,8 @@ static partial class Sidekick
         follower.Pose.WeaponStance = Relaxed;
         follower.Pose.CustomTransition = anim;
         follower.EndChangePose();
+        Begin(Leg.Vault);
+        Log.Info("sidekick.vault", $"{_name} is vaulting something {height / Metre:0.#} m high.");
         return true;
     }
 
@@ -414,10 +871,10 @@ static partial class Sidekick
     {
         if (_climbSet is not { IsValid: true })
         {
-            _climbSet = Game.FindObjects<AnimSet>().FirstOrDefault(set => set.IsValid && set.GetPathName() == ClimbSet);
+            _climbSet = Game.FindObject<AnimSet>(ClimbSet);
         }
 
-        if (_climbSet is null)
+        if (_climbSet is not { IsValid: true })
         {
             return null;
         }
@@ -437,189 +894,258 @@ static partial class Sidekick
         return null;
     }
 
-    // The edge of the player's roof on the sidekick's side, found by walking out from the player
-    // until the floor drops away. They grapple to it only when they can see it.
-    static bool GrappleUp(RPawnPlayer follower, Vector3 start, float facing)
+    static RSpecialMoveConfig? GrappleShot(RPawnPlayer follower) =>
+        follower.GrappleGun is { IsValid: true } gun && gun.GrappleFireMove is { IsValid: true } shot ? shot : null;
+
+    // The move that ends a grapple on a ledge. Batman's plays on every hero's body. Where his
+    // isn't loaded their own gun's is used.
+    static RSpecialMoveConfig? LandingMove(RPawnPlayer follower)
     {
-        if (follower.GrappleGun is not { IsValid: true } gun || gun.GrappleFireMove is not { IsValid: true } fire)
+        if (_landing is not { IsValid: true })
         {
-            return Refuse("they have no grapple gun");
+            _landing = Game.FindObject<RSpecialMoveConfig>(GrappleLanding);
         }
 
-        var toward = follower.Location - start;
-        toward.Z = 0f;
-        if (toward.LengthSquared() < 1f)
-        {
-            toward = -new Rotator(0f, facing, 0f).ToDirection();
-            toward.Z = 0f;
-        }
-
-        if (toward.LengthSquared() < 0.01f)
-        {
-            return Refuse("there is no way to face");
-        }
-
-        // The edge can lie past them when they stand close under it, so the search goes on a
-        // little further than the gap.
-        toward = Vector3.Normalize(toward);
-        var reach = MathF.Min(MathF.Sqrt(Flat(start, follower.Location)) + EdgeSearchPast, EdgeSearchMost);
-        if (EdgeToward(follower, start, toward, reach) is not { } ledge)
-        {
-            return Refuse("no edge was found between you");
-        }
-
-        if (ledge.Z - Feet(follower).Z < GrappleRise)
-        {
-            return Refuse("the edge isn't above them");
-        }
-
-        var seen = Sees(follower, ledge, toward);
-
-        // From the floor under the edge they can see it, so they run there first.
-        if (!seen)
-        {
-            if (Teleport.Floor(follower, ledge + toward * UnderEdge, ledge.Z, Feet(follower).Z - 300f, out var under)
-                && Flat(under, follower.Location) > HoldClose * HoldClose)
-            {
-                RunTo(follower, under);
-                return true;
-            }
-
-            return Refuse("they can't see the edge");
-        }
-
-        return FireAt(follower, fire, ledge, toward, "up to you");
+        return _landing is { IsValid: true } ? _landing
+            : follower.GrappleGun is { IsValid: true } gun && gun.GrappleEndClimbFlat is { IsValid: true } own ? own
+            : null;
     }
 
-    // The edge found is the last floor before the drop, a little inside the roof, and a parapet
-    // can stand on it. So a few points out over the edge and higher up are tried.
-    static bool Sees(RPawnPlayer follower, Vector3 ledge, Vector3 outward)
+    static REnvironmentCheckTicker.FEnvironmentSpecialMoveLocator Locator(RPawnPlayer follower, Vector3 ledge, Vector3 outward)
     {
-        var eye = follower.Location + Vector3.UnitZ * 60f;
-        foreach (var (over, up) in SightPoints)
-        {
-            if (follower.FastTrace(ledge + outward * over + Vector3.UnitZ * up, eye, Vector3.Zero, false))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    // Fires their own grapple gun at a ledge. Outward points from the ledge back toward them.
-    static bool FireAt(RPawnPlayer follower, RSpecialMoveConfig fire, Vector3 ledge, Vector3 outward, string where)
-    {
-        _grappleRefused = "";
-        Log.Info($"{_name} is grappling {where}.");
-        _bot!.ClearNavigation();
-        _walkedAt = -100f;
-        follower.StopMoveTo();
-        follower.GrappleGun?.GrappleRope?.SetHidden(false);
         var locator = new REnvironmentCheckTicker.FEnvironmentSpecialMoveLocator();
         locator.Location = ledge;
         locator.Normal = outward;
         locator.Distance = Vector3.Distance(ledge, follower.Location);
-        follower.TriggerSpecialMove(fire, locator);
-        _grappling = true;
-        _grappleTo = ledge;
-        _grappleOut = outward;
+        return locator;
+    }
+
+    // The partner AI stops walking them, so nothing pulls against the move.
+    static void Still(RPawnPlayer follower)
+    {
+        _bot!.ClearNavigation();
+        _walkedAt = -100f;
+        follower.StopMoveTo();
+    }
+
+    // Fires their own grapple gun at a ledge. Outward points from the ledge back toward them.
+    static bool Fire(RPawnPlayer follower, RSpecialMoveConfig shot, Vector3 ledge, Vector3 outward, string how)
+    {
+        Still(follower);
+        follower.GrappleGun?.GrappleRope?.SetHidden(false);
+        follower.TriggerSpecialMove(shot, Locator(follower, ledge, outward));
+        if (follower.CurrentSpecialMove is null)
+        {
+            PutAway(follower);
+            return Refuse("their grapple gun wouldn't fire");
+        }
+
+        _ledge = ledge;
+        _ledgeOut = outward;
+        var far = Vector3.Distance(ledge, follower.Location);
         _grappleSince = World.Now;
-        _flewAt = 0;
-        _flown = false;
+        _grappleFor = GrappleGiveUp + far / GrappleSecondEvery;
         _nearest = float.MaxValue;
+        _hung.Stop();
+        _byHand = false;
+        _refused = "";
+        Begin(Leg.Fire);
+        Log.Info($"{_name} is grappling {how} to {Where}, {far / Metre:0} m.");
         return true;
     }
 
-    // A gap too wide to jump but within a grapple is grappled across, to the far edge.
-    const float GrappleAcross = Metre * 25f;
-
-    static bool GrappleAcrossTo(RPawnPlayer follower, Vector3 far, Vector3 outward, float width)
+    // Pulls them up onto an edge within reach, with the move that ends a grapple.
+    static bool Mantle(RPawnPlayer follower, Vector3 ledge, Vector3 outward, float up)
     {
-        if (width > GrappleAcross)
+        Still(follower);
+        _ledge = ledge;
+        _ledgeOut = outward;
+        if (!Land(follower))
         {
-            return Refuse($"the gap is too wide to cross ({width / Metre:0} m)");
+            return Refuse("they have no climbing move");
         }
 
-        if (follower.GrappleGun is not { IsValid: true } gun || gun.GrappleFireMove is not { IsValid: true } fire)
-        {
-            return Refuse("they have no grapple gun");
-        }
-
-        if (!Sees(follower, far, outward))
-        {
-            return Refuse("they can't see the other side");
-        }
-
-        return FireAt(follower, fire, far, outward, "across to you");
+        _byHand = true;
+        _refused = "";
+        Log.Info($"{_name} is climbing {up / Metre:0.#} m up to {Where}.");
+        return true;
     }
 
-    // Every tick while a grapple is under way. Once the flight has run out they are pulled in
-    // close to the ledge and given the landing move.
-    static void FlyGrapple()
+    static bool Land(RPawnPlayer follower)
     {
-        if (!_grappling)
+        if (LandingMove(follower) is not { } move)
+        {
+            return false;
+        }
+
+        follower.TriggerSpecialMove(move, Locator(follower, _ledge, _ledgeOut));
+        if (follower.CurrentSpecialMove is null)
+        {
+            return false;
+        }
+
+        Begin(Leg.Landing);
+        return true;
+    }
+
+    // The game's own jump off a ledge for its partners. It lines them up on the edge, and their
+    // AI sees the fall through and lands them.
+    static bool Drop(RPawnPlayer follower, Vector3 lip, Vector3 toward, float height)
+    {
+        var bot = _bot!;
+        Still(follower);
+        _dropFrom = follower.Location.Z;
+        bot.JumpOffLedge(height, toward, lip);
+        bot.bNeedsToJumpDown = false;
+        bot.GotoState(JumpDown);
+        _refused = "";
+        Begin(Leg.Drop);
+        Log.Info($"{_name} is dropping {height / Metre:0.#} m down to {Where}.");
+        return true;
+    }
+
+    // Every tick. Sees a vault, a climb, a grapple or a drop through to its end.
+    static void Advance()
+    {
+        if (_leg is Leg.None or Leg.Run)
         {
             return;
         }
 
-        if (_bot?.BotPawn is not { IsValid: true, bDeleteMe: false } follower)
+        if (Follower is not { } follower)
         {
-            _grappling = false;
+            ForgetTraversal();
             return;
         }
 
-        if (World.Now < _grappleSince || World.Now - _grappleSince > GrappleGiveUp)
+        var spent = World.Now - _legSince;
+        var walking = follower.Physics == Actor.EPhysics.PHYS_Walking;
+        _aloft |= !walking;
+        switch (_leg)
         {
-            Untangle(follower, force: true);
+            case Leg.Fire:
+            case Leg.Flight:
+                Fly(follower);
+                break;
+
+            case Leg.Landing:
+                if (follower.CurrentSpecialMove is null)
+                {
+                    Arrived(follower);
+                }
+                else if (spent < 0f || spent > LandingMost)
+                {
+                    GiveUp(follower, "landing");
+                }
+
+                break;
+
+            case Leg.Vault:
+                if (spent < 0f || spent > VaultMost || (spent > BlockedSeconds && walking && !follower.IsInAnyTransition(default)))
+                {
+                    Arrived(follower);
+                }
+
+                break;
+
+            case Leg.Drop:
+                if (spent < 0f || spent > DropGiveUp)
+                {
+                    GiveUp(follower, "drop");
+                }
+                else if (spent > BlockedSeconds && walking && follower.CurrentSpecialMove is null && !follower.IsInAnyTransition(default))
+                {
+                    // Still up at their edge means the jump didn't carry them off it. They
+                    // are a step nearer it now, so it is tried again at once.
+                    if (follower.Location.Z < _dropFrom - DropTook)
+                    {
+                        Arrived(follower);
+                        break;
+                    }
+
+                    if (!_aloft)
+                    {
+                        Untangle(follower, force: true);
+                    }
+
+                    if (++_tries >= GiveUpAfter)
+                    {
+                        _tries--;
+                        Refuse("the jump didn't take them off the edge");
+                        break;
+                    }
+
+                    _leg = Leg.None;
+                    _ready = true;
+                }
+
+                break;
+        }
+    }
+
+    // Without the player's controller the flight doesn't end on the ledge. It runs out short of
+    // it in the air, or carries them up past it and turns into a fall. Once it has run out they
+    // are pulled in close and given the landing move, and they land as soon as they are close or
+    // the moment they start to move away.
+    static void Fly(RPawnPlayer follower)
+    {
+        var spent = World.Now - _grappleSince;
+        if (spent < 0f || spent > _grappleFor)
+        {
+            GiveUp(follower, "grapple");
             return;
         }
 
-        // Firing, or already landing.
+        // Firing.
         if (follower.CurrentSpecialMove is not null)
         {
-            _flewAt = 0;
             return;
         }
 
-        var away = _grappleTo - follower.Location;
+        var away = _ledge - follower.Location;
         var gap = away.Length();
-
-        // Without the player's controller the flight doesn't end on the ledge. It runs out short
-        // of it in the air, or carries them up past it and turns into a fall. They land as soon
-        // as they are close, or the moment they start to move away from it.
         if (follower.Physics == Actor.EPhysics.PHYS_Flying)
         {
-            _flown = true;
-            if (gap < _nearest)
-            {
-                _nearest = gap;
-            }
-
-            var now = System.Diagnostics.Stopwatch.GetTimestamp();
-            var seconds = _flewAt == 0 ? 0f : MathF.Min((float)((now - _flewAt) / (double)System.Diagnostics.Stopwatch.Frequency), 0.1f);
-            _flewAt = now;
+            _leg = Leg.Flight;
+            _nearest = MathF.Min(_nearest, gap);
             var passing = gap > _nearest + LandPassing && _nearest <= LandFar;
             if (gap > LandFrom && !passing)
             {
-                if (follower.Velocity.LengthSquared() < BlockedSpeed * BlockedSpeed)
+                if (follower.Velocity.LengthSquared() >= BlockedSpeed * BlockedSpeed || Pull(follower))
                 {
-                    follower.SetLocation(follower.Location + away / gap * MathF.Min(gap - LandFrom, PullSpeed * seconds));
+                    _hung.Stop();
+                    return;
                 }
 
-                return;
+                if (!_hung.Lasted(HungSeconds) || gap > LandFar)
+                {
+                    return;
+                }
             }
         }
-        else if (!_flown)
+        else if (_leg == Leg.Fire)
         {
+            // The shot is over and they never left the ground.
+            if (spent > FireMost)
+            {
+                GiveUp(follower, "grapple");
+            }
+
             return;
         }
         else if (follower.Physics == Actor.EPhysics.PHYS_Walking)
         {
             // They came down somewhere by themselves.
             PutAway(follower);
-            _grappling = false;
-            _restUntil = World.Now + TraverseRest;
+            if (gap <= LandFar)
+            {
+                Arrived(follower);
+            }
+            else
+            {
+                Missed();
+            }
+
             return;
         }
         else if (gap > LandFar)
@@ -627,42 +1153,52 @@ static partial class Sidekick
             return;
         }
 
-        if (_landing is not { IsValid: true })
-        {
-            _landing = Game.FindObjects<RSpecialMoveConfig>().FirstOrDefault(config => config.IsValid && config.GetPathName() == GrappleLanding);
-        }
-
         PutAway(follower);
-        _grappling = false;
-        if (_landing is null)
+        if (!Land(follower))
         {
-            Untangle(follower, force: true);
-            Place(follower, _grappleTo - _grappleOut * 80f, Heading(-_grappleOut, follower.Rotation.Yaw));
-            return;
+            GiveUp(follower, "grapple");
         }
-
-        var locator = new REnvironmentCheckTicker.FEnvironmentSpecialMoveLocator();
-        locator.Location = _grappleTo;
-        locator.Normal = _grappleOut;
-        locator.Distance = gap;
-        follower.TriggerSpecialMove(_landing, locator);
-        _restUntil = World.Now + TraverseRest;
     }
 
-    // A reload forgets a grapple under way, and the follow would then take over mid-air with the
-    // rope still out. So before this copy goes, a grapple is ended and they are put on the ledge.
-    static void EndGrapple()
+    // A step toward where they will hang. Straight there first. With something in the way, up
+    // alone and then across alone, which takes them round an overhang or a beam. False when
+    // nothing moved them.
+    static bool Pull(RPawnPlayer follower)
     {
-        if (!_grappling || _bot?.BotPawn is not { IsValid: true, bDeleteMe: false } follower)
+        var from = follower.Location;
+        var to = _ledge + _ledgeOut * HangOut - Vector3.UnitZ * HangUnder - from;
+        var left = to.Length();
+        if (left < 1f)
         {
-            _grappling = false;
+            return false;
+        }
+
+        var step = to / left * MathF.Min(left, PullSpeed * World.Delta);
+        return Shift(follower, from, step) || Shift(follower, from, new Vector3(0f, 0f, step.Z)) || Shift(follower, from, new Vector3(step.X, step.Y, 0f));
+    }
+
+    static bool Shift(RPawnPlayer follower, Vector3 from, Vector3 step) =>
+        step.LengthSquared() > 0.01f && follower.SetLocation(from + step) && Vector3.DistanceSquared(follower.Location, from) > 0.01f;
+
+    // A move that ran out of time. Close to the ledge they are stood on it. Further off they are
+    // let down where they are.
+    static void GiveUp(RPawnPlayer follower, string what)
+    {
+        var grappling = _leg is Leg.Fire or Leg.Flight or Leg.Landing;
+        var close = grappling && Vector3.DistanceSquared(_ledge, follower.Location) <= LandFar * LandFar;
+        var ledge = _ledge - _ledgeOut * 80f;
+        var yaw = Heading(-_ledgeOut, follower.Rotation.Yaw);
+        Untangle(follower, force: true);
+        Log.Info($"{_name}'s {what} didn't finish, so they were {(close ? "stood on the ledge" : "put back on their feet")}.");
+        if (close)
+        {
+            Place(follower, ledge, yaw);
+            _tries = 0;
+            Rest(TraverseRest);
             return;
         }
 
-        var ledge = _grappleTo - _grappleOut * 80f;
-        var yaw = Heading(-_grappleOut, follower.Rotation.Yaw);
-        Untangle(follower, force: true);
-        Place(follower, ledge, yaw);
+        Missed();
     }
 
     // The grapple gun back on the belt and the rope gone, as the player's grapple ends.
@@ -687,23 +1223,34 @@ static partial class Sidekick
         body.IsGrappling = false;
     }
 
-    // A body left flying or in the grapple pose with nothing moving it would wander in circles.
-    // It is put back on its feet.
-    static readonly FName GrapplePose = new("Grapple");
-
+    // A body left flying or in the grapple pose with nothing moving it would wander in circles,
+    // so it is put back on its feet. Forced, it is done whatever state they are in.
     static void Untangle(RPawnPlayer follower, bool force = false)
     {
-        var gun = follower.GrappleGun is { IsValid: true } held ? held : null;
-        var tangled = follower.Physics == Actor.EPhysics.PHYS_Flying || Same(follower.GetMovementStance(), GrapplePose)
-            || (gun is not null && (gun.bActive || gun.Projectile is { IsValid: true, bDeleteMe: false }));
-        if (!force && (follower.CurrentSpecialMove is not null || !tangled))
+        if (!force)
         {
-            return;
+            if (follower.CurrentSpecialMove is not null)
+            {
+                _parked.Stop();
+                return;
+            }
+
+            var gun = follower.GrappleGun is { IsValid: true } held ? held : null;
+            var left = follower.Physics == Actor.EPhysics.PHYS_Flying ? "flying"
+                : Same(follower.GetMovementStance(), GrapplePose) ? "in the grapple pose"
+                : gun is not null && (gun.bActive || gun.Projectile is { IsValid: true, bDeleteMe: false }) ? "with their grapple gun out"
+                : null;
+            if (left is null)
+            {
+                Unpark(follower);
+                return;
+            }
+
+            Log.Info($"{_name} was left {left} with no grapple under way, so they were put back on their feet.");
         }
 
-        _grappling = false;
+        _leg = Leg.None;
         PutAway(follower);
-        _bot?.ClearNavigation();
         follower.StopMoveTo();
         follower.Velocity = Vector3.Zero;
         if (follower.Physics == Actor.EPhysics.PHYS_Flying)
@@ -711,7 +1258,41 @@ static partial class Sidekick
             follower.SetPhysics(Actor.EPhysics.PHYS_Falling);
         }
 
-        follower.ChangePose(StandingBot, Relaxed, default, false, default, default, default, 1f);
-        Log.Info($"{_name} was left mid-grapple, so they were put back on their feet.");
+        if (_bot is not { IsValid: true, bDeleteMe: false } bot)
+        {
+            return;
+        }
+
+        bot.ClearNavigation();
+        follower.ChangePose(bot.bCrouched ? Crouching : StandingBot, Relaxed, default, false, default, default, default, 1f);
+        if (follower.CurrentSpecialMove is null && Waits(bot))
+        {
+            bot.GotoState(NoState);
+        }
+    }
+
+    // The partner AI waits out a special move or a fall in a state of its own, and only some
+    // endings take it back out. Left there it never walks or fights again.
+    static bool Waits(RRobinBotController bot)
+    {
+        var state = bot.GetStateName();
+        return Same(state, WaitsOnMove) || Same(state, WaitsOnFall);
+    }
+
+    static void Unpark(RPawnPlayer follower)
+    {
+        var bot = _bot!;
+        if (follower.Physics != Actor.EPhysics.PHYS_Walking || !Waits(bot))
+        {
+            _parked.Stop();
+            return;
+        }
+
+        if (_parked.Lasted(ParkedSeconds))
+        {
+            _parked.Stop();
+            bot.GotoState(NoState);
+            Log.Info("sidekick.parked", $"{_name}'s AI was still waiting on a move that had ended, so it was woken.");
+        }
     }
 }
