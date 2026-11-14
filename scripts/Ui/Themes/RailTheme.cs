@@ -775,4 +775,73 @@ sealed class RailTheme : Theme
             Draw.Text(lines[k], textLeft, top + helpTop + k * helpLine, 13f, feature is null ? Dim : Soft);
         }
     }
+
+
+    // The parts of a question: the tag row, the title, the wrapped text and the buttons.
+    const float AskWidth = 330f;
+    const float AskPad = 14f;
+    const float AskTag = 10f;
+    const float AskTitle = 15f;
+    const float AskBody = 11f;
+    const float AskLine = 15f;
+    const float AskButton = 24f;
+    const float AskGap = 8f;
+
+    static float AskHeight(string[] lines) =>
+        AskPad + AskTag + 12f + AskTitle + 10f + lines.Length * AskLine + 14f + AskButton + AskPad;
+
+    // A card like the menu's own, in the middle of the screen. It rises a little as it fades in,
+    // and the amber bar along its top draws out from the left.
+    public override void RenderModal(MenuView view, ModalView modal)
+    {
+        var accent = Look.AccentOr(Accent);
+        ShadeScreen(new Rgba(0, 0, 0, 100), modal.Opened);
+
+        var lines = Draw.Wrap(modal.Ask.Text, AskBody, AskWidth - 2f * AskPad);
+        var height = AskHeight(lines);
+        PlaceModal(AskWidth, height + 34f, 0f, (1f - modal.Opened) * 14f);
+
+        Draw.Fade(modal.Opened);
+        Draw.GradientDown(0f, 0f, AskWidth, height, PanelTop, PanelBottom);
+        Draw.Frame(0f, 0f, AskWidth, height, 1f, Edge);
+        Draw.Rect(0f, 0f, AskWidth * modal.Opened, 2f, accent);
+
+        var y = AskPad;
+        Draw.Rect(AskPad, y + 2f, 6f, 6f, accent);
+        var end = Draw.Tracked(modal.Ask.Tag, AskPad + 14f, y, AskTag, 2f, accent);
+        Draw.Rect(end + 8f, y + AskTag / 2f, AskWidth - AskPad - end - 8f, 1f, Line);
+
+        y += AskTag + 12f;
+        Draw.Tracked(modal.Ask.Title, AskPad, y, AskTitle, 1.5f, White);
+        y += AskTitle + 10f;
+        foreach (var text in lines)
+        {
+            Draw.Text(text, AskPad, y, AskBody, Dim);
+            y += AskLine;
+        }
+
+        y += 14f;
+        var width = (AskWidth - 2f * AskPad - AskGap) / 2f;
+        var ink = new Rgba(16, 20, 27);
+        for (var i = 0; i < 2; i++)
+        {
+            var x = AskPad + i * (width + AskGap);
+            var picked = modal.Choice == i;
+            if (picked)
+            {
+                Draw.Rect(x, y, width, AskButton, accent);
+                Kit.Sheen(x, y, width, AskButton, view.Time, new Rgba(255, 255, 255, 30));
+            }
+            else
+            {
+                Draw.Rect(x, y, width, AskButton, Empty with { A = 18 });
+                Draw.Frame(x, y, width, AskButton, 1f, Edge);
+            }
+
+            ButtonLabel(i == 0 ? modal.Ask.Yes : modal.Ask.No, x, y, width, AskButton, 10f, 2f, picked ? ink : Soft);
+        }
+
+        Kit.HintRow(modal.Hints, AskWidth / 2f, height + 20f, KeyHints.Size, KeyHints.Frame, KeyHints.Key, KeyHints.Label);
+        Draw.Fade(1f);
+    }
 }

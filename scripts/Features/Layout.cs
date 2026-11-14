@@ -56,10 +56,12 @@ static class Layout
         Catalog.AddPage("TELEPORT")
             .Add("WAYPOINT", Teleport.Sections)
             .Add("PLACES", Places.Sections)
+            .Add("LOCATIONS", Locations.Section)
             .Add("MOVE", Blink.Sections.Append(Fetch.Section).Append(Leave.Section).ToArray());
 
         Catalog.Background("teleport.waypoint", Teleport.Tick, Teleport.Release);
         Catalog.Background("teleport.places", Places.Tick);
+        Catalog.Background("teleport.locations", Locations.Tick, Locations.Release);
 
         Catalog.AddPage("CAMERA")
             .Add("VIEW", CameraView.Sections)

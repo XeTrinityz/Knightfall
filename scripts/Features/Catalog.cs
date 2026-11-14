@@ -242,8 +242,15 @@ static class Catalog
     }
 
     // A command row was pressed. Like a restore, it runs on the next game tick.
-    public static void Pressed(Command command)
+    public static void Pressed(Command command, bool confirmed = false)
     {
+        // One that asks first only runs once the player has said yes.
+        if (!confirmed && command.Confirm?.Invoke() is { } ask)
+        {
+            Menu.Ask(ask, command);
+            return;
+        }
+
         command.TouchedAt = System.Diagnostics.Stopwatch.GetTimestamp();
         if (!Commands.Contains(command))
         {

@@ -36,6 +36,9 @@ abstract class Theme
     // The favourites radial, in the middle of the screen. Each theme draws it its own way.
     public abstract void RenderRadial(RadialView view);
 
+    // A question asked before a command runs, drawn over the menu in the middle of the screen.
+    public abstract void RenderModal(MenuView view, ModalView modal);
+
     // Inside this distance from the middle the pointer is on no slot, so letting go cancels.
     public abstract float RadialHub { get; }
 
@@ -58,6 +61,29 @@ abstract class Theme
     public virtual float ToastHeight => 34f;
 
     public const float ToastGap = 6f;
+
+    // Lays a question out from 0,0 at the menu's size and puts it in the middle of the screen.
+    // Shift moves it from there in its own units, for one that slides in.
+    protected static void PlaceModal(float width, float height, float shiftX = 0f, float shiftY = 0f)
+    {
+        var zoom = Math.Min(Look.Zoom, Math.Min((Draw.ScreenWidth - 80f) / width, (Draw.ScreenHeight - 80f) / height));
+        Draw.Place((Draw.ScreenWidth - width * zoom) / 2f + shiftX * zoom, (Draw.ScreenHeight - height * zoom) / 2f + shiftY * zoom, zoom);
+    }
+
+    // Darkens the whole screen behind a question, more as it opens.
+    protected static void ShadeScreen(Rgba shade, float amount)
+    {
+        Draw.Place(0f, 0f, 1f);
+        Draw.Fade(1f);
+        Draw.Rect(0f, 0f, Draw.ScreenWidth, Draw.ScreenHeight, shade with { A = (byte)(shade.A * Math.Clamp(amount, 0f, 1f)) });
+    }
+
+    // A label in the middle of a button.
+    protected static void ButtonLabel(string label, float x, float y, float width, float height, float size, float spacing, Rgba color)
+    {
+        var wide = Draw.TrackedWidth(label, size, spacing);
+        Draw.Tracked(label, x + (width - wide) / 2f, y + (height - size) / 2f, size, spacing, color);
+    }
 
     // Puts a card in its row of the stack. Slide moves it out towards the edge it came from.
     protected static void PlaceToast(ToastView view, ToastView.Card card, float slide)

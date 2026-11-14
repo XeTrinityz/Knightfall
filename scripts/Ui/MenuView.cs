@@ -63,4 +63,29 @@ sealed class MenuView
     }
 
     public Feature? Focus => RowIndex < Rows.Count ? Rows[RowIndex] : null;
+
+    // The question on screen over the menu, or null.
+    public ModalView? Modal;
+}
+
+// A question over the menu, as a theme draws it.
+sealed class ModalView
+{
+    public ModalView(Confirmation ask)
+    {
+        Ask = ask;
+    }
+
+    public Confirmation Ask { get; }
+
+    // 0 for the yes button, 1 for no.
+    public int Choice;
+
+    // 1 when fully open and 0 when gone. It eases up on open and down on close.
+    public float Opened;
+
+    // True once it has been answered and is on its way out.
+    public bool Leaving;
+
+    public IReadOnlyList<GuideLine> Hints = Array.Empty<GuideLine>();
 }

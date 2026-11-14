@@ -12,6 +12,8 @@ static class Menu
     const float CloseSeconds = 0.14f;
     const float GlideRate = 22f;
     const double LoopSeconds = 3600;
+    const float AskOpenSeconds = 0.32f;
+    const float AskCloseSeconds = 0.14f;
 
     static readonly MenuView View = new();
 
@@ -24,6 +26,12 @@ static class Menu
     static (string? Press, string? Bind, string? Favourite, bool Passing) _hintRow;
     static long _lastFrame;
     static long _arrivedAt;
+
+    // The command a question on screen is about, and how far the question has opened, 0 to 1.
+    static Command? _asking;
+    static float _askProgress;
+    static Device _askDevice;
+    static Pad.Style _askStyle;
 
     // The menu was last drawn on the gauntlet.
     static bool _onWrist;
@@ -76,7 +84,15 @@ static class Menu
             }
             else if (_wanted && Controls.Pressed(Act.Back))
             {
-                Want(false);
+                // Back answers a question no, and leaves the menu open.
+                if (Asking)
+                {
+                    Answer(false);
+                }
+                else
+                {
+                    Want(false);
+                }
             }
         }
 
@@ -96,6 +112,14 @@ static class Menu
                 // A row can only wait for a key while the menu is there to hear it. Left
                 // waiting, it would keep every hotkey and the radial switched off.
                 Hotkeys.StopListening();
+
+                // A question shut away with the menu is a no.
+                if (_asking is not null)
+                {
+                    Answer(false);
+                }
+
+                View.Modal = null;
             }
         }
 
@@ -145,6 +169,12 @@ static class Menu
                     GauntletMenu.Render(View, height, shown * View.Opened);
                 }
 
+                // A question is asked on the screen, not on the wrist.
+                if (View.Modal is { } asked)
+                {
+                    Theme.Current.RenderModal(View, asked);
+                }
+
                 return;
             }
 
@@ -157,6 +187,10 @@ static class Menu
             _onWrist = false;
             Theme.BeginMenu();
             Theme.Current.Render(View);
+            if (View.Modal is { } modal)
+            {
+                Theme.Current.RenderModal(View, modal);
+            }
         }
         finally
         {
@@ -184,12 +218,38 @@ static class Menu
         View.Closing = !Showing;
         View.Arrived = (float)((View.Now - _arrivedAt) / (double)Stopwatch.Frequency);
 
+        if (View.Modal is { } modal)
+        {
+            if (modal.Leaving)
+            {
+                _askProgress = MathF.Max(0f, _askProgress - seconds / AskCloseSeconds);
+                modal.Opened = _askProgress * _askProgress;
+                if (_askProgress <= 0f)
+                {
+                    View.Modal = null;
+                }
+            }
+            else
+            {
+                _askProgress = MathF.Min(1f, _askProgress + seconds / AskOpenSeconds);
+                var rest = 1f - _askProgress;
+                modal.Opened = 1f - rest * rest * rest;
+            }
+        }
+
         var gap = View.RowIndex - View.Glide;
         View.Glide = MathF.Abs(gap) < 0.01f ? View.RowIndex : View.Glide + gap * (1f - MathF.Exp(-GlideRate * seconds));
     }
 
     static void Navigate()
     {
+        // A question takes every key until it's answered.
+        if (View.Modal is not null)
+        {
+            Choose();
+            return;
+        }
+
         if (Controls.Pressed(Act.PagePrev))
         {
             TurnPage(-1);
@@ -316,6 +376,84 @@ static class Menu
     }
 
     public static void Close() => Want(false);
+
+    static bool Asking => View.Modal is { Leaving: false };
+
+    // Asks before a command runs. The menu opens for it if it was shut, so a hotkey can't run
+    // past the question.
+    public static void Ask(Confirmation ask, Command command)
+    {
+        if (_asking is not null)
+        {
+            Answer(false);
+        }
+
+        _asking = command;
+        _askProgress = 0f;
+        View.Modal = new ModalView(ask);
+        _askDevice = (Device)(-1);
+        if (!_wanted)
+        {
+            Want(true);
+        }
+    }
+
+    static void Choose()
+    {
+        if (View.Modal is not { Leaving: false } modal)
+        {
+            return;
+        }
+
+        if (Controls.Pressed(Act.Left) || Controls.Pressed(Act.Right) || Controls.Pressed(Act.Up) || Controls.Pressed(Act.Down))
+        {
+            modal.Choice = 1 - modal.Choice;
+        }
+        else if (Controls.Pressed(Act.Accept))
+        {
+            Answer(modal.Choice == 0);
+        }
+
+        if (_askDevice != Controls.LastDevice || _askStyle != Pad.Look)
+        {
+            _askDevice = Controls.LastDevice;
+            _askStyle = Pad.Look;
+            var pad = Controls.LastDevice != Device.Keyboard;
+            string Key(Act act) => pad ? Controls.PadLabel(act) : Controls.KeyLabel(act);
+            modal.Hints = new[]
+            {
+                new GuideLine(new[] { Key(Act.Left), Key(Act.Right) }, "PICK"),
+                new GuideLine(new[] { Key(Act.Accept) }, "CONFIRM"),
+                new GuideLine(new[] { Key(Act.Back) }, "CANCEL"),
+            };
+        }
+    }
+
+    // Yes runs the command. No tells the player nothing happened, the way the command's own
+    // result would.
+    static void Answer(bool yes)
+    {
+        var command = _asking;
+        _asking = null;
+        if (View.Modal is { } modal)
+        {
+            modal.Leaving = true;
+        }
+
+        if (command is null)
+        {
+            return;
+        }
+
+        if (yes)
+        {
+            Catalog.Pressed(command, true);
+        }
+        else
+        {
+            command.Report(Outcome.Unchanged("CANCELLED"));
+        }
+    }
 
     // Whether this row is on the tab that is on screen.
     public static bool Shows(Feature row) => Showing && View.Page.Tabs.Count > 0 && View.Rows.Contains(row);

@@ -946,4 +946,64 @@ sealed class ConsoleTheme : Theme
         Draw.Text(Kit.Number(active), x + 8f, middle - 5f, 10f, active > 0 ? Live : Ghost);
         Draw.TextRight(Kit.Version, DialWidth - Cut - 16f, middle - 5f, 10f, Ghost);
     }
+
+
+    // The parts of a question: the tag row, the title, the wrapped text and the buttons.
+    const float AskWidth = 360f;
+    const float AskPad = 16f;
+    const float AskTag = 10f;
+    const float AskTitle = 15f;
+    const float AskBody = 11f;
+    const float AskLine = 15f;
+    const float AskButton = 24f;
+    const float AskGap = 8f;
+
+    static float AskHeight(string[] lines) =>
+        AskPad + AskTag + 12f + AskTitle + 10f + lines.Length * AskLine + 14f + AskButton + AskPad;
+
+    const float AskHeader = 30f;
+
+    // A solid panel of its own over the dimmed game, with a header bar like the menu's, the
+    // warning in it and a pulse running along under it.
+    public override void RenderModal(MenuView view, ModalView modal)
+    {
+        var accent = Look.AccentOr(Accent);
+        ShadeScreen(Shade, modal.Opened);
+
+        var lines = Draw.Wrap(modal.Ask.Text, AskBody, AskWidth - 2f * AskPad);
+        var height = AskHeader + AskHeight(lines) - AskTag - 12f;
+        PlaceModal(AskWidth, height + 34f, 0f, (1f - modal.Opened) * 10f);
+
+        Draw.Fade(modal.Opened);
+        Draw.Rect(0f, 0f, AskWidth, height, Panel);
+        Draw.Rect(0f, 0f, AskWidth, AskHeader, Bar);
+        Draw.Frame(0f, 0f, AskWidth, height, 1f, Edge);
+        Draw.Rect(0f, AskHeader, AskWidth, 1f, accent);
+        Kit.Pulse(0f, AskHeader, AskWidth, view.Time, new Rgba(255, 255, 255, 200));
+
+        Draw.Rect(AskPad, (AskHeader - 8f) / 2f, 8f, 8f, Live);
+        Draw.Tracked(modal.Ask.Tag, AskPad + 16f, (AskHeader - AskTag) / 2f, AskTag, 2f, Live);
+
+        var y = AskHeader + AskPad;
+        Draw.Tracked(modal.Ask.Title, AskPad, y, AskTitle, 1.5f, White);
+        y += AskTitle + 10f;
+        foreach (var text in lines)
+        {
+            Draw.Text(text, AskPad, y, AskBody, Dim);
+            y += AskLine;
+        }
+
+        y += 14f;
+        var width = (AskWidth - 2f * AskPad - AskGap) / 2f;
+        for (var i = 0; i < 2; i++)
+        {
+            var x = AskPad + i * (width + AskGap);
+            var picked = modal.Choice == i;
+            Draw.Rect(x, y, width, AskButton, picked ? accent : Empty);
+            ButtonLabel(i == 0 ? modal.Ask.Yes : modal.Ask.No, x, y, width, AskButton, 10f, 2f, picked ? Ink : Soft);
+        }
+
+        Kit.HintRow(modal.Hints, AskWidth / 2f, height + 20f, KeyHints.Size, KeyHints.Frame, KeyHints.Key, KeyHints.Label);
+        Draw.Fade(1f);
+    }
 }

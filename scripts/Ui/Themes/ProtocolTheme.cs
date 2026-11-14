@@ -1329,4 +1329,96 @@ sealed class ProtocolTheme : Theme
 
         return top + height;
     }
+
+
+    // The parts of a question: the tag row, the title, the wrapped text and the buttons.
+    const float AskWidth = 340f;
+    const float AskPad = 16f;
+    const float AskTag = 10f;
+    const float AskTitle = 15f;
+    const float AskBody = 11f;
+    const float AskLine = 15f;
+    const float AskButton = 24f;
+    const float AskGap = 8f;
+
+    static float AskHeight(string[] lines) =>
+        AskPad + AskTag + 12f + AskTitle + 10f + lines.Length * AskLine + 14f + AskButton + AskPad;
+
+    // A second projection: a line of light draws out from the middle, then the panel opens up and
+    // down from it, the way the menu itself does.
+    public override void RenderModal(MenuView view, ModalView modal)
+    {
+        var accent = Look.AccentOr(Accent);
+        ShadeScreen(new Rgba(0, 4, 10, 120), modal.Opened);
+
+        var lines = Draw.Wrap(modal.Ask.Text, AskBody, AskWidth - 2f * AskPad);
+        var height = AskHeight(lines);
+        PlaceModal(AskWidth, height + 34f);
+
+        var line = Math.Min(1f, modal.Opened / LineShare);
+        var open = Math.Clamp((modal.Opened - LineShare) / (1f - LineShare), 0f, 1f);
+        var middle = height / 2f;
+        var top = middle - middle * open;
+        var bottom = middle + middle * open;
+        var half = AskWidth / 2f * line;
+
+        Draw.Fade(1f);
+        if (bottom > top)
+        {
+            Draw.GradientDown(0f, top, AskWidth, bottom - top, PanelTop, PanelBottom);
+            Draw.Rect(0f, top, 1f, bottom - top, accent with { A = 70 });
+            Draw.Rect(AskWidth - 1f, top, 1f, bottom - top, accent with { A = 70 });
+        }
+
+        Draw.Rect(AskWidth / 2f - half, top, half * 2f, 1f, accent);
+        Draw.Rect(AskWidth / 2f - half, bottom - 1f, half * 2f, 1f, accent);
+
+        // What's inside shows once the panel is most of the way open.
+        var lit = Math.Clamp((open - 0.5f) * 2f, 0f, 1f);
+        if (lit <= 0f)
+        {
+            return;
+        }
+
+        Draw.Fade(lit);
+        var y = AskPad;
+        Draw.Line(AskPad, y + AskTag, AskPad + 5.5f, y, Live);
+        Draw.Line(AskPad + 5.5f, y, AskPad + 11f, y + AskTag, Live);
+        Draw.Line(AskPad + 11f, y + AskTag, AskPad, y + AskTag, Live);
+        var end = Draw.Tracked("PROTOCOL // " + modal.Ask.Tag, AskPad + 18f, y, AskTag, 2.5f, Live);
+        Draw.Rect(end + 8f, y + AskTag / 2f, AskWidth - AskPad - end - 8f, 1f, accent with { A = 50 });
+
+        y += AskTag + 12f;
+        Draw.Tracked(modal.Ask.Title, AskPad, y, AskTitle, 2f, White);
+        y += AskTitle + 10f;
+        foreach (var text in lines)
+        {
+            Draw.Text(text, AskPad, y, AskBody, Dim);
+            y += AskLine;
+        }
+
+        y += 14f;
+        var width = (AskWidth - 2f * AskPad - AskGap) / 2f;
+        AskButtonAt(modal.Ask.Yes, AskPad, y, width, modal.Choice == 0, accent);
+        AskButtonAt(modal.Ask.No, AskPad + width + AskGap, y, width, modal.Choice == 1, accent);
+
+        Kit.HintRow(modal.Hints, AskWidth / 2f, height + 20f, KeyHints.Size, KeyHints.Frame, KeyHints.Key, KeyHints.Label);
+        Draw.Fade(1f);
+    }
+
+    static void AskButtonAt(string label, float x, float y, float width, bool picked, Rgba accent)
+    {
+        if (picked)
+        {
+            Draw.Rect(x, y, width, AskButton, accent with { A = 40 });
+            Draw.Frame(x, y, width, AskButton, 1f, accent);
+            Draw.Rect(x + 8f, y + AskButton / 2f - 2.5f, 5f, 5f, accent);
+        }
+        else
+        {
+            Draw.Frame(x, y, width, AskButton, 1f, Ghost);
+        }
+
+        ButtonLabel(label, x, y, width, AskButton, 10f, 2f, picked ? White : Dim);
+    }
 }

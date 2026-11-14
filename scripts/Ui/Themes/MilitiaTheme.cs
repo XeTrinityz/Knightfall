@@ -900,4 +900,68 @@ sealed class MilitiaTheme : Theme
         Kit.HintRow(view.Hints, hintsLeft + NoteWidth / 2f - Slant * NoteHints / 2f, hintsTop + NoteHints / 2f, 10f, Ghost, Soft, Dim);
         Draw.Fade(1f);
     }
+
+
+    // The parts of a question: the tag row, the title, the wrapped text and the buttons.
+    const float AskWidth = 350f;
+    const float AskPad = 18f;
+    const float AskTag = 10f;
+    const float AskTitle = 15f;
+    const float AskBody = 11f;
+    const float AskLine = 15f;
+    const float AskButton = 24f;
+    const float AskGap = 8f;
+
+    static float AskHeight(string[] lines) =>
+        AskPad + AskTag + 12f + AskTitle + 10f + lines.Length * AskLine + 14f + AskButton + AskPad;
+
+    const float AskLean = 14f;
+
+    // A leaning slab that shoots in from the right edge, like the menu's own. Slanted shapes
+    // can't fade, so it slides instead, and its text comes in once it has landed.
+    public override void RenderModal(MenuView view, ModalView modal)
+    {
+        var accent = Look.AccentOr(Accent);
+        ShadeScreen(new Rgba(0, 0, 0, 110), modal.Opened);
+
+        var lines = Draw.Wrap(modal.Ask.Text, AskBody, AskWidth - 2f * AskPad - AskLean);
+        var height = AskHeight(lines);
+        var slide = (1f - Kit.EaseOut(modal.Opened)) * (Draw.ScreenWidth / 2f + AskWidth);
+        PlaceModal(AskWidth, height + 34f, slide);
+
+        Draw.Fade(1f);
+        Draw.Quad(AskLean, 0f, AskWidth, 0f, AskWidth - AskLean, height, 0f, height, Dark);
+        Draw.Quad(AskLean, 0f, AskLean + 6f, 0f, 6f, height, 0f, height, accent);
+        if (modal.Opened < 0.9f)
+        {
+            return;
+        }
+
+        var y = AskPad;
+        var x = AskPad + AskLean;
+        var end = Draw.Tracked(modal.Ask.Tag, x, y, AskTag, 2f, Warning);
+        Draw.Rect(end + 8f, y + AskTag / 2f, AskWidth - AskPad - end - 8f, 2f, Warning);
+
+        y += AskTag + 12f;
+        Draw.Tracked(modal.Ask.Title, x, y, AskTitle, 1.5f, White);
+        y += AskTitle + 10f;
+        foreach (var text in lines)
+        {
+            Draw.Text(text, x, y, AskBody, Dim);
+            y += AskLine;
+        }
+
+        y += 14f;
+        var width = (AskWidth - 2f * AskPad - AskGap - AskLean) / 2f;
+        for (var i = 0; i < 2; i++)
+        {
+            var left = x - 4f + i * (width + AskGap);
+            var picked = modal.Choice == i;
+            var lean = 8f;
+            Draw.Quad(left + lean, y, left + width, y, left + width - lean, y + AskButton, left, y + AskButton, picked ? White : Darker);
+            ButtonLabel(i == 0 ? modal.Ask.Yes : modal.Ask.No, left, y, width, AskButton, 10f, 2f, picked ? Ink : Soft);
+        }
+
+        Kit.HintRow(modal.Hints, AskWidth / 2f, height + 20f, KeyHints.Size, KeyHints.Frame, KeyHints.Key, KeyHints.Label);
+    }
 }

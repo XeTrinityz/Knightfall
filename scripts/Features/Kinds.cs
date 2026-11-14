@@ -283,6 +283,10 @@ readonly record struct Outcome(OutcomeKind Kind, string Text)
 
 // A row that does something once when pressed. It has no value, and shows what happened for a
 // moment instead.
+// A question asked before a command runs, for one that can do something the player might not
+// expect. Tag names the kind of warning, Yes and No are the two buttons.
+sealed record Confirmation(string Tag, string Title, string Text, string Yes, string No);
+
 sealed class Command : Feature
 {
     public const double ShowSeconds = 2.5;
@@ -303,6 +307,10 @@ sealed class Command : Feature
     // A quiet command shows no card when its key is pressed, for a key shared with the game, like
     // Firefly's take off on the run key.
     public bool Quiet { get; init; }
+
+    // The question to ask before the command runs, or null to run it straight away. Asked each
+    // time it is pressed, so it can depend on what the command would do.
+    public Func<Confirmation?>? Confirm { get; init; }
 
     public void Execute()
     {
