@@ -218,12 +218,45 @@ static partial class Sidekick
         Preference = true,
     };
 
+    public static readonly Toggle Hits = new(
+        "player.sidekick.hits", "SIDEKICK HITS HURT",
+        "Your sidekick's hits knock enemies out, and land harder as your combo grows. Off, their hits only stagger, as the story's partners' do. Where the story limits which hits count in a fight, they keep to it.", on: true)
+    {
+        Preference = true,
+        Block = static () => FightLock,
+    };
+
+    public static readonly Toggle Presses = new(
+        "player.sidekick.presses", "SIDEKICK PRESSES THE ATTACK",
+        "Your sidekick runs to the enemy nearest you, keeps hitting and finishes off whoever they have hurt. Off, they walk to whoever is nearest them and strike about once a second, as the story's partners do.", on: true)
+    {
+        Preference = true,
+        Block = static () => FightLock,
+    };
+
+    public static readonly Toggle Covers = new(
+        "player.sidekick.covers", "SIDEKICK COVERS YOU",
+        "Your sidekick hits an enemy who is about to strike you, when one is within their reach.", on: true)
+    {
+        Preference = true,
+        Block = static () => FightLock,
+    };
+
+    public static readonly Toggle Talks = new(
+        "player.sidekick.talks", "SIDEKICK TALKS",
+        "Your sidekick says the game's partner lines. They speak up as they join a fight, and praise a fight you won with a big combo or without being hit. The lines were recorded for the story's pairs, so they only talk to the hero they were made for. Off, they stay quiet.", on: true)
+    {
+        Preference = true,
+    };
+
+    static string? FightLock => Fights.On ? null : "FIGHTING IS OFF";
+
     public static readonly Catalog.Section[] Sections =
     {
         new("CALL", Who, SuitPick, Call, Bring, Dismiss, Rejoins),
         new("SWAP", Swap, ButtonSwaps),
         new("FOLLOWING", Follows, Distance, CatchesUp, Sneaks),
-        new("FIGHTING", Fights),
+        new("FIGHTING", Fights, Hits, Presses, Covers, Talks),
         new("DUAL TAKEDOWNS", Combat.DualTakedowns) { Borrowed = true },
     };
 
@@ -797,6 +830,7 @@ static partial class Sidekick
         LoadDoorMove();
         CapesApart(_body, _caller);
         Arena(Fights.On);
+        FightWatch(controller);
         Sneak(controller, follower);
         ThroughDoor(controller, follower);
         FreeSwap(controller);

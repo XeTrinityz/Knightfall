@@ -39,4 +39,10 @@ static class Offsets
     // an armed thug, so the pointer is written here. It is a script field's place, the same
     // kind of number every BmSDK binding is built on. Not checked.
     public const int FlytrapTarget = 692;
+
+    // An enemy's list of the hits a story fight allows, RPawnVillain.DamageAllowed. BmSDK can't
+    // read a list of that kind, so its length is read here, after the list's 8-byte pointer.
+    // Checked in Sidekick by the length being one the list could have.
+    public const int VillainDamageAllowed = 6204;
+    public const int ListLengthAfterData = 8;
 }
