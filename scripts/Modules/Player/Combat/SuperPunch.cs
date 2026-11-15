@@ -50,6 +50,7 @@ static class SuperPunch
     {
         Tick = Step,
         Restore = Throws.Clear,
+        Block = static () => Villains.On ? "VILLAIN IS ON" : null,
     };
 
     public static readonly Slider Force = new(
@@ -66,9 +67,9 @@ static class SuperPunch
     public static Vector3 Shape(RPawnVillain thug, ref RPawnCombat.FDamageInfo info)
     {
         // A hit with no damage isn't a punch. Gas, smoke and stuns reach thugs this way, and
-        // launching them would stop their own reaction.
+        // launching them would stop their own reaction. A villain's hits are their own.
         var mode = Mode.Index;
-        if (mode == 0 || info.DamageAmount <= 0f || World.Player is not { } you || !ReferenceEquals(info.Attacker, you) || you.Base is Vehicle
+        if (mode == 0 || Villains.On || info.DamageAmount <= 0f || World.Player is not { } you || !ReferenceEquals(info.Attacker, you) || you.Base is Vehicle
             || !Crowd.Standing(thug) || thug.IsRagdoll() || thug.Base is Vehicle || Bodyguards.Is(thug))
         {
             return Vector3.Zero;

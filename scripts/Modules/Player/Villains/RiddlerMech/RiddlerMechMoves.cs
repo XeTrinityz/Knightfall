@@ -191,7 +191,7 @@ static partial class RiddlerMech
         var bestDistance = AimReach;
         foreach (var thug in Crowd.StandingEnemies())
         {
-            var to = Teleport.Flat(thug.Location - player.Location);
+            var to = (thug.Location - player.Location) with { Z = 0f };
             var distance = to.Length();
             if (distance < bestDistance && distance > 1f && Vector3.Dot(to / distance, look) >= AimCone)
             {
@@ -201,7 +201,7 @@ static partial class RiddlerMech
         }
 
         var way = best is not null ? Teleport.Flat(best.Location - player.Location) : look;
-        if (way.LengthSquared() > 1f)
+        if (way.LengthSquared() > 0.01f)
         {
             player.SetRotation(new Rotator(0f, MathF.Atan2(way.Y, way.X) * (180f / MathF.PI), 0f));
         }

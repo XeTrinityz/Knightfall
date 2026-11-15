@@ -5,49 +5,54 @@ using BmSDK.BmGame;
 
 namespace Knightfall;
 
-// What Batman can't do while he is the mech. Each is the game's own switch for it, so the hidden
-// Batman underneath never fights, glides, climbs or rolls and drags the mech with him. He only
-// walks, runs, falls and lands.
-static partial class RiddlerMech
+// What Batman can't do while he is shown as a heavy villain of another shape, like the mech or
+// Croc. Each is the game's own switch for it, so the hidden Batman underneath never fights,
+// glides, climbs or rolls and drags the body on show with him. He only walks, runs, falls and
+// lands. Only one villain is on at a time, so they share one set.
+static class Heavy
 {
-    static readonly Held<RPlayerController, bool> NoGlide = new("mech glide", c => c.bCapeGlideDisabled, (c, off) => c.bCapeGlideDisabled = off);
-    static readonly Held<RPlayerController, bool> NoLedges = new("mech ledges", c => c.bLedgeGrabDisabled, (c, off) => c.bLedgeGrabDisabled = off);
-    static readonly Held<RPlayerController, bool> NoTakedowns = new("mech takedowns", c => c.bDisableTakedowns, (c, off) => c.bDisableTakedowns = off);
-    static readonly Held<RPlayerController, bool> NoEdgeJumps = new("mech edge jumps", c => c.bDisableAutoJumping, (c, off) => c.bDisableAutoJumping = off);
-    static readonly Held<RPlayerController, bool> NoQuickTurn = new("mech quick turn", c => c.bDisableRunInstantTurn, (c, off) => c.bDisableRunInstantTurn = off);
-    static readonly Held<RPlayerControllerCombat, bool> NoCombat = new("mech combat", c => c.bDisallowCombat, (c, off) => c.bDisallowCombat = off);
-    static readonly Held<RPlayerControllerCombat, bool> NoCapeStun = new("mech cape stun", c => c.bCapeStunDisabled, (c, off) => c.bCapeStunDisabled = off);
-    static readonly Held<RGameInfo, bool> NoGrapple = new("mech grapple", game => game.bNoGrapple, (game, off) => game.bNoGrapple = off);
+    static readonly Held<RPlayerController, bool> NoGlide = new("heavy glide", c => c.bCapeGlideDisabled, (c, off) => c.bCapeGlideDisabled = off);
+    static readonly Held<RPlayerController, bool> NoLedges = new("heavy ledges", c => c.bLedgeGrabDisabled, (c, off) => c.bLedgeGrabDisabled = off);
+    static readonly Held<RPlayerController, bool> NoTakedowns = new("heavy takedowns", c => c.bDisableTakedowns, (c, off) => c.bDisableTakedowns = off);
+    static readonly Held<RPlayerController, bool> NoEdgeJumps = new("heavy edge jumps", c => c.bDisableAutoJumping, (c, off) => c.bDisableAutoJumping = off);
+    static readonly Held<RPlayerController, bool> NoQuickTurn = new("heavy quick turn", c => c.bDisableRunInstantTurn, (c, off) => c.bDisableRunInstantTurn = off);
+    static readonly Held<RPlayerControllerCombat, bool> NoCombat = new("heavy combat", c => c.bDisallowCombat, (c, off) => c.bDisallowCombat = off);
+    static readonly Held<RPlayerControllerCombat, bool> NoCapeStun = new("heavy cape stun", c => c.bCapeStunDisabled, (c, off) => c.bCapeStunDisabled = off);
+    static readonly Held<RGameInfo, bool> NoGrapple = new("heavy grapple", game => game.bNoGrapple, (game, off) => game.bNoGrapple = off);
 
-    // Thugs can grab Batman, and with his fighting off he can't break free. Missions use this
-    // switch to stop thugs choosing that attack.
-    static readonly Held<RBMCombatManager, bool> NoGrabs = new("mech grabs", manager => manager.bDisableGrabAttack, (manager, off) => manager.bDisableGrabAttack = off);
-    static readonly Held<RPawnPlayer, bool> NoRailings = new("mech railings", pawn => pawn.bCanUseRailings, (pawn, can) => pawn.bCanUseRailings = can);
-    static readonly Held<RPawnPlayer, bool> NoPawnGlide = new("mech pawn glide", pawn => pawn.bCanCapeGlide, (pawn, can) => pawn.bCanCapeGlide = can);
-    static readonly Held<RPawnPlayer, bool> NoClimbing = new("mech climbing", pawn => pawn.bCanClimb, (pawn, can) => pawn.bCanClimb = can);
-    static readonly Held<RPawnPlayer, bool> NoPawnTakedowns = new("mech pawn takedowns", pawn => pawn.bDisableAllTakedowns, (pawn, off) => pawn.bDisableAllTakedowns = off);
+    // Thugs can grab Batman, or run at him and tackle him down, and a body this size makes no
+    // sense grabbed or tackled. Missions use these switches to stop thugs choosing those attacks.
+    static readonly Held<RBMCombatManager, bool> NoGrabs = new("heavy grabs", manager => manager.bDisableGrabAttack, (manager, off) => manager.bDisableGrabAttack = off);
+    static readonly Held<RBMCombatManager, bool> NoTackles = new("heavy tackles", manager => manager.bDisableChargeAttack, (manager, off) => manager.bDisableChargeAttack = off);
+    static readonly Held<RPawnPlayer, bool> NoRailings = new("heavy railings", pawn => pawn.bCanUseRailings, (pawn, can) => pawn.bCanUseRailings = can);
+    static readonly Held<RPawnPlayer, bool> NoPawnGlide = new("heavy pawn glide", pawn => pawn.bCanCapeGlide, (pawn, can) => pawn.bCanCapeGlide = can);
+    static readonly Held<RPawnPlayer, bool> NoClimbing = new("heavy climbing", pawn => pawn.bCanClimb, (pawn, can) => pawn.bCanClimb = can);
+    static readonly Held<RPawnPlayer, bool> NoPawnTakedowns = new("heavy pawn takedowns", pawn => pawn.bDisableAllTakedowns, (pawn, off) => pawn.bDisableAllTakedowns = off);
 
     // Landing, the game picks a roll or a running landing by speed and height. Every one of them
     // is swapped for the plain landing, which leaves him where he lands.
     static readonly Held<RPawnPlayer, RSpecialMoveConfig?>[] Landings =
     {
-        new("mech landing 1", pawn => pawn.LandMoves_1, (pawn, move) => pawn.LandMoves_1 = move!),
-        new("mech landing 2", pawn => pawn.LandMoves_2, (pawn, move) => pawn.LandMoves_2 = move!),
-        new("mech landing 3", pawn => pawn.LandMoves_3, (pawn, move) => pawn.LandMoves_3 = move!),
-        new("mech landing 4", pawn => pawn.LandMoves_4, (pawn, move) => pawn.LandMoves_4 = move!),
-        new("mech landing 5", pawn => pawn.LandMoves_5, (pawn, move) => pawn.LandMoves_5 = move!),
+        new("heavy landing 1", pawn => pawn.LandMoves_1, (pawn, move) => pawn.LandMoves_1 = move!),
+        new("heavy landing 2", pawn => pawn.LandMoves_2, (pawn, move) => pawn.LandMoves_2 = move!),
+        new("heavy landing 3", pawn => pawn.LandMoves_3, (pawn, move) => pawn.LandMoves_3 = move!),
+        new("heavy landing 4", pawn => pawn.LandMoves_4, (pawn, move) => pawn.LandMoves_4 = move!),
+        new("heavy landing 5", pawn => pawn.LandMoves_5, (pawn, move) => pawn.LandMoves_5 = move!),
     };
 
     static readonly Held<RPawnPlayerConfig, RSpecialMoveConfig?> DeepLanding =
-        new("mech deep landing", config => config.DeepFallLandRunSuccess, (config, move) => config.DeepFallLandRunSuccess = move!);
+        new("heavy deep landing", config => config.DeepFallLandRunSuccess, (config, move) => config.DeepFallLandRunSuccess = move!);
 
     // Crouching has no switch. Its button only raises a flag the game reads for itself, so the
     // game's default crouch keys are kept from it. A crouch already on is stood up from.
     const string CrouchKey = "LeftControl";
     static bool _crouchTaken;
 
-    static void Limit(RPawnPlayer player, RPlayerController controller)
+    static bool _holding;
+
+    public static void Limit(RPawnPlayer player, RPlayerController controller)
     {
+        _holding = true;
         NoGlide.Hold(controller, true);
         NoLedges.Hold(controller, true);
         NoTakedowns.Hold(controller, true);
@@ -65,6 +70,7 @@ static partial class RiddlerMech
             if (game.CombatManager is { IsValid: true } manager)
             {
                 NoGrabs.Hold(manager, true);
+                NoTackles.Hold(manager, true);
             }
         }
 
@@ -113,8 +119,9 @@ static partial class RiddlerMech
         }
     }
 
-    static void Unlimit()
+    public static void Unlimit()
     {
+        _holding = false;
         NoGlide.Release();
         NoLedges.Release();
         NoTakedowns.Release();
@@ -124,6 +131,7 @@ static partial class RiddlerMech
         NoCapeStun.Release();
         NoGrapple.Release();
         NoGrabs.Release();
+        NoTackles.Release();
         NoRailings.Release();
         NoPawnGlide.Release();
         NoClimbing.Release();
@@ -138,7 +146,7 @@ static partial class RiddlerMech
     }
 
     // Batman's climbing, vaulting, swinging and the like, which no switch covers. They all start
-    // here, from the move's own settings, and are turned down while he is the mech. Landings and
+    // here, from the move's own settings, and are turned down while he is held. Landings and
     // the moves that move him through doors and the like still run.
     static bool Refused(RSpecialMoveConfig move) => RefusedRailing(move) || move is RSpecialMoveConfig_Jump or RSpecialMoveConfig_CapeBreakFall
         or RSpecialMoveConfig_CatchLedge or RSpecialMoveConfig_HoldLedge or RSpecialMoveConfig_DropToLedgeHang or RSpecialMoveConfig_JumpToPerchLedge
@@ -163,7 +171,7 @@ static partial class RiddlerMech
     [Redirect(typeof(RPlayerController), nameof(RPlayerController.TriggerSpecialMove))]
     static void TriggerSpecialMove(RPlayerController self, RSpecialMoveConfig specMove, REnvironmentCheckTicker.FEnvironmentSpecialMoveLocator loc, bool forceReplicateToClient)
     {
-        if (_mech is not null && Option.On && specMove is { IsValid: true } && Refused(specMove) && !OnRailing(self))
+        if (_holding && specMove is { IsValid: true } && Refused(specMove) && !OnRailing(self))
         {
             return;
         }

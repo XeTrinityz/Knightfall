@@ -124,7 +124,7 @@ static class Status
     {
         try
         {
-            return NoStagger.On || self.IgnoreHitReaction();
+            return NoStagger.On || Villains.OwnHitReactions || self.IgnoreHitReaction();
         }
         catch (Exception error)
         {
@@ -190,12 +190,12 @@ static class Status
             return damage;
         }
 
-        var scaled = damage;
-        if (!DamageTaken.IsDefault)
+        var scaled = Villains.Hit(pawn, damage);
+        if (!DamageTaken.IsDefault && scaled > 0)
         {
             // Fractions are carried over to the next hit, so a low setting still adds up over
             // many small hits and doesn't round them all down to nothing.
-            _damageOwed += damage * DamageTaken.Value;
+            _damageOwed += scaled * DamageTaken.Value;
             scaled = (int)_damageOwed;
             _damageOwed -= scaled;
         }

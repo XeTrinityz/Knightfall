@@ -149,10 +149,12 @@ static partial class Sidekick
         }
     }
 
+    // The car button both calls the Batmobile and gets in when it is close. It does neither for a
+    // villain who keeps out of it.
     [Redirect(typeof(RPlayerController), nameof(RPlayerController.CallBatmobileToMe))]
     static void CallBatmobileToMe(RPlayerController self)
     {
-        if (_holdCar)
+        if (_holdCar || Villains.Walking)
         {
             return;
         }

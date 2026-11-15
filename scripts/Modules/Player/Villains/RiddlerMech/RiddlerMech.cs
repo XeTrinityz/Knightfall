@@ -142,7 +142,7 @@ static partial class RiddlerMech
 
         Hidden.Hide(player, own, Ours.Contains, keepCape: false);
         Villains.Keep(player, controller);
-        Limit(player, controller);
+        Heavy.Limit(player, controller);
         if (player.bGliding)
         {
             controller.GotoState(FallingMode);
@@ -184,7 +184,7 @@ static partial class RiddlerMech
         Unbuild();
         Hidden.Show();
         Villains.Release();
-        Unlimit();
+        Heavy.Unlimit();
         Unvoice();
     }
 

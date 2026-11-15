@@ -11,9 +11,12 @@ namespace Knightfall;
 // What the shared code needs from one villain: the switch that turns them on and their rows on
 // the tab. Fit is their say over the camera's view and BeforeCamera runs ahead of the game's
 // camera update, for one that moves the view. Keys adds the hotkeys they come with. Marking says
-// whether they have marks in the world to show, which Marks draws in their own style.
+// whether they have marks in the world to show, which Marks draws in their own style. Hit is
+// for one who takes hits his own way. It is handed each hit's damage on its way in, gives back how
+// much lands and plays his own reaction, so Batman's hidden one is held off. Walks is for one
+// who has no business in the Batmobile, so it can't be called or got into while they are on.
 sealed record Villain(Toggle Option, Catalog.Section[] Sections, Villain.Fitter? Fit = null, Action? BeforeCamera = null, Action? Keys = null,
-    Func<bool>? Marking = null, Action<float>? Marks = null)
+    Func<bool>? Marking = null, Action<float>? Marks = null, Func<RPawnPlayer, int, int>? Hit = null, bool Walks = false)
 {
     public delegate void Fitter(ref View view, float deltaTime);
 }
@@ -62,6 +65,7 @@ static class Villains
         new(JokerVillain.Option, JokerVillain.Sections, JokerVillain.AimView, JokerVillain.KeepAimFacing, Marking: JokerVillain.Marking, Marks: JokerVillain.Marks),
         new(PoisonIvy.Option, PoisonIvy.Sections, PoisonIvy.AimView, PoisonIvy.KeepAimFacing, Marking: PoisonIvy.Marking, Marks: PoisonIvy.Marks),
         new(ArkhamKnight.Option, ArkhamKnight.Sections, ArkhamKnight.AimView, ArkhamKnight.KeepAimFacing, ArkhamKnight.DefaultKeys, ArkhamKnight.Marking, ArkhamKnight.Marks),
+        new(KillerCroc.Option, KillerCroc.Sections, KillerCroc.Fit, KillerCroc.KeepFacing, KillerCroc.DefaultKeys, Hit: KillerCroc.Hit, Walks: true),
     };
 
     // PLAYER > VILLAINS, each villain's rows under their own heading.
@@ -74,6 +78,58 @@ static class Villains
             foreach (var villain in Roster)
             {
                 if (villain.Option.On)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    // A hit on the player, on its way in, for the villain who is on to take his own way.
+    public static int Hit(RPawnPlayer pawn, int damage)
+    {
+        if (World.Player is not { } player || player.Ptr != pawn.Ptr)
+        {
+            return damage;
+        }
+
+        foreach (var villain in Roster)
+        {
+            if (villain.Option.On && villain.Hit is { } hit)
+            {
+                return hit(pawn, damage);
+            }
+        }
+
+        return damage;
+    }
+
+    // Whether the villain who is on keeps out of the Batmobile.
+    public static bool Walking
+    {
+        get
+        {
+            foreach (var villain in Roster)
+            {
+                if (villain.Option.On && villain.Walks)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    public static bool OwnHitReactions
+    {
+        get
+        {
+            foreach (var villain in Roster)
+            {
+                if (villain.Option.On && villain.Hit is not null)
                 {
                     return true;
                 }

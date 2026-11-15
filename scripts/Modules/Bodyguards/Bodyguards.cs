@@ -297,6 +297,22 @@ static class Bodyguards
         return true;
     }
 
+    // Takes on an enemy another feature won over, like one a villain brought round, the way
+    // RECRUIT WHO I AIM AT does. DISMISS puts them back how they were. False when the team is
+    // full.
+    public static bool Win(RPawnVillain body)
+    {
+        if (Room == 0 || Is(body))
+        {
+            return false;
+        }
+
+        var label = Things.NameOf(body);
+        Adopt(body, label, true, Math.Max(body.HealthMax, body.Health), wasHostile: true);
+        Log.Info($"Bodyguards: won over {label} ({body.Class.Name}). {Team.Count} of {Most} in the team.");
+        return true;
+    }
+
     // Lets one bodyguard go, as DISMISS BODYGUARDS does for everyone. False when they weren't one.
     public static bool Let(RPawnVillain body)
     {
@@ -615,10 +631,33 @@ static class Bodyguards
         _you = null;
     }
 
+    // The game stops ticking someone far off it hasn't drawn lately, brain and all, so a
+    // bodyguard behind you stood still until you looked back. Marked as just drawn, he keeps up.
+    // The game writes these itself each time it draws him, so there is nothing to put back.
+    static void KeepAwake(RPawnVillain body)
+    {
+        if (!Game.TryGetWorldInfo(out var world))
+        {
+            return;
+        }
+
+        var now = world.TimeSeconds;
+        if (body.LastRenderTime < now)
+        {
+            body.LastRenderTime = now;
+        }
+
+        if (body.Mesh is { IsValid: true } mesh && mesh.LastRenderTime < now)
+        {
+            mesh.LastRenderTime = now;
+        }
+    }
+
     static void Step(Guard guard)
     {
         var body = guard.Body;
         var now = World.Now;
+        KeepAwake(body);
         if (!Crowd.Standing(body))
         {
             GuardBrain.Fell(guard);
