@@ -38,6 +38,10 @@ static class Spawned
 
         // A bodyguard, who follows you and so is never cleared for being far away.
         public bool Guard;
+
+        // Saved in edits.toml. It comes and goes with its part of the world, so it isn't cleared
+        // for being far away and doesn't count toward MOST AT ONCE.
+        public bool Kept;
         public float DownSince = -1f;
 
         // What to start once the new body's brain has taken over, and when.
@@ -161,7 +165,24 @@ static class Spawned
     };
 
     // How many more fit under MOST AT ONCE.
-    public static int Room => Math.Max(0, (int)Most.Value - Alive().Count());
+    public static int Room => Math.Max(0, (int)Most.Value - Alive().Count(spawn => !spawn.Kept));
+
+    // Spawned objects still in the world, and whether each is kept, for KEEP CHANGES.
+    public static IEnumerable<(DynamicSMActor Actor, bool Kept)> Objects() =>
+        Spawns.Where(spawn => spawn.Actor is DynamicSMActor && Things.Alive(spawn.Actor)).Select(spawn => ((DynamicSMActor)spawn.Actor, spawn.Kept)).ToArray();
+
+    public static bool Has(Actor actor) => Spawns.Exists(spawn => ReferenceEquals(spawn.Actor, actor));
+
+    // Still waiting to be sat on the floor or to come to rest.
+    public static bool Settling(Actor actor) => Spawns.Find(spawn => ReferenceEquals(spawn.Actor, actor))?.Start is not null;
+
+    public static void Keep(Actor actor, bool kept)
+    {
+        if (Spawns.Find(spawn => ReferenceEquals(spawn.Actor, actor)) is { } spawn)
+        {
+            spawn.Kept = kept;
+        }
+    }
 
     // Whether a spawned person is still in the world. A row asks every frame it's on screen.
     public static bool AnyPerson
@@ -185,19 +206,25 @@ static class Spawned
 
     static string? NonePicked() => Pick.CurrentId.Length == 0 ? NoneSpawned() ?? "NONE OF THAT KIND" : null;
 
-    public static Spawn Add(Actor actor, string label, bool passive, Action? start = null, bool guard = false)
+    public static Spawn Add(Actor actor, string label, bool passive, Action? start = null, bool guard = false, bool kept = false)
     {
         var spawn = new Spawn
         {
-            Actor = actor, Label = label, Number = ++_made, Passive = passive, Guard = guard, Start = start, StartAt = World.Now + StartAfter,
+            Actor = actor, Label = label, Number = ++_made, Passive = passive, Guard = guard, Kept = kept, Start = start, StartAt = World.Now + StartAfter,
         };
         Spawns.Add(spawn);
         _listDue = true;
 
-        // A bodyguard has its own marker, so the editor doesn't select it.
-        if (!guard)
+        // A bodyguard has its own marker, and a kept spawn coming back with its part of the world
+        // isn't something the player just made, so the editor selects neither.
+        if (!guard && !kept)
         {
             Editor.NewSpawn(actor);
+        }
+
+        if (!kept)
+        {
+            spawn.Kept = Kept.Adopts(actor);
         }
 
         return spawn;
@@ -263,7 +290,7 @@ static class Spawned
                 thug.SetHostile(false, Calm);
             }
 
-            if (!spawn.Guard && you is { } here && far > 0f && Vector3.DistanceSquared(spawn.Actor.Location, here) > far * far)
+            if (!spawn.Guard && !spawn.Kept && you is { } here && far > 0f && Vector3.DistanceSquared(spawn.Actor.Location, here) > far * far)
             {
                 Take(spawn);
             }

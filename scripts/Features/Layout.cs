@@ -111,7 +111,8 @@ static class Layout
             .Add("SELECT", Editor.Sections)
             .Add("MOVE", Moving.Sections)
             .Add("CHANGE", Change.Sections)
-            .Add("MODE", EditorMode.Sections);
+            .Add("MODE", EditorMode.Sections)
+            .Add("KEEP", Kept.Sections);
 
         Catalog.Background("editor", Editor.Tick, Editor.Release);
 

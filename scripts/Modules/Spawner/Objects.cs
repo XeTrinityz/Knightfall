@@ -567,7 +567,7 @@ static class Objects
 
             try
             {
-                Dress(copy, recipe, size);
+                Dress(copy, recipe.Mesh, recipe.Materials, recipe.Scale * size, Solid.On);
             }
             catch
             {
@@ -605,30 +605,46 @@ static class Objects
 
     // Kept still until it's on the floor. The size goes on before the mesh, since a new mesh is
     // fitted at once but a new size only at the end of the tick.
-    static void Dress(DynamicSMActor copy, Recipe recipe, float size)
+    static void Dress(DynamicSMActor copy, StaticMesh mesh, MaterialInterface?[] materials, Vector3 scale, bool solid)
     {
         copy.SetPhysics(Actor.EPhysics.PHYS_None);
-        copy.SetDrawScale3D(recipe.Scale * size);
-        copy.SetStaticMesh(recipe.Mesh);
+        copy.SetDrawScale3D(scale);
+        copy.SetStaticMesh(mesh);
         if (copy.StaticMeshComponent is { IsValid: true } part)
         {
-            for (var i = 0; i < recipe.Materials.Length; i++)
+            for (var i = 0; i < materials.Length; i++)
             {
-                if (recipe.Materials[i] is { IsValid: true } material)
+                if (materials[i] is { IsValid: true } material)
                 {
                     part.SetMaterial(i, material);
                 }
             }
         }
 
-        if (Solid.On)
+        copy.SetCollision(solid, solid, false);
+    }
+
+    // A copy put straight at a saved spot, still and with no physics yet. Null when the game
+    // refused the spot.
+    public static DynamicSMActor? Build(StaticMesh mesh, MaterialInterface?[] materials, Vector3 scale, bool physics, bool solid, Vector3 at, Rotator turn)
+    {
+        var kind = physics ? KActorSpawnable.StaticClass() : DynamicSMActor_Spawnable.StaticClass();
+        if (Game.SpawnActor(kind, default, at, turn) is not DynamicSMActor copy)
         {
-            copy.SetCollision(true, true, false);
+            return null;
         }
-        else
+
+        try
         {
-            copy.SetCollision(false, false, false);
+            Dress(copy, mesh, materials, scale, solid);
         }
+        catch
+        {
+            copy.Destroy();
+            throw;
+        }
+
+        return copy;
     }
 
     // Sits it on the floor by its real size. False while its size isn't known yet, which shows as

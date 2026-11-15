@@ -281,8 +281,8 @@ static class Marks
     {
         var kind = Things.KindOf(actor) is { } found ? (int)found : Things.Labels.Length;
         var edit = Edits.Find(actor);
-        var states = edit is null ? 0 : 1 | (edit.Frozen ? 2 : 0) | (edit.Removed ? 4 : 0) | (edit.Ghost ? 8 : 0);
-        var key = kind * 16 + states;
+        var states = (edit is null ? 0 : 1 | (edit.Frozen ? 2 : 0) | (edit.Removed ? 4 : 0) | (edit.Ghost ? 8 : 0)) | (Kept.Holds(actor) ? 16 : 0);
+        var key = kind * 32 + states;
         if (Notes.TryGetValue(key, out var note))
         {
             return note;
@@ -292,6 +292,11 @@ static class Marks
         if (states == 1)
         {
             note += "  CHANGED";
+        }
+
+        if ((states & 16) != 0)
+        {
+            note += "  KEPT";
         }
 
         if (edit is { Frozen: true })

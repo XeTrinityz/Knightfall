@@ -37,6 +37,7 @@ static class Survive
     public const string BodyguardHostile = "Knightfall.BodyguardHostile";
     public const string BodyguardHealth = "Knightfall.BodyguardHealth";
     public const string BodyguardOrders = "Knightfall.BodyguardOrders";
+    public const string KeptCopies = "Knightfall.KeptCopies";
 
     public static T Get<T>(string key, T fallback)
     {

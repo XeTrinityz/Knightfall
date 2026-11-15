@@ -81,7 +81,10 @@ static class Edits
     public static IEnumerable<Edit> All => Journal.Values.Where(edit => Things.Alive(edit.Actor));
 
     // The first touch notes how it was.
-    public static Edit Begin(Actor actor)
+    public static Edit Begin(Actor actor) => Begin(actor, actor.Location, actor.Rotation);
+
+    // A kept change starts from where the game had it, which edits.toml remembers.
+    public static Edit Begin(Actor actor, Vector3 at, Rotator turn)
     {
         if (Find(actor) is { } known)
         {
@@ -91,20 +94,33 @@ static class Edits
         var edit = new Edit
         {
             Actor = actor,
-            At = actor.Location,
-            Turn = actor.Rotation,
+            At = at,
+            Turn = turn,
             Physics = actor.Physics,
             DrawScale = actor.DrawScale,
             TickOff = actor.bTickIsDisabled,
         };
         Journal[actor.Ptr] = edit;
+        Kept.Touched();
         return edit;
+    }
+
+    // Puts it back as the game had it and drops it, with nothing for UNDO to bring back.
+    public static void Forget(Actor actor)
+    {
+        History.RemoveAll(step => ReferenceEquals(step.Actor, actor));
+        if (Find(actor) is { } edit)
+        {
+            Journal.Remove(actor.Ptr);
+            PutBack(edit);
+        }
     }
 
     // Called before every change the player makes, with the word UNDO shows for it. It notes how
     // the object is now, so UNDO can take that one change back.
     public static Edit Touch(Actor actor, string what)
     {
+        Kept.Touched();
         var known = Find(actor);
         var now = Stopwatch.GetTimestamp();
         if (History.Count > 0 && History[^1] is var last && ReferenceEquals(last.Actor, actor) && last.What == what
@@ -127,6 +143,7 @@ static class Edits
     // Takes the newest change back. Steps on objects that are gone are skipped.
     public static Outcome StepBack()
     {
+        Kept.Touched();
         while (History.Count > 0)
         {
             var step = History[^1];
@@ -168,6 +185,7 @@ static class Edits
     // is refused by the game, so it goes with its collision off for the move.
     public static void Put(Actor actor, Vector3 at, Rotator turn)
     {
+        Kept.Touched();
         actor.SetRotation(turn);
         if (!actor.SetLocation(at))
         {
@@ -191,6 +209,8 @@ static class Edits
         {
             edit.StillAt = at;
         }
+
+        Kept.Moved(actor);
     }
 
     // Puts the CHANGE rows' state on the object. Anything removed, frozen, or a physics object
@@ -205,6 +225,7 @@ static class Edits
             return;
         }
 
+        Kept.Touched();
         Hold(edit, Things.Fixed(actor) is null && (edit.Frozen || edit.Removed || (edit.Ghost && edit.Physics == Actor.EPhysics.PHYS_RigidBody)));
         if (edit.Removed != edit.Unseen)
         {
