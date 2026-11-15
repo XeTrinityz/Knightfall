@@ -130,6 +130,10 @@ static class GameTweaks
         {
             _capSet = FrameCap.Index;
         }
+
+        // Sending a value takes about half a second in the city. Counted in the gap, it would look
+        // like a pause and be sent again every tick.
+        _lastTick = Stopwatch.GetTimestamp();
     }
 
     static void ReleaseCap()
@@ -152,6 +156,8 @@ static class GameTweaks
         {
             _detailSet = CharacterDetail.Value;
         }
+
+        _lastTick = Stopwatch.GetTimestamp();
     }
 
     static void ReleaseDetail()
