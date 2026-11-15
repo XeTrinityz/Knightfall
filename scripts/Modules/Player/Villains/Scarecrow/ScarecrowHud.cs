@@ -1,19 +1,18 @@
 #nullable enable
 
 using System.Diagnostics;
-using System.Numerics;
 using BmSDK;
-using BmSDK.BmGame;
 using BmSDK.Engine;
 
 namespace Knightfall;
 
-// The Scarecrow's HUD, the console of his fear experiments. A canister of toxin runs down its
-// side and refills after he vents. Beside his name a polygraph pen traces the fear in the thugs
-// around him, jumping as each is dosed and kicking down as one drops, with their pulse next to
-// it. While he is on air the trace gives way to his broadcast, live. A row of subjects shows who
-// is calm and who is in a panic. His four moves are tiles on their keys, and along the bottom a
-// log types out what he says.
+// The Scarecrow's HUD, Dr. Crane's own kit. His gas mask's lenses glow with each breath, quicker
+// while he moves or works. Under them a tray of his instruments, one per move: the injector's
+// syringe, whose plunger drives home as the needle lands, three fear darts that fill as they come
+// back, the toxin canister with its pressure gauge, and an old set that hisses static until his
+// broadcast is ready and shows it live while he is on air. Below, his case notes on every thug he
+// has dosed, each with a heart trace that races in terror, slows as it wears off and flatlines
+// red when the subject breaks. The seams are stitched like his mask.
 static partial class Scarecrow
 {
     static readonly Rgba Ink = new(10, 12, 8, 236);
@@ -35,209 +34,139 @@ static partial class Scarecrow
     // Laid out on the 1080-high screen.
     const float HudLeft = 36f;
     const float HudBottom = 36f;
-    const float HudWidth = 372f;
-    const float TankColumn = 46f;
-    const float TankWidth = 18f;
-    const float HeaderHeight = 34f;
+    const float HudWidth = 392f;
+    const float HeaderHeight = 40f;
     const float Inset = 9f;
-    const float MonitorHeight = 52f;
-    const float PulseWidth = 74f;
-    const float SubjectsHeight = 12f;
-    const float TileHeight = 34f;
-    const float TileGap = 6f;
-    const float TickerHeight = 22f;
+    const float TrayHeight = 66f;
+    const float LabelHeight = 30f;
+    const float ColumnGap = 6f;
+    const float CaptionHeight = 16f;
+    const float CaseRow = 15f;
+    const int CaseRows = 4;
 
-    // How fast the log types, and how long a line stays bright.
-    const float TypeRate = 34f;
-    const float LineHolds = 5f;
-
-    // A tile in use pulses this often. A new mode flashes its tag.
+    // A tool in use pulses this often. A new mode flashes its tag.
     const float PulseSeconds = 1.3f;
     const float FlashSeconds = 0.35f;
 
-    // The polygraph keeps this many readings, taken this often, and swings this far. A dose
-    // kicks the pen up and a collapse throws it down.
-    const int Readings = 120;
-    const float ReadEvery = 1f / 30f;
-    const float PenSwing = 18f;
-    const float Kick = 1f;
+    // One breath at rest, and while he moves or works.
+    const float BreathSlow = 3.6f;
+    const float BreathFast = 1.7f;
 
-    // Their pulse at rest and how much each thug in a panic adds.
-    const int RestingPulse = 72;
-    const int PulsePerPanic = 17;
+    // The plunger drives home this fast and draws back this fast.
+    const float PlungeRate = 7f;
+    const float DrawBackRate = 1.4f;
 
-    const int SubjectSlots = 10;
+    // A thug who drops this soon after a collapse broke, and his case stays up this long after.
+    const float BrokenWithin = 0.5f;
+    const float BrokenHolds = 5f;
 
-    static readonly float[] Pen = new float[Readings];
-    static int _penAt;
-    static float _penClock;
-    static float _penKick;
-    static int _penDosesSeen;
-    static int _penDropsSeen;
-    static float _penPhase;
+    // Heartbeats a second for a subject in terror and one whose fear is wearing off, and how
+    // many beats each trace shows.
+    const float TerrorRate = 2.4f;
+    const float WaningRate = 1.2f;
+    const float BeatsShown = 3f;
 
-    static string[] _line = Array.Empty<string>();
-    static float _lineAt = -100f;
-    static int _logged;
-    static string _lastSpoken = "";
+    // The static on the set changes this often.
+    const float StaticRate = 20f;
+
+    // A heartbeat as points along one beat: its phase and how far up the pen is.
+    static readonly (float Phase, float Value)[] Wave =
+    {
+        (0f, 0f), (0.06f, 0f), (0.09f, 0.15f), (0.12f, 0f), (0.14f, 0f), (0.16f, -0.15f), (0.18f, 1f),
+        (0.21f, -0.45f), (0.24f, 0f), (0.32f, 0f), (0.37f, 0.22f), (0.44f, 0f), (1f, 0f),
+    };
+
+    sealed class Case
+    {
+        public required nint Thug;
+        public required int Number;
+        public float Ended = -1f;
+        public bool Broken;
+    }
+
+    static readonly List<Case> Cases = new();
+    static int _caseCount;
+
+    static float _breath;
+    static float _plunger = 1f;
     static string _mode = "";
     static long _modeAt;
 
-    static readonly Dictionary<string, string[]> TypedLines = new();
-    static readonly string[] Percents = Enumerable.Range(0, 101).Select(n => n + "%").ToArray();
-    static readonly string[] Panics = Enumerable.Range(0, 101).Select(n => "PANIC " + n + "%").ToArray();
-    static readonly string[] Pulses = Enumerable.Range(0, 250).Select(n => n.ToString()).ToArray();
     static readonly string[] Pairs = Enumerable.Range(0, 100).Select(n => n.ToString("00")).ToArray();
     static readonly string[] Seconds = Enumerable.Range(0, 61).Select(n => n + " S").ToArray();
-    static readonly string[] Logs = Enumerable.Range(0, 100).Select(n => $"LOG {n:00} >").ToArray();
+    static readonly string[] CaseNumbers = Enumerable.Range(0, 1000).Select(n => $"NO.{n:000}").ToArray();
     static readonly string[] DartCounts = Enumerable.Range(0, DartsMost + 1).Select(n => $"{n} / {DartsMost}").ToArray();
-
-    // The words of his lines, for the log.
-    static readonly Dictionary<string, string> Spoken = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Scenes_Tv_Scarecrow_City_Ch07_Gas_B_01"] = "Gotham is mine. Do you see, world? The nightmare has truly begun.",
-        ["Scenes_Tv_Scarecrow_City_Ch07_Pre_Gas_I_01"] = "People of Gotham. I'm going to give you something. A gift unlike anything you've experienced before.",
-        ["Scenes_Tv_Scarecrow_City_Ch01_B_01"] = "I have waited for this night. Yearned for it. When I'm finished, the world will be forever changed.",
-        ["Scenes_Tv_Scarecrow_City_Ch05_D_01"] = "When I'm done with Gotham - and with you - I will have barely begun. Terror will spread far.",
-        ["Scenes_Tv_Scarecrow_City_Ch07_Pre_Gas_F_01"] = "It is time for you to bear witness to Gotham's end. Her destruction will be mirrored in your defeat.",
-        ["Scenes_Tv_Scarecrow_City_Ch07_Post_Gas_J_01"] = "I gave you all a gift. Stripped away your pretenses and let you be the frightened beasts you all are inside.",
-        ["Scenes_Tv_Scarecrow_City_Ch09_J_01"] = "Do not let cowardice be your epitaph. Accept your fate and face me.",
-        ["Scenes_Tv_Scarecrow_City_Ch03_Army_01"] = "Are you scared, petty criminals of Gotham? Of the tanks rolling across the roads. The armed men patrolling your streets?",
-        ["Scenes_Tv_Scarecrow_City_Ch01_H_01"] = "Look at your city. Abandoned in terror by those that fled, torn apart by those who had nowhere to go.",
-    };
-
-    // A line for the log, typed a letter at a time.
-    static void Said(string words)
-    {
-        if (!TypedLines.TryGetValue(words, out var typed))
-        {
-            typed = Enumerable.Range(1, words.Length).Select(n => words[..n]).ToArray();
-            TypedLines[words] = typed;
-        }
-
-        _line = typed;
-        _lineAt = World.Now;
-        _logged = (_logged + 1) % 100;
-    }
 
     static void ShowHud()
     {
-        if (!Hud.On)
-        {
-            VillainHud.Show(null);
-            return;
-        }
-
-        // A line he just spoke goes into the log.
-        var spoken = Speech.LastLine;
-        if (spoken != _lastSpoken)
-        {
-            _lastSpoken = spoken;
-            if (Spoken.TryGetValue(spoken[(spoken.LastIndexOf('.') + 1)..], out var words))
-            {
-                Said(words);
-            }
-        }
-
-        VillainHud.Show(DrawHud);
+        VillainHud.Show(Hud.On ? DrawHud : null);
     }
 
     static void DrawHud(float rise, float seconds)
     {
+        FileCases();
         var now = Stopwatch.GetTimestamp();
         var time = (float)(now / (double)Stopwatch.Frequency);
-        var height = HeaderHeight + Inset + MonitorHeight + Inset + SubjectsHeight + Inset + TileHeight * 2f + TileGap + Inset + TickerHeight;
+        _breath = (_breath + seconds / (Acting || _speed > StillSpeed ? BreathFast : BreathSlow)) % 1f;
+        var target = _move == Move.Needle && _hit ? 0.1f : 1f;
+        _plunger = target < _plunger ? MathF.Max(target, _plunger - seconds * PlungeRate) : MathF.Min(target, _plunger + seconds * DrawBackRate);
+
+        var height = HeaderHeight + Inset + TrayHeight + LabelHeight + CaptionHeight + CaseRow * CaseRows + Inset;
         var x = HudLeft;
         var y = Draw.ScreenHeight - HudBottom - height + rise;
+        var right = x + HudWidth;
         Shapes.Under = Solid;
 
         Draw.Rect(x, y, HudWidth, height, Ink);
         Draw.Frame(x, y, HudWidth, height, 1f, Rule);
-        Tank(x, y, height, time);
-        var left = x + TankColumn;
-        var right = x + HudWidth - Inset;
-        Draw.Rect(left, y, 1f, height, Rule);
+        Header(x, y, right, now);
+        Seam(x + 1f, right - 1f, y + HeaderHeight);
 
-        Header(left, y, right, now);
         var row = y + HeaderHeight + Inset;
-        Monitor(left + Inset, row, right - PulseWidth - Inset, time, seconds);
-        PulseReading(right - PulseWidth, row);
-
-        row += MonitorHeight + Inset;
-        Subjects(left + Inset, row, right, time);
-
-        row += SubjectsHeight + Inset;
+        var width = (HudWidth - Inset * 2f - ColumnGap * 3f) / 4f;
         var pulse = 0.5f + 0.5f * MathF.Sin(time * MathF.Tau / PulseSeconds);
-        var tileWidth = (right - left - Inset - TileGap) / 2f;
-        var firstX = left + Inset;
-        var secondX = firstX + tileWidth + TileGap;
+        var cx = x + Inset;
 
-        Tile(firstX, row, tileWidth, "NEEDLE", Hotkeys.KeyText(NeedleKey), _move == Move.Needle, false, 1f, "", pulse);
-        Tile(secondX, row, tileWidth, "FEAR DART", Hotkeys.KeyText(DartKey), _move == Move.Dart, _darts < 1f, _darts / DartsMost,
-            DartCounts[Math.Clamp((int)MathF.Floor(_darts), 0, DartsMost)], pulse);
+        var dosing = _move == Move.Needle;
+        Column(cx, row, width, "NEEDLE", Hotkeys.KeyText(NeedleKey), dosing, dosing ? "DOSING" : "READY", dosing ? GreenGlow : Green, pulse);
+        Syringe(cx + width / 2f, row, dosing);
 
-        row += TileHeight + TileGap;
+        cx += width + ColumnGap;
+        var loaded = Math.Clamp((int)MathF.Floor(_darts), 0, DartsMost);
+        Column(cx, row, width, "FEAR DART", Hotkeys.KeyText(DartKey), _move == Move.Dart, DartCounts[loaded], loaded > 0 ? Green : Dim, pulse);
+        Darts(cx + width / 2f, row);
+
+        cx += width + ColumnGap;
         var gassing = _move == Move.Toxin || World.Now < _cloudUntil;
         var toxinReady = Readiness(_nextToxin, ToxinWait);
-        Tile(firstX, row, tileWidth, "FEAR TOXIN", Hotkeys.KeyText(ToxinKey), gassing, !gassing && toxinReady < 1f, gassing ? 1f : toxinReady,
-            gassing ? "GASSING" : toxinReady < 1f ? Wait(_nextToxin) : "", pulse);
-        var airReady = OnAir ? 1f : Readiness(_nextBroadcast, BroadcastWait);
-        Tile(secondX, row, tileWidth, "BROADCAST", Hotkeys.KeyText(BroadcastKey), OnAir, !OnAir && airReady < 1f, airReady,
-            OnAir ? "ON AIR" : airReady < 1f ? Wait(_nextBroadcast) : "", pulse);
+        Column(cx, row, width, "FEAR TOXIN", Hotkeys.KeyText(ToxinKey), gassing,
+            gassing ? "GASSING" : toxinReady < 1f ? Wait(_nextToxin) : "READY", gassing ? Amber : toxinReady < 1f ? Dim : Green, pulse);
+        Canister(cx + width / 2f, row, gassing, toxinReady, time);
 
-        Ticker(left, y + height - TickerHeight, right, time);
+        cx += width + ColumnGap;
+        var airReady = OnAir ? 1f : Readiness(_nextBroadcast, BroadcastWait);
+        Column(cx, row, width, "BROADCAST", Hotkeys.KeyText(BroadcastKey), OnAir,
+            OnAir ? "ON AIR" : airReady < 1f ? Wait(_nextBroadcast) : "READY", OnAir ? Blood : airReady < 1f ? Dim : Green, pulse);
+        Set(cx + width / 2f, row, airReady, time);
+
+        row += TrayHeight + LabelHeight;
+        Seam(x + 1f, right - 1f, row);
+        Notes(x + Inset, row + 4f, right - Inset, time);
     }
 
     static string Wait(float readyAt) => Seconds[Math.Clamp((int)MathF.Ceiling(readyAt - World.Now), 0, Seconds.Length - 1)];
 
-    // The toxin canister, filled to how ready his next vent is. It bubbles as it refills, and
-    // while the gas is out it drains as the cloud thins and its outline blinks amber.
-    static void Tank(float x, float y, float height, float time)
-    {
-        const string label = "TOXIN";
-        Draw.Tracked(label, x + (TankColumn - Draw.TrackedWidth(label, 7f, 1f)) / 2f, y + 6f, 7f, 1f, Dim);
-
-        var tx = x + (TankColumn - TankWidth) / 2f;
-        var ty = y + 24f;
-        var th = height - 50f;
-        var gassing = _move == Move.Toxin || World.Now < _cloudUntil;
-        var level = gassing ? Math.Clamp((_cloudUntil - World.Now) / CloudSeconds, 0f, 1f) : Readiness(_nextToxin, ToxinWait);
-
-        Draw.Rect(tx - 3f, ty - 5f, TankWidth + 6f, 5f, Chip);
-        Draw.Rect(tx + TankWidth / 2f - 2f, ty - 9f, 4f, 4f, Chip);
-        Draw.Rect(tx, ty, TankWidth, th, Glass);
-        var surface = ty + th - level * th;
-        if (level > 0f)
-        {
-            Draw.Rect(tx + 2f, surface, TankWidth - 4f, ty + th - surface - 1f, level >= 1f && !gassing ? Green : GreenDim);
-            Draw.Rect(tx + 2f, surface, TankWidth - 4f, 1.5f, GreenGlow);
-        }
-
-        if (!gassing && level > 0.05f && level < 1f)
-        {
-            for (var i = 0; i < 3; i++)
-            {
-                var phase = (time * 0.5f + i / 3f) % 1f;
-                var by = ty + th - 4f - phase * (ty + th - 4f - surface);
-                Draw.Rect(tx + 4f + i * 4f, by, 2f, 2f, GreenGlow with { A = (byte)(220f * (1f - phase)) });
-            }
-        }
-
-        Draw.Frame(tx, ty, TankWidth, th, 1f, gassing && time % 0.8f < 0.4f ? Amber : Rule);
-        for (var i = 1; i < 4; i++)
-        {
-            Draw.Rect(tx + TankWidth - (i == 2 ? 7f : 5f), ty + th * i / 4f, i == 2 ? 6f : 4f, 1f, Dim);
-        }
-
-        Draw.Rect(tx - 3f, ty + th, TankWidth + 6f, 4f, Chip);
-        var shown = Percents[Math.Clamp((int)MathF.Round(level * 100f), 0, 100)];
-        Draw.Text(shown, x + (TankColumn - Draw.TextWidth(shown, 10f)) / 2f, y + height - 19f, 10f, level >= 1f && !gassing ? Green : Words);
-    }
-
+    // His mask, his name and what he is doing.
     static void Header(float x, float y, float right, long now)
     {
-        Draw.Tracked("DR. J. CRANE", x + Inset, y + 5f, 15f, 3f, Words);
-        Draw.Tracked("FEAR RESPONSE STUDY", x + Inset, y + 21f, 8f, 1.5f, Dim);
+        var glow = 0.5f - 0.5f * MathF.Cos(_breath * MathF.Tau);
+        Lens(x + 22f, y + 17f, glow);
+        Lens(x + 44f, y + 17f, glow);
+        Dot(x + 33f, y + 31f, 5f, Chip);
+        Hoop(x + 33f, y + 31f, 2f, 3f, Rgba.Mix(Dark, GreenDim, glow));
+
+        Draw.Tracked("SCARECROW", x + 64f, y + 7f, 15f, 3f, Words);
+        Draw.Tracked("DR. JONATHAN CRANE", x + 64f, y + 24f, 8f, 1.5f, Dim);
 
         var mode = Mode();
         if (mode != _mode)
@@ -249,15 +178,22 @@ static partial class Scarecrow
         var colour = OnAir ? Blood : _move == Move.None ? Green : Amber;
         var flash = 1f - Math.Clamp((float)((now - _modeAt) / (double)Stopwatch.Frequency) / FlashSeconds, 0f, 1f);
         var tagWidth = Draw.TrackedWidth(mode, 11f, 2.5f) + 14f;
-        var tagX = right - tagWidth;
+        var tagX = right - Inset - tagWidth;
         if (flash > 0f)
         {
-            Draw.Rect(tagX, y + 9f, tagWidth, 17f, colour with { A = (byte)(flash * 120f) });
+            Draw.Rect(tagX, y + 11f, tagWidth, 17f, colour with { A = (byte)(flash * 120f) });
         }
 
-        Draw.Frame(tagX, y + 9f, tagWidth, 17f, 1f, colour);
-        Draw.Tracked(mode, tagX + 7f, y + 12f, 11f, 2.5f, colour);
-        Draw.Rect(x, y + HeaderHeight, right + Inset - x, 1f, Rule);
+        Draw.Frame(tagX, y + 11f, tagWidth, 17f, 1f, colour);
+        Draw.Tracked(mode, tagX + 7f, y + 14f, 11f, 2.5f, colour);
+    }
+
+    // One eyepiece of his mask, lit as he breathes in.
+    static void Lens(float x, float y, float glow)
+    {
+        Dot(x, y, 10f, Chip);
+        Dot(x, y, 7.5f, Rgba.Mix(Dark, GreenGlow, 0.15f + 0.65f * glow));
+        Dot(x - 2.5f, y - 2.5f, 1.6f, Words with { A = 160 });
     }
 
     static string Mode() => _move switch
@@ -270,218 +206,391 @@ static partial class Scarecrow
         _ => _speed > OwnFades ? "STALKING" : _speed > StillSpeed ? "CREEPING" : "WATCHING",
     };
 
-    // The polygraph window. Its pen writes at the right and the paper runs left, wavering more
-    // the more of them are afraid. On air, it shows his broadcast instead.
-    static void Monitor(float x, float y, float right, float time, float delta)
-    {
-        var width = right - x;
-        Draw.Rect(x, y, width, MonitorHeight, Solid);
-        Draw.Frame(x, y, width, MonitorHeight, 1f, Rule);
-        Record(delta);
-
-        if (OnAir && _feedTexture is { IsValid: true } feed && feed.SizeX > 0 && feed.SizeY > 0)
-        {
-            Feed(x, y, width, feed, time);
-            return;
-        }
-
-        for (var gx = x + 12f; gx < right - 2f; gx += 12f)
-        {
-            Draw.Rect(gx, y + 3f, 1f, MonitorHeight - 6f, Rule with { A = 70 });
-        }
-
-        var baseline = y + MonitorHeight * 0.58f;
-        Draw.Rect(x + 3f, baseline, width - 6f, 1f, Rule with { A = 140 });
-
-        var step = (width - 10f) / (Readings - 1);
-        var lastX = 0f;
-        var lastY = 0f;
-        for (var i = 0; i < Readings; i++)
-        {
-            var px = x + 5f + i * step;
-            var py = baseline - Pen[(_penAt + i) % Readings] * PenSwing;
-            if (i > 0)
-            {
-                Stroke(lastX, lastY, px, py, 1.5f, Rgba.Mix(Green, Solid, (1f - i / (float)(Readings - 1)) * 0.7f));
-            }
-
-            lastX = px;
-            lastY = py;
-        }
-
-        Draw.Rect(lastX - 1f, y + 4f, 2f, MonitorHeight - 8f, Dim with { A = 120 });
-        Draw.Place(lastX, lastY, 1f);
-        Shapes.Disc(2.4f, GreenGlow);
-        Draw.Place(0f, 0f, 1f);
-
-        Draw.Rect(x + 4f, y + 4f, Draw.TrackedWidth("GROUP FEAR", 7.5f, 1.5f) + 6f, 11f, Solid with { A = 230 });
-        Draw.Tracked("GROUP FEAR", x + 7f, y + 5f, 7.5f, 1.5f, Dim);
-        var panic = _afraid > 0 ? _afraid / (float)Math.Max(_near, _afraid) : 0f;
-        var reading = Panics[Math.Clamp((int)MathF.Round(panic * 100f), 0, 100)];
-        var readingWidth = Draw.TextWidth(reading, 8.5f);
-        Draw.Rect(right - readingWidth - 10f, y + MonitorHeight - 15f, readingWidth + 8f, 11f, Solid with { A = 230 });
-        Draw.TextRight(reading, right - 6f, y + MonitorHeight - 15f, 8.5f, panic > 0.5f ? Amber : Green);
-    }
-
-    // The pen's next readings: a tremor that grows with the fear, and the kicks.
-    static void Record(float delta)
-    {
-        if (_doses != _penDosesSeen)
-        {
-            _penDosesSeen = _doses;
-            _penKick = Kick;
-        }
-
-        if (_collapsed != _penDropsSeen)
-        {
-            _penDropsSeen = _collapsed;
-            _penKick = -Kick;
-        }
-
-        _penClock = MathF.Min(_penClock + delta, 1f);
-        while (_penClock >= ReadEvery)
-        {
-            _penClock -= ReadEvery;
-            var fear = Math.Clamp(_afraid / 4f, 0f, 1f);
-            _penPhase = (_penPhase + ReadEvery * (0.7f + 2.5f * fear)) % 1000f;
-            var tremor = (0.12f + 0.5f * fear) * MathF.Sin(_penPhase * MathF.Tau) + (0.05f + 0.25f * fear) * MathF.Sin(_penPhase * 17.3f);
-            Pen[_penAt] = Math.Clamp(tremor + _penKick, -1.2f, 1.2f);
-            _penAt = (_penAt + 1) % Readings;
-            _penKick *= 0.82f;
-        }
-    }
-
-    // His broadcast as it plays, with a blinking light and a band of interference rolling down.
-    static void Feed(float x, float y, float width, TextureRenderTarget2D feed, float time)
-    {
-        var aspect = feed.SizeX / (float)feed.SizeY;
-        var shownWidth = MathF.Min(width - 4f, (MonitorHeight - 4f) * aspect);
-        var shownX = x + (width - shownWidth) / 2f;
-        Draw.Glow(feed, shownX, y + 2f, shownWidth, MonitorHeight - 4f, 0f, 0f, feed.SizeX, feed.SizeY, Words);
-        for (var line = y + 3f; line < y + MonitorHeight - 2f; line += 3f)
-        {
-            Draw.Rect(shownX, line, shownWidth, 1f, Solid with { A = 70 });
-        }
-
-        Draw.Rect(shownX, y + 2f + time * 22f % (MonitorHeight - 6f), shownWidth, 2f, Words with { A = 40 });
-        if (time % 1f < 0.6f)
-        {
-            Draw.Place(x + 9f, y + 10f, 1f);
-            Shapes.Disc(3f, Blood);
-            Draw.Place(0f, 0f, 1f);
-        }
-
-        Draw.Tracked("ON AIR", x + 15f, y + 5f, 7.5f, 1.5f, Blood);
-    }
-
-    // Their pulse, climbing with every thug in a panic.
-    static void PulseReading(float x, float y)
-    {
-        Draw.Tracked("PULSE", x, y + 1f, 7.5f, 1.5f, Dim);
-        var bpm = Math.Min(RestingPulse + PulsePerPanic * _afraid, Pulses.Length - 1);
-        var end = Draw.Tracked(Pulses[bpm], x, y + 11f, 17f, 0.5f, _afraid > 0 ? Amber : Words);
-        Draw.Text("BPM", end + 3f, y + 17f, 8f, Dim);
-        var (trend, colour) = _afraid > 0 ? ("RACING", Amber) : _near > 0 ? ("STEADY", Green) : ("NO SUBJECTS", Dim);
-        Draw.Tracked(trend, x, y + 34f, 7.5f, 1f, colour);
-    }
-
-    // The thugs close by: green while in a panic, pale while calm. Then those he has dropped.
-    static void Subjects(float x, float y, float right, float time)
-    {
-        var end = Draw.Tracked("SUBJECTS", x, y + 1f, 7.5f, 1.5f, Dim);
-        var dx = end + 10f;
-        var afraid = Math.Min(_afraid, SubjectSlots);
-        var calm = Math.Min(Math.Max(_near - _afraid, 0), SubjectSlots - afraid);
-        var beat = 0.6f + 0.4f * MathF.Sin(time * 9f);
-        for (var i = 0; i < SubjectSlots; i++)
-        {
-            Draw.Place(dx + i * 12f, y + 6f, 1f);
-            if (i < afraid)
-            {
-                Shapes.Disc(4f, Rgba.Mix(GreenDim, GreenGlow, beat));
-            }
-            else
-            {
-                Shapes.Ring(2.6f, 4f, i < afraid + calm ? Words : Dark);
-            }
-        }
-
-        Draw.Place(0f, 0f, 1f);
-        var down = Pairs[Math.Clamp(_collapsed, 0, Pairs.Length - 1)];
-        var downEnd = Draw.TextRight(down, right, y - 1f, 9.5f, Since(_collapsedAt) < FlashSeconds ? Blood : Words);
-        Draw.Tracked("DOWN", downEnd - Draw.TrackedWidth("DOWN", 7.5f, 1.5f) - 5f, y + 1f, 7.5f, 1.5f, Dim);
-    }
-
-    // One move. In use it glows and pulses. When it can't be used yet it is hatched. Its bar
-    // shows how ready it is.
-    static void Tile(float x, float y, float width, string name, string key, bool lit, bool waiting, float bar, string corner, float pulse)
+    // A slot on the tray, with the move's name, its key and how it stands under it.
+    static void Column(float x, float y, float width, string name, string key, bool lit, string status, Rgba statusColour, float pulse)
     {
         if (lit)
         {
-            Draw.Rect(x - 2f, y - 2f, width + 4f, TileHeight + 4f, Green with { A = (byte)(40f + 60f * pulse) });
-            Draw.Rect(x, y, width, TileHeight, LitFill);
-            Draw.Frame(x, y, width, TileHeight, 1f, Green);
+            Draw.Rect(x - 2f, y - 2f, width + 4f, TrayHeight + 4f, Green with { A = (byte)(40f + 60f * pulse) });
+            Draw.Rect(x, y, width, TrayHeight, LitFill);
+            Draw.Frame(x, y, width, TrayHeight, 1f, Green);
         }
         else
         {
-            Draw.Rect(x, y, width, TileHeight, TileFill);
-            if (waiting)
-            {
-                Draw.Hatch(x, y, width, TileHeight, 6f, Dark);
-            }
-
-            Draw.Frame(x, y, width, TileHeight, 1f, Rule);
+            Draw.Rect(x, y, width, TrayHeight, TileFill);
+            Draw.Frame(x, y, width, TrayHeight, 1f, Rule);
         }
 
+        Draw.Tracked(name, x + (width - Draw.TrackedWidth(name, 8.5f, 1.5f)) / 2f, y + TrayHeight + 4f, 8.5f, 1.5f, lit ? GreenGlow : Words);
+        var keyRight = x;
         if (key.Length > 0)
         {
-            var keyWidth = Draw.TextWidth(key, 9f) + 8f;
-            Draw.Rect(x + 6f, y + 5f, keyWidth, 12f, lit ? Green : Chip);
-            Draw.Text(key, x + 10f, y + 6f, 9f, lit ? Solid : Words);
+            var keyWidth = Draw.TextWidth(key, 8.5f) + 8f;
+            Draw.Rect(x, y + TrayHeight + 16f, keyWidth, 11f, lit ? Green : Chip);
+            Draw.Text(key, x + 4f, y + TrayHeight + 16.5f, 8.5f, lit ? Solid : Words);
+            keyRight = x + keyWidth + 4f;
         }
 
-        if (corner.Length > 0)
+        Draw.TextRightFit(status, x + width, y + TrayHeight + 16.5f, 8.5f, statusColour, keyRight);
+    }
+
+    // The injector's syringe. The plunger drives home as the needle lands and draws back after.
+    static void Syringe(float cx, float y, bool lit)
+    {
+        const float barrel = 12f;
+        var top = y + 26f;
+        var bottom = y + 50f;
+        var plunger = bottom - _plunger * (bottom - top);
+
+        Draw.Rect(cx - 1f, plunger - 14f, 2f, 14f, Dim);
+        Hoop(cx, plunger - 17f, 2.2f, 3.8f, Dim);
+        Draw.Rect(cx - 10f, top - 2f, 20f, 2f, Chip);
+        Draw.Rect(cx - barrel / 2f, top, barrel, bottom - top, Glass);
+        if (bottom - plunger > 3f)
         {
-            Draw.TextRight(corner, x + width - 6f, y + 6f, 8.5f, corner == "ON AIR" ? Blood : waiting ? Dim : Green);
+            Draw.Rect(cx - barrel / 2f + 1f, plunger + 2f, barrel - 2f, bottom - plunger - 2f, lit ? GreenGlow : Green);
         }
 
-        Draw.Tracked(name, x + 6f, y + 19f, 11f, 1.5f, lit ? GreenGlow : waiting ? Dim : Words);
-        Draw.Rect(x + 6f, y + TileHeight - 5f, width - 12f, 2f, Dark);
-        var filled = Math.Clamp(bar, 0f, 1f);
-        if (filled > 0f)
+        Draw.Rect(cx - barrel / 2f + 1f, plunger, barrel - 2f, 2.5f, Words);
+        Draw.Frame(cx - barrel / 2f, top, barrel, bottom - top, 1f, lit ? Green : Rule);
+        for (var i = 1; i < 4; i++)
         {
-            Draw.Rect(x + 6f, y + TileHeight - 5f, (width - 12f) * filled, 2f, lit ? Green : Green with { A = 130 });
+            Draw.Rect(cx + barrel / 2f - (i == 2 ? 5f : 3f), top + (bottom - top) * i / 4f, i == 2 ? 4f : 2f, 1f, Dim);
+        }
+
+        Draw.Rect(cx - 3f, bottom, 6f, 4f, Chip);
+        Draw.Rect(cx - 0.75f, bottom + 4f, 1.5f, 9f, Words);
+        if (lit)
+        {
+            Dot(cx, bottom + 13f, 1.8f, GreenGlow);
         }
     }
 
-    // What he last said, typed with a blinking caret. A long line shows its newest words. Once it
-    // has been shown a while it dims.
-    static void Ticker(float x, float y, float right, float time)
+    // His three fear darts, each filling as it comes back.
+    static void Darts(float cx, float y)
     {
-        Draw.Rect(x, y, right + Inset - x, 1f, Rule);
-        var since = World.Now - _lineAt;
-        var end = Draw.Tracked(Logs[_logged], x + Inset, y + 7f, 8.5f, 0.5f, Dim);
-        var text = _line.Length > 0 ? _line[Math.Clamp((int)(since * TypeRate), 0, _line.Length - 1)] : "";
-        var typing = _line.Length > 0 && text.Length < _line[^1].Length;
-        var colour = typing || since < LineHolds ? Words : Dim;
-        var from = end + 6f;
-        var last = right - 12f;
-        var width = Draw.TrackedWidth(text, 9.5f, 0.5f);
-        var after = from + width;
-        if (after <= last)
+        for (var i = 0; i < DartsMost; i++)
         {
-            Draw.Tracked(text, from, y + 6f, 9.5f, 0.5f, colour);
+            var dx = cx + (i - (DartsMost - 1) / 2f) * 18f;
+            var fill = Math.Clamp(_darts - i, 0f, 1f);
+            var top = y + 22f;
+            var bottom = y + 46f;
+
+            Draw.Rect(dx - 0.75f, y + 11f, 1.5f, 11f, Dim);
+            Draw.Triangle(dx - 0.75f, y + 13f, dx - 0.75f, y + 21f, dx - 6f, y + 10f, fill >= 1f ? Chip : Dark);
+            Draw.Triangle(dx + 0.75f, y + 13f, dx + 6f, y + 10f, dx + 0.75f, y + 21f, fill >= 1f ? Chip : Dark);
+            Draw.Rect(dx - 3.5f, top, 7f, bottom - top, Glass);
+            if (fill > 0f)
+            {
+                var surface = bottom - fill * (bottom - top);
+                Draw.Rect(dx - 2.5f, surface, 5f, bottom - surface, fill >= 1f ? Green : GreenDim);
+                if (fill >= 1f)
+                {
+                    Draw.Rect(dx - 2.5f, surface, 5f, 1.5f, GreenGlow);
+                }
+            }
+
+            Draw.Frame(dx - 3.5f, top, 7f, bottom - top, 1f, fill >= 1f ? Rule : Dark);
+            Draw.Rect(dx - 0.6f, bottom, 1.2f, 9f, fill >= 1f ? Words : Dim);
+        }
+    }
+
+    // The toxin canister on his back and its pressure gauge, full when he can vent again. While
+    // the gas is out it drains as the cloud thins and the gauge blinks amber.
+    static void Canister(float cx, float y, bool gassing, float ready, float time)
+    {
+        var level = gassing ? Math.Clamp((_cloudUntil - World.Now) / CloudSeconds, 0f, 1f) : ready;
+        var warn = gassing && time % 0.8f < 0.4f;
+
+        var gy = y + 17f;
+        Dot(cx, gy, 12.5f, warn ? Amber : Rule);
+        Dot(cx, gy, 11f, Solid);
+        Draw.Place(cx, gy, 1f);
+        Shapes.Arc(8f, 10f, -120f, 120f, Dark);
+        Shapes.Arc(8f, 10f, -120f, -120f + 240f * level, gassing ? Amber : level >= 1f ? Green : GreenDim);
+        for (var i = 0; i < 5; i++)
+        {
+            Shapes.Spoke(-120f + 60f * i, 6f, 7.5f, 1f, Dim);
+        }
+
+        Shapes.Spoke(-120f + 240f * level, 0f, 9f, 1.5f, Words);
+        Shapes.Disc(2f, Chip);
+        Draw.Place(0f, 0f, 1f);
+
+        Draw.Rect(cx - 1.5f, gy + 12f, 3f, 4f, Chip);
+        var top = y + 36f;
+        var bottom = y + 59f;
+        Draw.Rect(cx - 15f, top - 3f, 30f, 3f, Chip);
+        Draw.Rect(cx - 13f, top, 26f, bottom - top, Glass);
+        var surface = bottom - level * (bottom - top);
+        if (level > 0f)
+        {
+            Draw.Rect(cx - 12f, surface, 24f, bottom - surface, level >= 1f && !gassing ? Green : GreenDim);
+            Draw.Rect(cx - 12f, surface, 24f, 1.5f, GreenGlow);
+        }
+
+        if (!gassing && level > 0.1f && level < 1f)
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                var phase = (time * 0.5f + i / 3f) % 1f;
+                var by = bottom - 3f - phase * (bottom - 3f - surface);
+                Draw.Rect(cx - 7f + i * 6f, by, 2f, 2f, GreenGlow with { A = (byte)(220f * (1f - phase)) });
+            }
+        }
+
+        Draw.Frame(cx - 13f, top, 26f, bottom - top, 1f, Rule);
+        Draw.Rect(cx - 15f, bottom, 30f, 3f, Chip);
+    }
+
+    // The old set his broadcast takes over. Static until it is ready, clearing as it gets close,
+    // then it waits on standby. On air it shows the broadcast live.
+    static void Set(float cx, float y, float ready, float time)
+    {
+        const float sw = 52f;
+        const float sh = 32f;
+        var sx = cx - sw / 2f;
+        var sy = y + 24f;
+
+        Stroke(cx, y + 20f, cx - 14f, y + 6f, 1.2f, Dim);
+        Stroke(cx, y + 20f, cx + 16f, y + 4f, 1.2f, Dim);
+        Dot(cx - 14f, y + 6f, 1.6f, Dim);
+        Dot(cx + 16f, y + 4f, 1.6f, Dim);
+        Draw.Rect(sx - 4f, sy - 4f, sw + 8f, sh + 8f, Dark);
+        Draw.Frame(sx - 4f, sy - 4f, sw + 8f, sh + 8f, 1f, Rule);
+        Draw.Rect(sx - 2f, sy + sh + 4f, 6f, 2f, Chip);
+        Draw.Rect(sx + sw - 4f, sy + sh + 4f, 6f, 2f, Chip);
+        Draw.Rect(sx, sy, sw, sh, Solid);
+
+        if (OnAir && _feedTexture is { IsValid: true } feed && feed.SizeX > 0 && feed.SizeY > 0)
+        {
+            // The feed is wider than the screen, so its sides are cut off.
+            var across = MathF.Min(feed.SizeX, feed.SizeY * sw / sh);
+            Draw.Glow(feed, sx, sy, sw, sh, (feed.SizeX - across) / 2f, 0f, across, feed.SizeY, Words);
+            Draw.Rect(sx, sy + time * 18f % (sh - 2f), sw, 2f, Words with { A = 40 });
+            if (time % 1f < 0.6f)
+            {
+                Dot(sx + 5f, sy + 5f, 2.4f, Blood);
+            }
+        }
+        else if (ready < 1f)
+        {
+            const float cell = 4f;
+            var frame = (int)(time * StaticRate);
+            for (var row = 0; row < (int)(sh / cell); row++)
+            {
+                for (var col = 0; col < (int)(sw / cell); col++)
+                {
+                    var bright = Noise(frame, row * 32 + col) * (1f - ready * 0.8f);
+                    Draw.Rect(sx + col * cell, sy + row * cell, cell, cell, Rgba.Mix(Solid, Words, bright * 0.7f));
+                }
+            }
         }
         else
         {
-            Draw.TrackedTail(text, last, y + 6f, 9.5f, 0.5f, colour, from);
-            after = last;
+            Draw.Rect(sx, sy, sw, sh, GreenDim with { A = 60 });
+            Draw.Rect(sx, sy + time * 12f % (sh - 2f), sw, 2f, Green with { A = 50 });
+            if (time % 1.6f < 1.1f)
+            {
+                Draw.Tracked("STANDBY", cx - Draw.TrackedWidth("STANDBY", 7f, 1f) / 2f, sy + sh / 2f - 4f, 7f, 1f, Green);
+            }
         }
 
-        if (typing || (time % 1f) < 0.5f)
+        for (var line = sy + 1f; line < sy + sh; line += 3f)
         {
-            Draw.Rect(after + 3f, y + 6f, 6f, 11f, colour);
+            Draw.Rect(sx, line, sw, 1f, Solid with { A = 70 });
         }
+    }
+
+    // Every thug he has dosed, newest first. A trace races while the subject is in terror and
+    // slows once it wears off. One who collapsed flatlines in red for a while.
+    static void Notes(float x, float y, float right, float time)
+    {
+        Draw.Tracked("CASE NOTES", x, y + 1f, 7.5f, 1.5f, Dim);
+        var reach = Draw.TextRight(Pairs[Math.Clamp(_near, 0, Pairs.Length - 1)], right, y, 9f, _near > 0 ? Words : Dim);
+        var reachLabel = reach - Draw.TrackedWidth("IN REACH", 7.5f, 1.5f) - 5f;
+        Draw.Tracked("IN REACH", reachLabel, y + 1f, 7.5f, 1.5f, Dim);
+        var broken = Since(_collapsedAt) < FlashSeconds ? Blood : _collapsed > 0 ? Words : Dim;
+        var brokenAt = Draw.TextRight(Pairs[Math.Clamp(_collapsed, 0, Pairs.Length - 1)], reachLabel - 14f, y, 9f, broken);
+        Draw.Tracked("BROKEN", brokenAt - Draw.TrackedWidth("BROKEN", 7.5f, 1.5f) - 5f, y + 1f, 7.5f, 1.5f, Dim);
+
+        var traceLeft = x + 48f;
+        var traceRight = right - 66f;
+        for (var slot = 0; slot < CaseRows; slot++)
+        {
+            var ry = y + CaptionHeight + slot * CaseRow;
+            var mid = ry + 6f;
+            var index = Cases.Count - 1 - slot;
+            if (index < 0)
+            {
+                Draw.Text("NO.---", x, ry, 8.5f, Chip);
+                for (var dx = traceLeft; dx < traceRight; dx += 8f)
+                {
+                    Draw.Rect(dx, mid, 4f, 1f, Dark);
+                }
+
+                continue;
+            }
+
+            var file = Cases[index];
+            if (file.Broken)
+            {
+                if (World.Now - file.Ended < FlashSeconds)
+                {
+                    Draw.Rect(x - 3f, ry - 2f, right - x + 6f, CaseRow - 1f, Blood with { A = 90 });
+                }
+
+                Draw.Text(CaseNumbers[file.Number], x, ry, 8.5f, Dim);
+                Draw.Rect(traceLeft, mid, traceRight - traceLeft, 1.2f, Blood);
+                Draw.TextRight("BROKEN", right, ry, 8.5f, Blood);
+                continue;
+            }
+
+            var terror = Dosed.TryGetValue(file.Thug, out var dose) && Panicked(dose.Thug);
+            var rate = terror ? TerrorRate : WaningRate;
+            var colour = terror ? Green : GreenDim;
+            Draw.Text(CaseNumbers[file.Number], x, ry, 8.5f, terror ? Words : Dim);
+            Trace(traceLeft, traceRight, mid, terror ? 6f : 3.5f, time * rate + file.Number * 0.37f, colour);
+            Draw.TextRight(terror ? "TERROR" : "WANING", right, ry, 8.5f, terror ? GreenGlow : Dim);
+        }
+    }
+
+    // Opens a case for every thug newly dosed and closes the ones no longer dosed. A thug gone
+    // just as one collapsed is the one who broke.
+    static void FileCases()
+    {
+        foreach (var key in Dosed.Keys)
+        {
+            if (!Open(key))
+            {
+                _caseCount = _caseCount % (CaseNumbers.Length - 1) + 1;
+                Cases.Add(new Case { Thug = key, Number = _caseCount });
+            }
+        }
+
+        for (var i = Cases.Count - 1; i >= 0; i--)
+        {
+            var file = Cases[i];
+            if (file.Ended < 0f)
+            {
+                if (!Dosed.ContainsKey(file.Thug))
+                {
+                    file.Ended = World.Now;
+                    file.Broken = Since(_collapsedAt) < BrokenWithin;
+                }
+            }
+            else if (!file.Broken || World.Now - file.Ended > BrokenHolds || World.Now < file.Ended)
+            {
+                Cases.RemoveAt(i);
+            }
+        }
+    }
+
+    static bool Open(nint thug)
+    {
+        foreach (var file in Cases)
+        {
+            if (file.Thug == thug && file.Ended < 0f)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // A heart trace, its newest beat at the right. Head counts beats, so its whole part picks the
+    // beat and the rest is how far into it the pen is.
+    static void Trace(float left, float right, float mid, float height, float head, Rgba colour)
+    {
+        var width = right - left;
+        var lastX = 0f;
+        var lastY = 0f;
+        var started = false;
+        for (var beat = (int)MathF.Floor(head - BeatsShown); beat <= (int)MathF.Floor(head); beat++)
+        {
+            foreach (var (phase, value) in Wave)
+            {
+                var px = right - (head - (beat + phase)) / BeatsShown * width;
+                var py = mid - value * height;
+                if (started)
+                {
+                    Segment(lastX, lastY, px, py, left, right, colour);
+                }
+
+                lastX = px;
+                lastY = py;
+                started = true;
+            }
+        }
+
+        var now = head - MathF.Floor(head);
+        for (var i = 1; i < Wave.Length; i++)
+        {
+            if (now <= Wave[i].Phase)
+            {
+                var (p0, v0) = Wave[i - 1];
+                var (p1, v1) = Wave[i];
+                var value = v0 + (v1 - v0) * (now - p0) / (p1 - p0);
+                Dot(right, mid - value * height, 1.8f, GreenGlow);
+                break;
+            }
+        }
+    }
+
+    // The part of a line inside left to right.
+    static void Segment(float x0, float y0, float x1, float y1, float left, float right, Rgba colour)
+    {
+        if (x1 <= x0 || x1 <= left || x0 >= right)
+        {
+            return;
+        }
+
+        if (x0 < left)
+        {
+            y0 += (y1 - y0) * (left - x0) / (x1 - x0);
+            x0 = left;
+        }
+
+        if (x1 > right)
+        {
+            y1 = y0 + (y1 - y0) * (right - x0) / (x1 - x0);
+            x1 = right;
+        }
+
+        Stroke(x0, y0, x1, y1, 1.2f, colour);
+    }
+
+    // A rule with stitches across it, like the seams of his mask.
+    static void Seam(float x0, float x1, float y)
+    {
+        Draw.Rect(x0, y, x1 - x0, 1f, Rule);
+        for (var sx = x0 + 8f; sx < x1 - 4f; sx += 12f)
+        {
+            Stroke(sx - 2f, y - 3f, sx + 2f, y + 4f, 1.2f, Chip);
+        }
+    }
+
+    static void Dot(float x, float y, float radius, Rgba colour)
+    {
+        Draw.Place(x, y, 1f);
+        Shapes.Disc(radius, colour);
+        Draw.Place(0f, 0f, 1f);
+    }
+
+    static void Hoop(float x, float y, float inner, float outer, Rgba colour)
+    {
+        Draw.Place(x, y, 1f);
+        Shapes.Ring(inner, outer, colour);
+        Draw.Place(0f, 0f, 1f);
+    }
+
+    // The same 0 to 1 for the same two numbers, for static that holds still between frames.
+    static float Noise(int a, int b)
+    {
+        var h = unchecked((uint)(a * 374761393 + b * 668265263));
+        h = unchecked((h ^ (h >> 13)) * 1274126177u);
+        return (h ^ (h >> 16)) % 1024u / 1023f;
     }
 
     // From 0 as a move is used to 1 once it can be used again.
