@@ -111,11 +111,6 @@ static partial class KillerCroc
     const float LandAt = 150f;
     const float LungeSpeed = 1500f;
 
-    // The step he takes over a kerb when the game doesn't give one, and how far down a slope
-    // he is let for each unit forward, about 40 degrees.
-    const float StepHeight = 35f;
-    const float SlopeDrop = 0.85f;
-
     static bool _spins;
     static float _spin;
     static float _lastYaw;
@@ -310,35 +305,7 @@ static partial class KillerCroc
         var delta = World.Delta;
         var left = MathF.Max(_hitAt - played.CurrentTime, delta);
         var step = MathF.Min(gap * MathF.Min(1f, delta / left), LungeSpeed * delta);
-        Stride(player, to / distance * step);
-    }
-
-    // Moves the pawn along the ground the way walking does. A plain move stops dead at a kerb or
-    // a lip of rubble, so a blocked move steps up over it, goes on and comes back down. He is
-    // then let down onto ground that falls away under him, as far as a slope that steep would.
-    // Returns how far along the ground it really went.
-    static float Stride(RPawnPlayer player, Vector3 way)
-    {
-        var want = way.Length();
-        if (want < 0.01f)
-        {
-            return 0f;
-        }
-
-        var start = player.Location;
-        var from = player.Location;
-        player.Move(way);
-        var gone = Level(player.Location - from).Length();
-        if (want - gone > 1f)
-        {
-            var lift = Vector3.UnitZ * (player.MaxStepHeight > 0f ? player.MaxStepHeight : StepHeight);
-            player.Move(lift);
-            player.Move(way * ((want - gone) / want));
-            player.Move(-lift);
-        }
-
-        player.Move(-Vector3.UnitZ * (want * SlopeDrop));
-        return Level(player.Location - start).Length();
+        Villains.Stride(player, to / distance * step);
     }
 
     // Every tick while a move plays.
@@ -376,7 +343,7 @@ static partial class KillerCroc
         _lastRoot = root;
         if (step.LengthSquared() > 0.01f)
         {
-            Stride(player, Turned(new Vector3(step, 0f), _base + own.Rotation.Yaw + _turn));
+            Villains.Stride(player, Turned(new Vector3(step, 0f), _base + own.Rotation.Yaw + _turn));
         }
 
         if (_move == Move.Swipe && !_hit && played.CurrentTime >= _hitAt)

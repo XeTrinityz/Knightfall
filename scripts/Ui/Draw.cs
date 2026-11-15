@@ -287,7 +287,7 @@ static class Draw
     // Part of a texture, added on top of what is behind it. Black adds nothing, so a dark
     // background baked into a texture disappears and only its bright parts show. The color
     // tints it. Fading dims it, since added light has no alpha of its own.
-    public static void Glow(Texture2D texture, float x, float y, float width, float height, float u, float v, float ul, float vl, Rgba color)
+    public static void Glow(Texture texture, float x, float y, float width, float height, float u, float v, float ul, float vl, Rgba color)
     {
         if (_canvas is null || !texture.IsValid)
         {

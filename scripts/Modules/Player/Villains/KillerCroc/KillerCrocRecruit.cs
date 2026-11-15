@@ -226,14 +226,14 @@ static partial class KillerCroc
     // he went, to face that way.
     static float WalkAround(RPawnPlayer player, Vector3 way, float step)
     {
-        if (Stride(player, way * step) >= step * Blocked)
+        if (Villains.Stride(player, way * step) >= step * Blocked)
         {
             return 0f;
         }
 
         foreach (var turn in new[] { _detour, -_detour, _detour * 2f, -_detour * 2f })
         {
-            if (Stride(player, Turned(way, turn) * step) >= step * Blocked)
+            if (Villains.Stride(player, Turned(way, turn) * step) >= step * Blocked)
             {
                 _detour = turn is > 0f ? MathF.Abs(_detour) : -MathF.Abs(_detour);
                 return turn;

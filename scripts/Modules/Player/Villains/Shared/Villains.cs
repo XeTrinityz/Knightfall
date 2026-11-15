@@ -15,10 +15,13 @@ namespace Knightfall;
 // for one who takes hits his own way. It is handed each hit's damage on its way in, gives back how
 // much lands and plays his own reaction, so Batman's hidden one is held off. Walks is for one
 // who has no business in the Batmobile, so it can't be called or got into while they are on.
+// Steps is for one with footsteps of their own. It says whether it took the step, and its sound.
 sealed record Villain(Toggle Option, Catalog.Section[] Sections, Villain.Fitter? Fit = null, Action? BeforeCamera = null, Action? Keys = null,
-    Func<bool>? Marking = null, Action<float>? Marks = null, Func<RPawnPlayer, int, int>? Hit = null, bool Walks = false)
+    Func<bool>? Marking = null, Action<float>? Marks = null, Func<RPawnPlayer, int, int>? Hit = null, bool Walks = false, Villain.Stepper? Steps = null)
 {
     public delegate void Fitter(ref View view, float deltaTime);
+
+    public delegate bool Stepper(RPawnPlayer pawn, RAnimNotify_Footstep.EFoot foot, out AkEvent? sound);
 }
 
 // What every villain on PLAYER > VILLAINS shares. Only one is on at a time. While one is on,
@@ -65,7 +68,8 @@ static class Villains
         new(JokerVillain.Option, JokerVillain.Sections, JokerVillain.AimView, JokerVillain.KeepAimFacing, Marking: JokerVillain.Marking, Marks: JokerVillain.Marks),
         new(PoisonIvy.Option, PoisonIvy.Sections, PoisonIvy.AimView, PoisonIvy.KeepAimFacing, Marking: PoisonIvy.Marking, Marks: PoisonIvy.Marks),
         new(ArkhamKnight.Option, ArkhamKnight.Sections, ArkhamKnight.AimView, ArkhamKnight.KeepAimFacing, ArkhamKnight.DefaultKeys, ArkhamKnight.Marking, ArkhamKnight.Marks),
-        new(KillerCroc.Option, KillerCroc.Sections, KillerCroc.Fit, KillerCroc.KeepFacing, KillerCroc.DefaultKeys, Hit: KillerCroc.Hit, Walks: true),
+        new(KillerCroc.Option, KillerCroc.Sections, KillerCroc.Fit, KillerCroc.KeepFacing, KillerCroc.DefaultKeys, Hit: KillerCroc.Hit, Walks: true, Steps: KillerCroc.Steps),
+        new(Scarecrow.Option, Scarecrow.Sections, BeforeCamera: Scarecrow.KeepFacing, Keys: Scarecrow.DefaultKeys, Walks: true, Steps: Scarecrow.Steps),
     };
 
     // PLAYER > VILLAINS, each villain's rows under their own heading.
@@ -318,6 +322,63 @@ static class Villains
         CapeRain.Release();
         CapeRainGliding.Release();
         GlideLoop.Release();
+    }
+
+    // Each footstep the game plays for the player asks for its sound. A villain with steps of
+    // their own answers it.
+    [Redirect(typeof(RPawnPlayer), nameof(RPawnPlayer.FindContactName))]
+    static AkEvent? FindContactName(RPawnPlayer self, RAnimNotify_Footstep.EFoot foot, RAnimNotify_Footstep.EContactType contact)
+    {
+        try
+        {
+            foreach (var villain in Roster)
+            {
+                if (villain.Option.On && villain.Steps is { } steps && steps(self, foot, out var sound))
+                {
+                    return sound;
+                }
+            }
+
+            return self.FindContactName(foot, contact);
+        }
+        catch (Exception error)
+        {
+            Log.Error("villains.footsteps", "The footstep sound check failed", error);
+            return null;
+        }
+    }
+
+    // The step a villain takes over a kerb when the game doesn't give one, and how far down a
+    // slope he is let for each unit forward, about 40 degrees.
+    const float StepHeight = 35f;
+    const float SlopeDrop = 0.85f;
+
+    // Moves the pawn along the ground the way walking does, for a villain's own moves that carry
+    // him. A plain move stops dead at a kerb or a lip of rubble, so a blocked move steps up over
+    // it, goes on and comes back down. He is then let down onto ground that falls away under him,
+    // as far as a slope that steep would. Returns how far along the ground it really went.
+    public static float Stride(RPawnPlayer player, Vector3 way)
+    {
+        var want = way.Length();
+        if (want < 0.01f)
+        {
+            return 0f;
+        }
+
+        var start = player.Location;
+        var from = player.Location;
+        player.Move(way);
+        var went = ((player.Location - from) with { Z = 0f }).Length();
+        if (want - went > 1f)
+        {
+            var lift = Vector3.UnitZ * (player.MaxStepHeight > 0f ? player.MaxStepHeight : StepHeight);
+            player.Move(lift);
+            player.Move(way * ((want - went) / want));
+            player.Move(-lift);
+        }
+
+        player.Move(-Vector3.UnitZ * (want * SlopeDrop));
+        return ((player.Location - start) with { Z = 0f }).Length();
     }
 
     // Batman's idle fidgets, like straightening his gauntlet once a fight is over, play over the

@@ -457,21 +457,34 @@ static class People
                 follow.FollowDistSq = FollowGap * FollowGap;
                 brain.ActivateSpawnedBehaviour(follow);
                 break;
-            case RunAway when body is RPawnVillain && brain.RiotBrain is { IsValid: true } riot && FleeClass() is { } flee:
-                // The way the game breaks a street thug who has the Batmobile coming at him. He
-                // runs along the roads, and the game takes him away once he's far off and unseen.
-                brain.ExitCombat();
-                if (brain.GetBehaviour(0) is { IsValid: true } doing)
-                {
-                    brain.InstantExitBehaviour(doing, true);
-                }
-
-                riot.bRiotHiding = true;
-                riot.RunAwayBehaviour = flee;
-                brain.DefaultFleeBehaviourClass = flee;
-                brain.SpawnBehaviour(flee, null!);
+            case RunAway:
+                Flee(body);
                 break;
         }
+    }
+
+    // The way the game breaks a street thug who has the Batmobile coming at him. He runs along
+    // the roads, and the game takes him away once he's far off and unseen. False for someone
+    // who can't, like a thug with no street brain or anyone indoors.
+    public static bool Flee(RBMPawnAI body)
+    {
+        if (!body.IsAlive || body is not RPawnVillain || body.AIController is not { IsValid: true } brain || brain.RiotBrain is not { IsValid: true } riot
+            || FleeClass() is not { } flee)
+        {
+            return false;
+        }
+
+        brain.ExitCombat();
+        if (brain.GetBehaviour(0) is { IsValid: true } doing)
+        {
+            brain.InstantExitBehaviour(doing, true);
+        }
+
+        riot.bRiotHiding = true;
+        riot.RunAwayBehaviour = flee;
+        brain.DefaultFleeBehaviourClass = flee;
+        brain.SpawnBehaviour(flee, null!);
+        return true;
     }
 
     // The run away the city's streets give their people. Nothing indoors, where there are none.

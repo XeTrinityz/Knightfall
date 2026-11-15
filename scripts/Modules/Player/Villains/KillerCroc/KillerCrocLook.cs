@@ -631,20 +631,12 @@ static partial class KillerCroc
         }
     }
 
-    // Each footstep the game plays for the player asks here for its sound. While he is Croc it
-    // gets none.
-    [Redirect(typeof(RPawnPlayer), nameof(RPawnPlayer.FindContactName))]
-    static AkEvent? FindContactName(RPawnPlayer self, RAnimNotify_Footstep.EFoot foot, RAnimNotify_Footstep.EContactType contact)
+    // Each footstep the game plays for the player asks for its sound. While he is Croc it gets
+    // none.
+    public static bool Steps(RPawnPlayer pawn, RAnimNotify_Footstep.EFoot foot, out AkEvent? sound)
     {
-        try
-        {
-            return Option.On && _on is { IsValid: true } on && on.Ptr == self.Ptr && _body is { IsValid: true } ? null : self.FindContactName(foot, contact);
-        }
-        catch (Exception error)
-        {
-            Log.Error("killer_croc.footsteps", "The footstep sound check failed", error);
-            return null;
-        }
+        sound = null;
+        return _on is { IsValid: true } on && on.Ptr == pawn.Ptr && _body is { IsValid: true };
     }
 
     static float TurnFor(SkeletalMeshComponent own, SkeletalMeshComponent idler)
