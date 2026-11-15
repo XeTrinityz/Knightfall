@@ -117,7 +117,7 @@ static class Things
             }
 
             var gap = Vector3.DistanceSquared(actor.Location, from);
-            if (gap > reach || actor.bHidden || actor.bDeleteMe || actor.bPendingDelete || ReferenceEquals(actor, you) || ReferenceEquals(actor, car)
+            if (gap > reach || actor.bHidden || ReferenceEquals(actor, you) || ReferenceEquals(actor, car)
                 || KindOf(actor) is not { } kind || !wants[(int)kind] || actor.Outer is not Level)
             {
                 continue;
@@ -127,7 +127,7 @@ static class Things
         }
     }
 
-    public static bool Alive(Actor? actor) => actor is { IsValid: true, bDeleteMe: false, bPendingDelete: false };
+    public static bool Alive(Actor? actor) => actor is { IsAlive: true };
 
     // Why it can't be moved, or null when it can. Pieces built into the level don't move even
     // when told to.

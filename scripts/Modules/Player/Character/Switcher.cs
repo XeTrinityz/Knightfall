@@ -89,7 +89,7 @@ static class Switcher
         // The body being left stays in memory until the new one has taken over, so both have to
         // fit in the game's object table at once.
         var cost = Packages.Cost<RAddContentPlayerCharacter>(character) + Packages.Cost<RAddContentPlayerCharacterMesh>(mesh);
-        var room = ObjectTable.Headroom;
+        var room = Game.ObjectHeadroom;
         if (cost > 0 && room < cost + Packages.Spare)
         {
             // A body left earlier may still be in memory. It is cleared out and the switch is
@@ -150,7 +150,7 @@ static class Switcher
         {
             ref var slot = ref game.PlayerCharacters_0;
             slot.CharacterName = new FName(character);
-            slot.MeshName = GameText.Once(mesh);
+            slot.MeshName = new FString(mesh);
             slot.CharacterData = data;
             slot.MeshData = suit;
             slot.DamageLevel = damage;
@@ -192,7 +192,7 @@ static class Switcher
 
         // The body that left is no longer used by anything, and the game clears it out in its
         // own time. When room is short it is cleared now.
-        if (ObjectTable.Headroom < RoomFloor)
+        if (Game.ObjectHeadroom < RoomFloor)
         {
             world.ForceGarbageCollection(true);
         }
@@ -203,7 +203,7 @@ static class Switcher
         // The suit and battle damage lists are about whoever is played, so they are read again
         // as if the menu had just opened.
         Catalog.MenuOpening();
-        Log.Info($"Now playing {character} in {mesh}. It took {cost} objects and {ObjectTable.Headroom} are free.");
+        Log.Info($"Now playing {character} in {mesh}. It took {cost} objects and {Game.ObjectHeadroom} are free.");
         return Outcome.Done(again ? "CHANGED" : "SWITCHED");
     }
 
@@ -253,7 +253,7 @@ static class Switcher
             return World.Driving is not null ? "GET OUT FIRST" : "NOT NOW";
         }
 
-        if (pawn.bDeleteMe || pawn.Health <= 0 || Loaded.IndexOf(game, pawn) != 0)
+        if (!pawn.IsAlive || pawn.Health <= 0 || Loaded.IndexOf(game, pawn) != 0)
         {
             return "NOT NOW";
         }

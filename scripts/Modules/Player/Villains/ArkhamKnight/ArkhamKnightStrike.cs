@@ -131,7 +131,7 @@ static partial class ArkhamKnight
         {
             var (shell, last, by) = Falling[i];
             // A shell is marked dead the moment it bursts, and stays a while to be cleaned up.
-            if (shell.IsValid && !shell.bDeleteMe && !shell.bDead && World.Now < by)
+            if (shell.IsAlive && !shell.bDead && World.Now < by)
             {
                 Falling[i] = (shell, shell.Location, by);
                 continue;

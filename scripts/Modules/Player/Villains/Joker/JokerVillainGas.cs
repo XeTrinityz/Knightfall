@@ -25,11 +25,6 @@ static partial class JokerVillain
     const string HarleyGadget = "MLaughingGasBase";
     const string CanisterPath = "DLC0_HarleyQuinn_BM3_Weapons.Harleys_SmokeBomb_01";
 
-    // Her cloud's own versions of these. The SDK's binding would run the plain smoke bomb's, which
-    // gasses nobody with laughing gas.
-    const string StartGasPath = "BmScript.MLaughingGasScreen.InitSmoke";
-    const string StartRoomPath = "BmScript.MLaughingGasScreen.StartPredReaction";
-
     // Firefly's launch sound lives in his story level, which is small.
     const string LaunchSoundPackage = "CityX__ChF478";
     const string LaunchSoundPath = "Ww_CHR_Firefly.Play_Firefly_Grenade_Launch";
@@ -126,7 +121,7 @@ static partial class JokerVillain
 
         try
         {
-            Game.LoadPackage(package);
+            Game.TryLoadPackage(package, out _);
         }
         catch (Exception error)
         {
@@ -241,15 +236,8 @@ static partial class JokerVillain
             return;
         }
 
-        if (!ScriptCall.Run(gas, StartGasPath, 0, 1))
-        {
-            gas.InitSmoke(false, true);
-        }
-
-        if (!ScriptCall.Run(gas, StartRoomPath, 0))
-        {
-            gas.StartPredReaction(false);
-        }
+        gas.InitSmoke(false, true);
+        gas.StartPredReaction(false);
 
         Say("gas", always: true);
     }

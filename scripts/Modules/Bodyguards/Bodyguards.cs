@@ -522,7 +522,7 @@ static class Bodyguards
         foreach (var guard in Team)
         {
             var body = guard.Body;
-            if (!body.IsValid || body.bDeleteMe || body.bHidden)
+            if (!body.IsAlive || body.bHidden)
             {
                 continue;
             }
@@ -551,7 +551,7 @@ static class Bodyguards
         var count = 0;
         foreach (var guard in Team.ToArray())
         {
-            if (!guard.Body.IsValid || guard.Body.bDeleteMe)
+            if (!guard.Body.IsAlive)
             {
                 Drop(guard, false);
                 continue;
@@ -690,7 +690,7 @@ static class Bodyguards
         {
             var guard = Team[i];
             var body = guard.Body;
-            if (!body.IsValid || body.bDeleteMe)
+            if (!body.IsAlive)
             {
                 Drop(guard, false);
                 Log.Info($"Bodyguards: {guard.Label} left the world. {Team.Count} left in the team.");
@@ -795,7 +795,7 @@ static class Bodyguards
     // them up again from the list kept here.
     public static void Release()
     {
-        var kept = Team.Where(guard => guard.Body.IsValid && !guard.Body.bDeleteMe && !Fight.Pooled(guard.Body)).ToArray();
+        var kept = Team.Where(guard => guard.Body.IsAlive && !Fight.Pooled(guard.Body)).ToArray();
         Survive.Set(Survive.BodyguardBodies, kept.Select(guard => (long)guard.Body.Ptr).ToArray());
         Survive.Set(Survive.BodyguardLabels, kept.Select(guard => guard.Label).ToArray());
         Survive.Set(Survive.BodyguardRecruited, kept.Select(guard => guard.Recruited).ToArray());
@@ -829,7 +829,7 @@ static class Bodyguards
 
         foreach (var villain in Game.FindObjects<RPawnVillain>())
         {
-            if (!villain.IsValid || villain.bDeleteMe || villain.bHidden)
+            if (!villain.IsValid || villain.bHidden)
             {
                 continue;
             }

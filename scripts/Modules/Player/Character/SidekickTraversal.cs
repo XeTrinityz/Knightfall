@@ -209,7 +209,7 @@ static partial class Sidekick
 
     // The body the partner AI has, while both are still in the world.
     static RPawnPlayer? Follower =>
-        _bot is { IsValid: true, bDeleteMe: false } bot && bot.BotPawn is { IsValid: true, bDeleteMe: false } body ? body : null;
+        _bot is { IsAlive: true } bot && bot.BotPawn is { IsAlive: true } body ? body : null;
 
     static bool Resting => World.Now >= _restFrom && World.Now - _restFrom < _restFor;
 
@@ -335,7 +335,7 @@ static partial class Sidekick
 
         goal = Feet(player);
         facing = player.Rotation.Yaw;
-        return _bot!.BotExclusionVolume is not { IsValid: true, bDeleteMe: false } keptOut || !keptOut.EncompassesPoint(player.Location);
+        return _bot!.BotExclusionVolume is not { IsAlive: true } keptOut || !keptOut.EncompassesPoint(player.Location);
     }
 
     // Out of the reach the partner AI stands at: well above, well below or a good way off. A
@@ -381,7 +381,7 @@ static partial class Sidekick
         _tries = 0;
         _runs = 0;
         Rest(ArrivedRest);
-        if (_bot is not { IsValid: true, bDeleteMe: false } bot)
+        if (_bot is not { IsAlive: true } bot)
         {
             return;
         }
@@ -1212,7 +1212,7 @@ static partial class Sidekick
         gun.bActive = false;
         gun.bForcedGrapple = false;
         gun.StopGrappleTrails();
-        if (gun.Projectile is { IsValid: true, bDeleteMe: false } projectile)
+        if (gun.Projectile is { IsAlive: true } projectile)
         {
             projectile.Destroy();
         }
@@ -1238,7 +1238,7 @@ static partial class Sidekick
             var gun = follower.GrappleGun is { IsValid: true } held ? held : null;
             var left = follower.Physics == Actor.EPhysics.PHYS_Flying ? "flying"
                 : Same(follower.GetMovementStance(), GrapplePose) ? "in the grapple pose"
-                : gun is not null && (gun.bActive || gun.Projectile is { IsValid: true, bDeleteMe: false }) ? "with their grapple gun out"
+                : gun is not null && (gun.bActive || gun.Projectile is { IsAlive: true }) ? "with their grapple gun out"
                 : null;
             if (left is null)
             {
@@ -1258,7 +1258,7 @@ static partial class Sidekick
             follower.SetPhysics(Actor.EPhysics.PHYS_Falling);
         }
 
-        if (_bot is not { IsValid: true, bDeleteMe: false } bot)
+        if (_bot is not { IsAlive: true } bot)
         {
             return;
         }

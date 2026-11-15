@@ -53,7 +53,7 @@ static class GuardMarks
         foreach (var guard in Bodyguards.All)
         {
             var body = guard.Body;
-            if (body.IsValid && !body.bDeleteMe && !body.bHidden)
+            if (body.IsAlive && !body.bHidden)
             {
                 Mark(guard, you, time);
             }

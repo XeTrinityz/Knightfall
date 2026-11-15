@@ -352,7 +352,7 @@ static class Draw
         Canvas.FFontRenderInfo info = default;
         _canvas.SetPos(PixelX(x), PixelY(y), 0f);
         _canvas.SetDrawColor(color.R, color.G, color.B, Alpha(color));
-        _canvas.DrawText(Native(text), false, scale, scale, out info);
+        _canvas.DrawText(text, false, scale, scale, out info);
     }
 
     // Draws text that ends at the given x. Returns where it starts.
@@ -544,8 +544,8 @@ static class Draw
         return MathF.Max(0f, width - spacing);
     }
 
-    // Words are measured one at a time. Measuring each trial line would make a native string
-    // for every one of them, and those are never freed.
+    // Words are measured one at a time. Measuring each trial line would ask the game to measure
+    // every one of them.
     public static string[] Wrap(string text, float size, float width)
     {
         var key = (text, size, width);
@@ -659,9 +659,8 @@ static class Draw
     {
         var width = 0f;
         var height = 0f;
-        _canvas!.TextSize(Native(text), out width, out height, 1f, 1f);
+        _canvas!.TextSize(text, out width, out height, 1f, 1f);
         return (width, height);
     }
 
-    static FString Native(string text) => GameText.Of(text);
 }

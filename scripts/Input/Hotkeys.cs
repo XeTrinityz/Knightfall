@@ -474,7 +474,7 @@ static class Hotkeys
     {
         foreach (var binding in Bindings.Values)
         {
-            var down = (binding.Key != Keys.None && Keyboard.IsDown(binding.Key)) || Pad.IsDown(binding.Buttons);
+            var down = (binding.Key != Keys.None && (Keyboard.IsDown(binding.Key) || Keyboard.WasPressed(binding.Key))) || Pad.IsDown(binding.Buttons);
             if (down && !binding.Held && !Menu.Showing && _listening is null)
             {
                 Fire(binding.Feature);

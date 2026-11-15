@@ -71,19 +71,19 @@ static class Markers
             targets.DeregisterCompassItem("Custom");
         }
 
-        data.CustomWaypointName = GameText.Once(name);
-        data.CustomWaypointTypeName = GameText.Once(type);
+        data.CustomWaypointName = new FString(name);
+        data.CustomWaypointTypeName = new FString(type);
         data.SetCustomWaypoint(at, true, false);
         data.CustomWaypoint_NotReached = 1;
         data.CustomWaypoint_SilentWhenReached = 0;
         info.Map3DRenderingData.WaypointPosition = new Vector4(at, 1f);
         if (controller.Map3DActRef is { IsValid: true } map)
         {
-            map.SetUserMarker(true, true, at.X, at.Y, at.Z, GameText.Once(name));
+            map.SetUserMarker(true, true, at.X, at.Y, at.Z, name);
         }
 
         data.CustomWaypoint_Type = RPersistentData.ECustomWayPointType.CustomWayType_Riddler;
-        data.CustomWaypoint_VisibleFlag = GameText.Once("Riddler_" + name);
+        data.CustomWaypoint_VisibleFlag = new FString("Riddler_" + name);
         return true;
     }
 
@@ -120,5 +120,5 @@ static class Markers
         return true;
     }
 
-    static bool Usable(RObjectiveMarker? marker) => marker is { IsValid: true, bDeleteMe: false, IsMarkerActive: true, IsCustomWaypoint: false };
+    static bool Usable(RObjectiveMarker? marker) => marker is { IsAlive: true, IsMarkerActive: true, IsCustomWaypoint: false };
 }

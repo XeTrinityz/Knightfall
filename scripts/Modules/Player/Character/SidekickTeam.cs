@@ -207,7 +207,7 @@ static partial class Sidekick
         try
         {
             _lentKey = false;
-            if (Present && Game.TryGetPlayerController(out var controller) && controller.Pawn is RPawnPlayerCombat { IsValid: true } played && IsRedHood(played))
+            if (Present && Game.TryGetPlayerController(out var controller) && controller.Pawn is RPawnPlayerCombat { IsValid: true } played && played.IsRedHood())
             {
                 LendCallKey(self, controller);
             }
@@ -243,16 +243,11 @@ static partial class Sidekick
                 return;
             }
 
-            input.SetBindWithOptionalSave(new FName(key), GameText.Once(command), false, stored.bPrimaryCtrl, stored.bPrimaryShift, stored.bPrimaryAlt);
+            input.SetBindWithOptionalSave(new FName(key), command, false, stored.bPrimaryCtrl, stored.bPrimaryShift, stored.bPrimaryAlt);
             _lentKey = true;
             return;
         }
     }
-
-    // His class has no binding of its own, so its IsRedHood can't be asked from here.
-    static bool IsRedHood(RPawnPlayerCombat pawn) => pawn.CharacterName.ToString() == RedHoodName;
-
-    const string RedHoodName = "Redhood";
 
     static bool RedHoodUses(RGameInfo info, RPersistentOptions options, string name)
     {

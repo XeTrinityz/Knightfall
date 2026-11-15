@@ -100,7 +100,7 @@ static class Weapons
         Found.Clear();
         foreach (var weapon in Game.FindObjects<RVehicleWeapon>())
         {
-            if (weapon.IsValid && !weapon.bDeleteMe && weapon.Owner is { } owner && owner.Ptr == car.Ptr)
+            if (weapon.IsValid && weapon.Owner is { } owner && owner.Ptr == car.Ptr)
             {
                 Found.Add(weapon);
             }

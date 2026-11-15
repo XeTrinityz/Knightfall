@@ -138,7 +138,7 @@ static class Remesh
         }
 
         var index = Loaded.IndexOf(game, _character);
-        var onFoot = controller.Pawn is { } driven && driven.Ptr == pawn.Ptr && !pawn.bDeleteMe && pawn.Health > 0;
+        var onFoot = controller.Pawn is { } driven && driven.Ptr == pawn.Ptr && pawn.IsAlive && pawn.Health > 0;
         if (_step == Step.WaitingOnFoot)
         {
             // Another character is being played now, so this change is no longer theirs.

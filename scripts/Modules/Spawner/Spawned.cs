@@ -302,7 +302,7 @@ static class Spawned
 
     static IEnumerable<Spawn> Alive() => Spawns.Where(Alive);
 
-    static bool Alive(Spawn spawn) => spawn.Actor.IsValid && !spawn.Actor.bDeleteMe;
+    static bool Alive(Spawn spawn) => spawn.Actor.IsAlive;
 
     static bool Fallen(Spawn spawn) => spawn.Actor switch
     {
@@ -414,10 +414,10 @@ static class Spawned
 
             var brain = body.Controller;
             body.DestroyOrReturnToPool(true, false);
-            if (body.IsValid && !body.bDeleteMe)
+            if (body.IsAlive)
             {
                 body.Destroy();
-                if (brain is { IsValid: true, bDeleteMe: false })
+                if (brain is { IsAlive: true })
                 {
                     brain.Destroy();
                 }

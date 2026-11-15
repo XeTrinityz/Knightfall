@@ -168,7 +168,7 @@ static class Gauntlet
         // Tick only raises it while the screen is free. In the car the game puts the screen on
         // the dashboard and trims the HUD by itself.
         var projector = controller.GauntletProjector;
-        projector.StartVideoProjection(GameText.Once(""), GameText.Once(""), bNoMovie: true);
+        projector.StartVideoProjection("", "", bNoMovie: true);
 
         if (where == Where.Cockpit)
         {
@@ -240,7 +240,7 @@ static class Gauntlet
         var projector = controller.GauntletProjector;
         if (projector is { IsValid: true } && projector.ScreenOn && Ours(projector))
         {
-            projector.StopProjection(null!, GameText.Once(""), -1f);
+            projector.StopProjection(null!, "", -1f);
         }
     }
 
@@ -278,11 +278,7 @@ static class Gauntlet
             return false;
         }
 
-        controller.GetPlayerViewPoint(out var eye, out var turn);
-        var fieldOfView = controller.PlayerCamera is { IsValid: true } camera ? camera.GetFOVAngle() : controller.GetFOVAngle();
-        Hologram.Frame(canvas, eye, turn, fieldOfView);
-
-        if (!Surface(screen, pawn, width, out var panel, out height) || !Hologram.Place(panel, width, height))
+        if (!Hologram.Frame(canvas) || !Surface(screen, pawn, width, out var panel, out height) || !Hologram.Place(panel, width, height))
         {
             return false;
         }

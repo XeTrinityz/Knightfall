@@ -211,7 +211,7 @@ static class Vehicles
         {
             // The actor's own spawn refuses a spot the vehicle won't fit, unlike a forced one.
             if (mover.Spawn(template.Class, null, default, spot.Floor + new Vector3(0f, 0f, lift), spot.Facing, template, false)
-                is not RVehicleNPC vehicle || !vehicle.IsValid || vehicle.bDeleteMe)
+                is not RVehicleNPC vehicle || !vehicle.IsAlive)
             {
                 continue;
             }
@@ -241,7 +241,7 @@ static class Vehicles
     // anything set before, so this waits for that to have run.
     static void Start(RVehicleNPC vehicle, Spawned.Spawn spawn, string behaviour, bool ally)
     {
-        if (!vehicle.IsValid || vehicle.bDeleteMe || vehicle.HasDied)
+        if (!vehicle.IsAlive || vehicle.HasDied)
         {
             return;
         }
@@ -289,7 +289,7 @@ static class Vehicles
     // which froze tanks in Oracle. That one case gets its own AI back and stays hostile.
     static void Check(RVehicleNPC vehicle, RVehicleBehaviour? before)
     {
-        if (!vehicle.IsValid || vehicle.bDeleteMe || vehicle.HasDied || vehicle.CurrentBehaviour is { IsValid: true })
+        if (!vehicle.IsAlive || vehicle.HasDied || vehicle.CurrentBehaviour is { IsValid: true })
         {
             return;
         }

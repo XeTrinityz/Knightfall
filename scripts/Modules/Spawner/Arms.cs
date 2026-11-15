@@ -251,13 +251,13 @@ static class Arms
             finally
             {
                 // The held form goes back the way a disarm sends it.
-                if (weapon.IsValid && !weapon.bDeleteMe)
+                if (weapon.IsAlive)
                 {
                     weapon.DestroyOrReturnToPool();
                 }
             }
 
-            if (dropped is not { IsValid: true, bDeleteMe: false })
+            if (dropped is not { IsAlive: true })
             {
                 unloaded = true;
                 continue;

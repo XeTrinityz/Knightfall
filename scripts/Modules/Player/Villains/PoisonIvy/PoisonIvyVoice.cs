@@ -50,7 +50,7 @@ static partial class PoisonIvy
     // Each moment's lines, as their place in the pick and what she says.
     static readonly Dictionary<string, List<(int Index, string Text)>> Voice = new();
     static (int Weighting, bool Used)[]? _pick;
-    static float _pickBackAt = -1f;
+    static GameTimer? _pickBack;
     static float _nextLine;
 
     // What she said last and when, for the HUD.
@@ -127,7 +127,8 @@ static partial class PoisonIvy
             events[i] = item;
         }
 
-        _pickBackAt = World.Now + PickBack;
+        _pickBack?.Cancel();
+        _pickBack = Game.After(PickBack, static () => Kernel.Run("poison_ivy.pick_back", PutPickBack));
         Speaker.Hold(speaker, voice);
         if (!player.StartSpeech(attack, default, default))
         {
@@ -139,15 +140,6 @@ static partial class PoisonIvy
         _nextLine = World.Now + VoiceGap;
         _said = text;
         _saidAt = World.Now;
-    }
-
-    // Each tick, the pick goes back as the game had it once the line has started.
-    static void KeepVoice()
-    {
-        if (_pickBackAt >= 0f && World.Now >= _pickBackAt)
-        {
-            PutPickBack();
-        }
     }
 
     static void PutPickBack()
@@ -165,7 +157,7 @@ static partial class PoisonIvy
         }
 
         _pick = null;
-        _pickBackAt = -1f;
+        _pickBack?.Cancel();
     }
 
     // Batman's own voice back, for when she is off or in the car.

@@ -137,7 +137,7 @@ static class Buildings
             }
 
             // A part of an actor that's being deleted can't be touched safely.
-            if (part.Owner is { } owner && (!owner.IsValid || owner.bDeleteMe || owner.bPendingDelete))
+            if (part.Owner is { } owner && !owner.IsAlive)
             {
                 continue;
             }

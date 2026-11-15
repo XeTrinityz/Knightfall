@@ -84,7 +84,7 @@ static class Rain
     static float _lookedAt = -1f;
     static int? _applied;
     static bool _silent;
-    static float _soundBackAt = -1f;
+    static GameTimer? _soundBack;
     static AkParameterName? _rainLevel;
 
     public static readonly Slider Amount = new(
@@ -131,8 +131,6 @@ static class Rain
 
     public static void Tick()
     {
-        SoundBack();
-
         var era = Atmosphere.Era.On;
         var snow = Snow.Falling;
         var any = era || snow;
@@ -338,7 +336,7 @@ static class Rain
     static void Silence()
     {
         _silent = true;
-        _soundBackAt = -1f;
+        _soundBack?.Cancel();
         if (RainLevel_() is { } level)
         {
             Actor.SetGlobalAudioParameter(level, 0f);
@@ -376,17 +374,12 @@ static class Rain
         }
 
         Emitters.Release();
-        _soundBackAt = World.Now + SoundBackAfter;
+        _soundBack?.Cancel();
+        _soundBack = Game.After(SoundBackAfter, static () => Kernel.Run("rain.sound_back", SoundBack));
     }
 
     static void SoundBack()
     {
-        if (_soundBackAt < 0f || World.Now < _soundBackAt && World.Now >= _soundBackAt - SoundBackAfter)
-        {
-            return;
-        }
-
-        _soundBackAt = -1f;
         if (RainLevel_() is { } level)
         {
             Actor.SetGlobalAudioParameter(level, AkSoundDirector.LocationRainDensity(AkWwise.GetActiveListenerPosition()));

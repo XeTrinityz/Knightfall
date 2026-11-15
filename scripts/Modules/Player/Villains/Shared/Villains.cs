@@ -357,7 +357,7 @@ static class Villains
         }
 
         thug.TakeDamage(damage, player.Controller, thug.Location, push * (fall ? force : force * 0.2f), RDmgType_Explosion.StaticClass(), default, player);
-        if (!fall || !thug.IsValid || thug.bDeleteMe || thug.IsRagdoll())
+        if (!fall || !thug.IsAlive || thug.IsRagdoll())
         {
             return false;
         }
@@ -525,7 +525,7 @@ static class Villains
         var count = 0;
         foreach (var car in Game.FindObjects<RVehicleNPC>())
         {
-            if (car is not { IsValid: true, IsClassDefaultObject: false, bDeleteMe: false, bHidden: false, DroneHacked: false, IsFriendly: false, Health: > 0 }
+            if (car is not { IsValid: true, IsClassDefaultObject: false, bHidden: false, DroneHacked: false, IsFriendly: false, Health: > 0 }
                 || !Near(car.Location, at, reach) || (hit is not null && !hit.Add(car.Ptr)))
             {
                 continue;
@@ -543,7 +543,7 @@ static class Villains
 
         foreach (var car in Game.FindObjects<RAbandonedVehicle>())
         {
-            if (car is not { IsValid: true, IsClassDefaultObject: false, bDeleteMe: false, bHidden: false, Health: > 0 }
+            if (car is not { IsValid: true, IsClassDefaultObject: false, bHidden: false, Health: > 0 }
                 || !Near(car.Location, at, reach) || (hit is not null && !hit.Add(car.Ptr)))
             {
                 continue;
@@ -611,7 +611,7 @@ static class Villains
         var count = 0;
         foreach (var thing in Breakables)
         {
-            if (!thing.IsValid || thing.bDeleteMe || !Near(thing.Location, at, reach) || (hit is not null && !hit.Add(thing.Ptr)))
+            if (!thing.IsAlive || !Near(thing.Location, at, reach) || (hit is not null && !hit.Add(thing.Ptr)))
             {
                 continue;
             }
@@ -711,7 +711,7 @@ static class Villains
     {
         foreach (var thing in Game.FindObjects<T>())
         {
-            if (thing is { IsValid: true, IsClassDefaultObject: false, bDeleteMe: false, bHidden: false })
+            if (thing is { IsValid: true, IsClassDefaultObject: false, bHidden: false })
             {
                 Breakables.Add(thing);
             }

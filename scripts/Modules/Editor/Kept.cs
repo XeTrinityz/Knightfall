@@ -83,8 +83,8 @@ static class Kept
         public required Rotator FromTurn;
         public State Now;
         public RBMPawnAI? Actor;
-        public long LookingSince;
-        public long PutAt;
+        public double LookingSince = -1;
+        public double PutAt = -1;
 
         public bool Moved => Vector3.Distance(Now.At, From) > Shift;
     }
@@ -167,6 +167,9 @@ static class Kept
     static string FilePath => Path.Combine(GameFiles.Mod, FileName);
 
     static double Since(long from) => Stopwatch.GetElapsedTime(from).TotalSeconds;
+
+    // People only come and settle while the game runs, so their waits go by game time.
+    static double Since(double from) => Game.WorldTime - from;
 
     // Called on every change the editor makes.
     public static void Touched()
@@ -372,7 +375,7 @@ static class Kept
         foreach (var person in Folk)
         {
             person.Actor = null;
-            person.LookingSince = 0;
+            person.LookingSince = -1;
         }
     }
 
@@ -459,7 +462,7 @@ static class Kept
             {
                 if (!Things.Alive(person.Actor) && person.Level.Equals(level, StringComparison.OrdinalIgnoreCase))
                 {
-                    person.LookingSince = Stopwatch.GetTimestamp();
+                    person.LookingSince = Game.WorldTime;
                 }
             }
         }
@@ -476,7 +479,7 @@ static class Kept
         List<(Person Person, nint Spawner, nint Define)>? wanted = null;
         foreach (var person in Folk)
         {
-            if (Things.Alive(person.Actor) || person.LookingSince == 0 || Since(person.LookingSince) > LookForPeople || !IsShown(person.Level))
+            if (Things.Alive(person.Actor) || person.LookingSince < 0 || Since(person.LookingSince) > LookForPeople || !IsShown(person.Level))
             {
                 continue;
             }
@@ -538,8 +541,8 @@ static class Kept
         (edit.Size, edit.Frozen, edit.Ghost) = (now.Size, now.Frozen, now.Ghost);
         Edits.Apply(edit);
         person.Actor = body;
-        person.LookingSince = 0;
-        person.PutAt = Stopwatch.GetTimestamp();
+        person.LookingSince = -1;
+        person.PutAt = Game.WorldTime;
         Live[body.Ptr] = body;
     }
 
@@ -549,7 +552,7 @@ static class Kept
     {
         foreach (var person in Folk)
         {
-            if (person.PutAt != 0 && Since(person.PutAt) < SettleFor && person.Moved && person.Actor is { } body && Things.Alive(body) && !IsStanding(body))
+            if (person.PutAt >= 0 && Since(person.PutAt) < SettleFor && person.Moved && person.Actor is { } body && Things.Alive(body) && !IsStanding(body))
             {
                 Stand(body);
             }
@@ -921,7 +924,7 @@ static class Kept
                 }
 
                 person.Actor = null;
-                person.LookingSince = 0;
+                person.LookingSince = -1;
             }
         }
         finally

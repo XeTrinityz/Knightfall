@@ -153,12 +153,12 @@ static class CitySky
             }
 
             var cost = GameFiles.Exports(sky.Package);
-            if (ObjectTable.Headroom < (cost > 0 ? cost : 10000) + Packages.Spare)
+            if (Game.ObjectHeadroom < (cost > 0 ? cost : 10000) + Packages.Spare)
             {
                 return Fail(sky, "there isn't room to load it right now");
             }
 
-            Game.LoadPackage(sky.Package);
+            Game.TryLoadPackage(sky.Package, out _);
             mesh = Game.FindObject<StaticMesh>(sky.Mesh);
             if (mesh is null)
             {

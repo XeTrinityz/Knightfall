@@ -15,28 +15,28 @@ static class Packages
 
     // Whether the object table can take a package, with the spare room on top. The name is the
     // file's, with or without the _SF a cooked package has on the end.
-    public static bool HasRoom(string package) => ObjectTable.Headroom >= GameFiles.Exports(package) + Spare;
+    public static bool HasRoom(string package) => Game.ObjectHeadroom >= GameFiles.Exports(package) + Spare;
 
     // Loads a package for something that goes without when it can't be had. What names it in
-    // the log, like "Firefly's flying moves". False when there was no room or the load failed.
+    // the log, like "Firefly's flying moves". False when it isn't installed, there was no room or
+    // the load failed.
     public static bool TryLoad(string package, string what, string key)
     {
-        if (!HasRoom(package))
-        {
-            Log.Info($"No room to load {what}.");
-            return false;
-        }
-
         try
         {
-            Game.LoadPackage(package);
-            return true;
+            if (Game.TryLoadPackage(package, out _))
+            {
+                return true;
+            }
         }
         catch (Exception error)
         {
             Log.Error(key, $"{char.ToUpperInvariant(what[0])}{what[1..]} failed to load", error);
             return false;
         }
+
+        Log.Info(GameFiles.HasPackage(package) ? $"No room to load {what}." : $"Couldn't load {what}, its package isn't installed.");
+        return false;
     }
 
     // A package's main object has the package's own name. It is found in memory, or its package
@@ -50,7 +50,7 @@ static class Packages
             return loaded;
         }
 
-        if (ObjectTable.Headroom < Cost<T>(name) + Spare)
+        if (Game.ObjectHeadroom < Cost<T>(name) + Spare)
         {
             // The engine collects on its next tick. Asking again a moment later can work.
             if (Game.TryGetWorldInfo(out var world))
@@ -61,20 +61,13 @@ static class Packages
             throw new InvalidOperationException("the game is close to its object limit");
         }
 
-        // Cooked packages are named with _SF on the end. A few are not.
-        foreach (var file in new[] { name + "_SF", name })
+        try
         {
-            try
-            {
-                if (Game.LoadPackage(file) is { IsValid: true })
-                {
-                    break;
-                }
-            }
-            catch (Exception error)
-            {
-                Log.Error("packages.load", $"Package {file} failed to load", error);
-            }
+            Game.TryLoadPackage(name, out _);
+        }
+        catch (Exception error)
+        {
+            Log.Error("packages.load", $"Package {name} failed to load", error);
         }
 
         return Game.FindObject<T>(path) is { IsValid: true } found ? found : throw new InvalidOperationException($"{name} is not installed or did not load");

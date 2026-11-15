@@ -233,7 +233,7 @@ static class Fight
     // After they are moved by hand. The follow's path still starts from where they were.
     public static void Repath(RPawnVillain body)
     {
-        if (FollowOf(body) is { FollowActor: { IsValid: true, bDeleteMe: false } } follow)
+        if (FollowOf(body) is { FollowActor: { IsAlive: true } } follow)
         {
             follow.SetPathToFollowActor();
         }

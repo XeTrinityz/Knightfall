@@ -279,7 +279,7 @@ static partial class Disguise
     {
         foreach (var rest in new[] { _wornRest, _mineRest })
         {
-            if (rest is { IsValid: true } && player is { IsValid: true, bDeleteMe: false } && rest.Owner is { } owner && owner.Ptr == player.Ptr)
+            if (rest is { IsValid: true } && player is { IsAlive: true } && rest.Owner is { } owner && owner.Ptr == player.Ptr)
             {
                 player.DetachComponent(rest);
             }

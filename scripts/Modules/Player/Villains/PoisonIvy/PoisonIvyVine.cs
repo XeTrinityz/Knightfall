@@ -309,7 +309,7 @@ static partial class PoisonIvy
         var bestOff = GrabNear * GrabNear;
         foreach (var tank in Game.FindObjects<RVehicleTank>())
         {
-            if (tank is not { IsValid: true, IsClassDefaultObject: false, bDeleteMe: false, bHidden: false, DroneHacked: false, IsFriendly: false, IsHackedFriendly: false, IsHeavyTank: false, bGrabbedByIvyVine: false, Health: > 0 }
+            if (tank is not { IsValid: true, IsClassDefaultObject: false, bHidden: false, DroneHacked: false, IsFriendly: false, IsHackedFriendly: false, IsHeavyTank: false, bGrabbedByIvyVine: false, Health: > 0 }
                 || Vector3.DistanceSquared(tank.Location, player.Location) > VineReach * VineReach)
             {
                 continue;
@@ -347,7 +347,7 @@ static partial class PoisonIvy
         foreach (var car in Game.FindObjects<RVehicleNPC>())
         {
             if (car is RVehicleFlying or RVehicleNPCBatmobile
-                || car is not { IsValid: true, IsClassDefaultObject: false, bDeleteMe: false, bHidden: false, DroneHacked: false, IsFriendly: false, IsHackedFriendly: false, IsHeavyTank: false, bGrabbedByIvyVine: false, Health: > 0 })
+                || car is not { IsValid: true, IsClassDefaultObject: false, bHidden: false, DroneHacked: false, IsFriendly: false, IsHackedFriendly: false, IsHeavyTank: false, bGrabbedByIvyVine: false, Health: > 0 })
             {
                 continue;
             }
@@ -357,7 +357,7 @@ static partial class PoisonIvy
 
         foreach (var car in Game.FindObjects<RAbandonedVehicle>())
         {
-            if (car is { IsValid: true, IsClassDefaultObject: false, bDeleteMe: false, bHidden: false, Health: > 0 })
+            if (car is { IsValid: true, IsClassDefaultObject: false, bHidden: false, Health: > 0 })
             {
                 Closer(car, ref best, ref bestOff);
             }
@@ -495,8 +495,8 @@ static partial class PoisonIvy
     // Moves a carried car as the hidden tank's chassis moves, until the car is destroyed.
     static void Lift(Vine vine)
     {
-        Actor? car = vine.Parked is { IsValid: true, bDeleteMe: false } parked ? parked
-            : vine.Tank is { IsValid: true, bDeleteMe: false } driven ? driven : null;
+        Actor? car = vine.Parked is { IsAlive: true } parked ? parked
+            : vine.Tank is { IsAlive: true } driven ? driven : null;
         if (!vine.Lifts || car is null || vine.Struck || vine.Ghost is not { IsValid: true } ghost)
         {
             return;
@@ -673,7 +673,7 @@ static partial class PoisonIvy
     // as it moves. Letting go throws him on away from her.
     static void Hold(RPawnPlayer player, Vine vine)
     {
-        if (vine.Victim is not { IsValid: true, bDeleteMe: false } thug)
+        if (vine.Victim is not { IsAlive: true } thug)
         {
             return;
         }
@@ -823,7 +823,7 @@ static partial class PoisonIvy
     static void Strike(RPawnPlayer player, Vine vine)
     {
         var hit = new HashSet<nint>();
-        if (vine.Tank is { IsValid: true, bDeleteMe: false } tank)
+        if (vine.Tank is { IsAlive: true } tank)
         {
             // A car with people in it, or one under escort, is spared explosions by the game.
             // The vine isn't, so that is switched off for its blow, and put back if it lives.
@@ -838,7 +838,7 @@ static partial class PoisonIvy
             _wrecked++;
 
             // A carried car is thrown as it blows up, while the vine pulls back.
-            if (vine.Lifts && tank.IsValid && !tank.bDeleteMe)
+            if (vine.Lifts && tank.IsAlive)
             {
                 var now = World.Now;
                 vine.ArcStart = now;
@@ -851,7 +851,7 @@ static partial class PoisonIvy
         }
 
         // A parked car is set alight the way the riots do it, then blown up.
-        if (vine.Parked is { IsValid: true, bDeleteMe: false } parked)
+        if (vine.Parked is { IsAlive: true } parked)
         {
             hit.Add(parked.Ptr);
             Say(player, "wreck", always: true);
@@ -890,13 +890,13 @@ static partial class PoisonIvy
     // the grab took from it.
     static void Wither(Vine vine)
     {
-        if (vine.Host is { IsValid: true, bDeleteMe: false } host)
+        if (vine.Host is { IsAlive: true } host)
         {
             host.Destroy();
         }
 
         Release(vine);
-        if (vine.Tank is { IsValid: true, bDeleteMe: false, Health: > 0 } tank)
+        if (vine.Tank is { IsAlive: true, Health: > 0 } tank)
         {
             tank.bGrabbedByIvyVine = false;
             tank.DefaultCombatBehaviour = vine.TankBehaviour!;
@@ -914,7 +914,7 @@ static partial class PoisonIvy
         }
 
         // A parked car can't fall, so one that lived through it goes back where it stood.
-        if (vine.Parked is { IsValid: true, bDeleteMe: false, Health: > 0 } parked)
+        if (vine.Parked is { IsAlive: true, Health: > 0 } parked)
         {
             if (vine.Measured)
             {
@@ -931,7 +931,7 @@ static partial class PoisonIvy
     // its pin where it was set down.
     static void Release(Vine vine)
     {
-        if (vine.Unpinned || vine.Tank is not { IsValid: true, bDeleteMe: false, Health: > 0 } tank)
+        if (vine.Unpinned || vine.Tank is not { IsAlive: true, Health: > 0 } tank)
         {
             return;
         }
@@ -960,7 +960,7 @@ static partial class PoisonIvy
     static void Throw(RPawnPlayer player, Vine vine)
     {
         var now = World.Now;
-        if (vine.ArcStart < 0f || vine.Tank is not { IsValid: true, bDeleteMe: false } car)
+        if (vine.ArcStart < 0f || vine.Tank is not { IsAlive: true } car)
         {
             return;
         }

@@ -127,7 +127,7 @@ static class Spawns
             came = 0;
             foreach (var thug in people.CurrentBatmobileMobThugs)
             {
-                if (thug is { IsValid: true, bDeleteMe: false } && !known.Contains(thug.Ptr))
+                if (thug is { IsAlive: true } && !known.Contains(thug.Ptr))
                 {
                     came++;
                 }
@@ -142,7 +142,7 @@ static class Spawns
         // What the game does when it forces thugs into a fight, so they hold their ground.
         foreach (var thug in people.CurrentBatmobileMobThugs)
         {
-            if (thug is RPawnVillain { IsValid: true, bDeleteMe: false } villain && !known.Contains(villain.Ptr))
+            if (thug is RPawnVillain { IsAlive: true } villain && !known.Contains(villain.Ptr))
             {
                 villain.bIgnoreBatmobileThreat = true;
                 if (villain.AIController?.RiotBrain is { IsValid: true } brain)
@@ -299,7 +299,7 @@ static class Spawns
 
             foreach (var car in scenario.Vehicles)
             {
-                if (car is { IsValid: true, bDeleteMe: false, IsFriendly: false }
+                if (car is { IsAlive: true, IsFriendly: false }
                     && (only is null ? !Known.Contains(car.Ptr) : ReferenceEquals(car, only)))
                 {
                     chase = kind == RGameInfo.VehicleScenarioType.VehicleScenario_CopChase;

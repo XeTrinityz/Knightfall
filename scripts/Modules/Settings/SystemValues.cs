@@ -100,7 +100,7 @@ static class SystemValues
         }
 
         Holding.Add(name);
-        controller.ConsoleCommand(GameText.Once($"scale set {name} {value.ToString("0.###", CultureInfo.InvariantCulture)}"));
+        controller.ConsoleCommand($"scale set {name} {value.ToString("0.###", CultureInfo.InvariantCulture)}");
         WriteBack();
         return true;
     }
@@ -120,7 +120,7 @@ static class SystemValues
             return;
         }
 
-        controller.ConsoleCommand(GameText.Once($"scale set {name} {original}"));
+        controller.ConsoleCommand($"scale set {name} {original}");
         Originals.Remove(name);
 
         // The command saved every live value, including ones other rows still hold.

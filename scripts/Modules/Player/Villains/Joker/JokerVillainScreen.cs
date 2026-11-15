@@ -19,10 +19,6 @@ static partial class JokerVillain
     const string CursorLook = "shotgun";
     const string CursorKick = "Fire";
 
-    // The HUD's whole tint, which reaches every one of its movies, not just the main one. The
-    // SDK only has the main movie's.
-    const string TintPath = "BmGame.RGFxMovieModularHud.SetColorTransform";
-
     // Harley's Psychosis view, and the one that plays as it fades off.
     const string PsychosisPath = "postprocess_level_wbgm.BatXray.pp_Psychosis_INST";
     const string PsychosisOffPath = "postprocess_level_wbgm.Harley.pp_PsychosisTransition_mi";
@@ -48,14 +44,14 @@ static partial class JokerVillain
             return;
         }
 
-        targets.TargetCursorCentreScreen(GameText.Of(Cursor), GameText.Of(CursorLook), 0, -1, -1, GameText.Of(""), false, -1f);
+        targets.TargetCursorCentreScreen(Cursor, CursorLook, 0, -1, -1, "", false, -1f);
     }
 
     static void KickCrosshair(RPlayerController controller)
     {
         if (controller.ModularHud is { IsValid: true } hud && hud.TargetsModule is { IsValid: true } targets)
         {
-            targets.PlaySubAnimOnCursor3D(GameText.Of(Cursor), GameText.Of(CursorKick));
+            targets.PlaySubAnimOnCursor3D(Cursor, CursorKick);
         }
     }
 
@@ -127,7 +123,7 @@ static partial class JokerVillain
     {
         if (_tinted is { IsValid: true } hud && _untinted.Length == 6)
         {
-            ScriptCall.Run(hud, TintPath, _untinted.Select(BitConverter.SingleToInt32Bits).ToArray());
+            hud.SetColorTransform(_untinted[0], _untinted[1], _untinted[2], _untinted[3], _untinted[4], _untinted[5]);
         }
 
         _tinted = null;

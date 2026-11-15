@@ -190,7 +190,7 @@ static class Snow
 
         foreach (var volume in Game.FindObjects<SnowVolume>())
         {
-            if (volume.IsValid && !volume.bDeleteMe && volume.SnowComponent is { IsValid: true })
+            if (volume.IsValid && volume.SnowComponent is { IsValid: true })
             {
                 Density.Hold(volume, was => was * (float)Amount.Value);
             }

@@ -52,7 +52,7 @@ static class Stealth
     {
         foreach (var villain in Game.FindObjects<RPawnVillain>())
         {
-            if (!villain.IsValid || villain.bDeleteMe)
+            if (!villain.IsValid)
             {
                 continue;
             }

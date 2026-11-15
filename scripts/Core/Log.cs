@@ -132,8 +132,6 @@ static class Log
                     File.AppendAllText(_path, line + Environment.NewLine);
                 }
             }
-
-            Debug.Log($"[Knightfall] {level.Trim()} {text}", skipSender: true);
         }
         catch (Exception)
         {

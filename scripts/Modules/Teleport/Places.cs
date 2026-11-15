@@ -178,9 +178,9 @@ static class Places
 
     static bool Left(Rule rule, Place place, RFlagManager flags) => rule switch
     {
-        Rule.Riddler => !flags.GetGlobalFlag(GameText.Of("PickedUp_" + place.Name)),
-        Rule.MostWanted => !flags.GetGlobalFlag(GameText.Of("PickedUp_" + place.Name))
-            && ((place.Flags & AlwaysOnMap) != 0 || flags.GetGlobalFlag(GameText.Of("MapObj_" + place.Name))),
+        Rule.Riddler => !flags.GetGlobalFlag("PickedUp_" + place.Name),
+        Rule.MostWanted => !flags.GetGlobalFlag("PickedUp_" + place.Name)
+            && ((place.Flags & AlwaysOnMap) != 0 || flags.GetGlobalFlag("MapObj_" + place.Name)),
         _ => true,
     };
 
@@ -263,7 +263,7 @@ static class Places
         // The map's own waypoint for a Riddler item only lasts while the map shows the item.
         // The game takes it away straight after otherwise.
         var place = goal.Place;
-        if (Kinds[Category.Index].Left == Rule.Riddler && Flags() is { } flags && flags.GetGlobalFlag(GameText.Of("Riddler_" + place.Name)))
+        if (Kinds[Category.Index].Left == Rule.Riddler && Flags() is { } flags && flags.GetGlobalFlag("Riddler_" + place.Name))
         {
             return Markers.SetItem(place.At, place.Name, place.Type) ? Outcome.Done("SET") : Outcome.NoPlayer;
         }
@@ -379,7 +379,7 @@ static class Places
     // The game's own text lookup. A key it hasn't got comes back wrapped in question marks.
     static string? Localized(string section, string key, string package)
     {
-        var text = GameObject.Localize(GameText.Of(section), GameText.Of(key), GameText.Of(package)).ToString();
+        var text = GameObject.Localize(section, key, package).ToString();
         return string.IsNullOrWhiteSpace(text) || text.StartsWith('?') ? null : text.Trim();
     }
 

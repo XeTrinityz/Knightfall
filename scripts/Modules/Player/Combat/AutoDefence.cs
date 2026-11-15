@@ -66,7 +66,7 @@ static class AutoDefence
             return;
         }
 
-        if (World.Driving is not null || World.Player is not { Health: > 0, bDeleteMe: false } me)
+        if (World.Driving is not null || World.Player is not { IsAlive: true, Health: > 0 } me)
         {
             return;
         }
@@ -74,7 +74,7 @@ static class AutoDefence
         Sweep();
         foreach (var villain in Game.FindObjects<RPawnVillain>())
         {
-            if (!villain.IsValid || villain.bDeleteMe || villain.CombatMove is not { IsValid: true } move)
+            if (!villain.IsValid || villain.CombatMove is not { IsValid: true } move)
             {
                 continue;
             }

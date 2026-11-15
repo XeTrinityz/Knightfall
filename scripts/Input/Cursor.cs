@@ -45,7 +45,7 @@ static class Cursor
     {
         dx = 0;
         dy = 0;
-        if (!GameWindow.InFront || !Middle(out var x, out var y) || !GetCursorPos(out var at))
+        if (!Keyboard.HasFocus || !Middle(out var x, out var y) || !GetCursorPos(out var at))
         {
             return false;
         }
@@ -62,7 +62,7 @@ static class Cursor
 
     public static void Centre()
     {
-        if (GameWindow.InFront && Middle(out var x, out var y))
+        if (Keyboard.HasFocus && Middle(out var x, out var y))
         {
             SetCursorPos(x, y);
         }

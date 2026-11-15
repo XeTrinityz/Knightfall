@@ -323,7 +323,7 @@ static partial class Sidekick
     static string _wanted = "";
     static bool _rejoining;
     static int _rejoinTries;
-    static long _rejoinAt;
+    static double _rejoinAt;
 
     // The sidekick or the body that called them is gone, and the world may be coming down.
     static bool _lost;
@@ -347,7 +347,7 @@ static partial class Sidekick
     // Taken away by the game and due back.
     static bool Rejoining => _wanted.Length > 0 && _body is null && !OnTheWay && Rejoins.On;
 
-    static bool Present => _body is { IsValid: true, bDeleteMe: false } && _bot is { IsValid: true, bDeleteMe: false };
+    static bool Present => _body is { IsAlive: true } && _bot is { IsAlive: true };
 
     // The body that called the sidekick, while the player is in the sidekick's. Nobody otherwise.
     public static RPawnPlayer? Waiting
@@ -355,7 +355,7 @@ static partial class Sidekick
         get
         {
             Adopt();
-            return Present && _caller is { IsValid: true, bDeleteMe: false } caller && Game.TryGetPlayerController(out var controller)
+            return Present && _caller is { IsAlive: true } caller && Game.TryGetPlayerController(out var controller)
                 && controller.Pawn is { } driven && driven.Ptr == _body!.Ptr ? caller : null;
         }
     }
@@ -450,7 +450,7 @@ static partial class Sidekick
         }
 
         // The story's own partner owns the switch. Taking it would break the mission.
-        if (info.PlayerSwitchPawn is { IsValid: true, bDeleteMe: false })
+        if (info.PlayerSwitchPawn is { IsAlive: true })
         {
             return "PARTNER IS HERE";
         }
@@ -506,7 +506,7 @@ static partial class Sidekick
             return Outcome.Failed(World.Driving is not null ? "GET OUT FIRST" : "NOT NOW");
         }
 
-        if (pawn.bDeleteMe || pawn.Health <= 0 || Remesh.Busy)
+        if (!pawn.IsAlive || pawn.Health <= 0 || Remesh.Busy)
         {
             return Outcome.Failed("NOT NOW");
         }
@@ -550,7 +550,7 @@ static partial class Sidekick
         }
 
         var cost = already ? 0 : GameFiles.Exports(name) + GameFiles.Exports(Suits.Owner(name) + "_Std");
-        var room = ObjectTable.Headroom;
+        var room = Game.ObjectHeadroom;
         if (cost > 0 && room < cost + Packages.Spare)
         {
             world.ForceGarbageCollection(true);
@@ -621,14 +621,14 @@ static partial class Sidekick
             return;
         }
 
-        var now = Stopwatch.GetTimestamp();
+        var now = Game.WorldTime;
         if (now < _rejoinAt)
         {
             return;
         }
 
-        _rejoinAt = now + (long)(RejoinEverySeconds * Stopwatch.Frequency);
-        if (World.Player is not { bDeleteMe: false, Health: > 0, Physics: Actor.EPhysics.PHYS_Walking } pawn || World.Controller is not { } controller
+        _rejoinAt = now + RejoinEverySeconds;
+        if (World.Player is not { IsAlive: true, Health: > 0, Physics: Actor.EPhysics.PHYS_Walking } pawn || World.Controller is not { } controller
             || controller.Pawn is not { } driven || driven.Ptr != pawn.Ptr || !Following(controller) || Remesh.Busy || Busy(_wanted) is not null)
         {
             return;
@@ -726,7 +726,7 @@ static partial class Sidekick
             return Outcome.Failed(World.Driving is not null ? "GET OUT FIRST" : "NOT NOW");
         }
 
-        if (_bot!.BotPawn is not { IsValid: true, bDeleteMe: false } follower || follower.CurrentSpecialMove is not null || follower.CombatMove is not null)
+        if (_bot!.BotPawn is not { IsAlive: true } follower || follower.CurrentSpecialMove is not null || follower.CombatMove is not null)
         {
             return Outcome.Failed("THEY ARE BUSY");
         }
@@ -817,7 +817,7 @@ static partial class Sidekick
         // the same while it takes the old world apart, and destroying actors or reloading slots
         // in the middle of that crashed the game. So nothing is touched until the player has a
         // live body again. If the world goes instead, the branch above lets it all go.
-        if (!Present || _caller is not { IsValid: true, bDeleteMe: false })
+        if (!Present || _caller is not { IsAlive: true })
         {
             if (!_lost)
             {
@@ -844,7 +844,7 @@ static partial class Sidekick
         }
 
         _upkeepAt = World.Now + UpkeepSeconds;
-        if (World.Controller is not { } controller || World.Info is not { } info || _bot!.BotPawn is not { IsValid: true, bDeleteMe: false } follower)
+        if (World.Controller is not { } controller || World.Info is not { } info || _bot!.BotPawn is not { IsAlive: true } follower)
         {
             return;
         }
@@ -934,7 +934,7 @@ static partial class Sidekick
     static void TickLoad()
     {
         // The player went to another world or into another body. Nobody is left to arrive beside.
-        if (_caller is not { IsValid: true, bDeleteMe: false })
+        if (_caller is not { IsAlive: true })
         {
             CancelLoad();
             if (!Rejoining)
@@ -1104,7 +1104,7 @@ static partial class Sidekick
 
         _lentFor = suit;
         _lentWas = was;
-        options.SetActivePlayerSkin(GameText.Once(suit));
+        options.SetActivePlayerSkin(suit);
     }
 
     static void ReturnSuit()
@@ -1119,7 +1119,7 @@ static partial class Sidekick
         _lentWas = "";
         if (Game.TryGetGameRI(out var game) && game.PersistentOptions is { IsValid: true } options)
         {
-            options.SetActivePlayerSkin(GameText.Once(was));
+            options.SetActivePlayerSkin(was);
         }
     }
 
@@ -1160,7 +1160,7 @@ static partial class Sidekick
             return GiveUp("YOU WERE BUSY");
         }
 
-        if (info.PlayerSwitchPawn is { IsValid: true, bDeleteMe: false })
+        if (info.PlayerSwitchPawn is { IsAlive: true })
         {
             return GiveUp("PARTNER IS HERE");
         }
@@ -1221,23 +1221,12 @@ static partial class Sidekick
         _briskUntil = 0f;
         Tune(bot, controller);
         Keep();
-        Log.Info($"{_name} joined as a sidekick from slot {_slot}. {ObjectTable.Headroom} objects are free.");
+        Log.Info($"{_name} joined as a sidekick from slot {_slot}. {Game.ObjectHeadroom} objects are free.");
         return Outcome.Done(_standardSuit ? "ARRIVED IN STANDARD SUIT" : _rejoining ? "BACK WITH YOU" : "ARRIVED");
     }
 
-    // The character's own starting gadgets. Most playable classes have no binding of their own in
-    // BmSDK, and a binding always runs its own class's version, so the call goes through the
-    // closest class that defines it.
-    static void GiveKit(RPawnPlayer body)
-    {
-        for (var kind = body.Class as Struct; kind is { IsValid: true }; kind = kind.SuperStruct)
-        {
-            if (ScriptCall.Run(body, kind.GetPathName() + ".AddDefaultInventory"))
-            {
-                return;
-            }
-        }
-    }
+    // The character's own starting gadgets.
+    static void GiveKit(RPawnPlayer body) => body.AddDefaultInventory();
 
     static Outcome GiveUp(string why)
     {
@@ -1355,12 +1344,12 @@ static partial class Sidekick
 
         void Hand(RPawnPlayer? pawn)
         {
-            if (pawn is not { IsValid: true, bDeleteMe: false })
+            if (pawn is not { IsAlive: true })
             {
                 return;
             }
 
-            var has = pawn.CombatBotVolume is { IsValid: true, bDeleteMe: false } volume ? volume : null;
+            var has = pawn.CombatBotVolume is { IsAlive: true } volume ? volume : null;
             if (!wanted)
             {
                 if (has is not null && _arena is { } mine && has.Ptr == mine.Ptr)
@@ -1376,7 +1365,7 @@ static partial class Sidekick
                 return;
             }
 
-            if (_arena is not { IsValid: true, bDeleteMe: false })
+            if (_arena is not { IsAlive: true })
             {
                 _arena = Game.SpawnActor(RCombatBotVolume.StaticClass(), default, pawn.Location) as RCombatBotVolume;
                 if (_arena is null)
@@ -1481,7 +1470,7 @@ static partial class Sidekick
         }
 
         // The story keeps its partners out of some rooms. Ours waits outside them too.
-        if (_bot!.BotExclusionVolume is { IsValid: true, bDeleteMe: false } keptOut && keptOut.EncompassesPoint(player.Location))
+        if (_bot!.BotExclusionVolume is { IsAlive: true } keptOut && keptOut.EncompassesPoint(player.Location))
         {
             _farSince = -1f;
             return;
@@ -1580,10 +1569,10 @@ static partial class Sidekick
     // then the AI, the body, and last the slot the character was loaded into.
     static void Remove()
     {
-        var body = _body is { IsValid: true, bDeleteMe: false } ? _body : null;
-        var bot = _bot is { IsValid: true, bDeleteMe: false } ? _bot : null;
-        var caller = _caller is { IsValid: true, bDeleteMe: false } ? _caller : null;
-        var arena = _arena is { IsValid: true, bDeleteMe: false } ? _arena : null;
+        var body = _body is { IsAlive: true } ? _body : null;
+        var bot = _bot is { IsAlive: true } ? _bot : null;
+        var caller = _caller is { IsAlive: true } ? _caller : null;
+        var arena = _arena is { IsAlive: true } ? _arena : null;
         var played = Game.TryGetPlayerController(out var controller) ? controller.Pawn?.Ptr ?? 0 : 0;
 
         if (Game.TryGetGameInfo(out var info) && info.PlayerSwitchPawn is { } linked && (linked.Ptr == body?.Ptr || linked.Ptr == caller?.Ptr))
@@ -1645,11 +1634,11 @@ static partial class Sidekick
     }
 
     static bool Worn(RGameRI game, Pawn? pawn) =>
-        pawn is RPawnPlayer { IsValid: true, bDeleteMe: false } player && Loaded.IndexOf(game, player) == _slot;
+        pawn is RPawnPlayer { IsAlive: true } player && Loaded.IndexOf(game, player) == _slot;
 
     // The player has a live body and no loading screen is up.
     static bool Settled() =>
-        World.Player is { bDeleteMe: false, Health: > 0 } pawn && World.Controller is { } controller && controller.Pawn is { IsValid: true, bDeleteMe: false } driven
+        World.Player is { IsAlive: true, Health: > 0 } pawn && World.Controller is { } controller && controller.Pawn is { IsAlive: true } driven
         && (driven.Ptr == pawn.Ptr || World.Driving is not null) && !controller.IsPlayingFullScreenMovie(false);
 
     static void Leftover(string name, int slot, long game)
@@ -1700,7 +1689,7 @@ static partial class Sidekick
         _lookedAt = -100f;
         ForgetTraversal();
         ClearHold();
-        _rejoinAt = Stopwatch.GetTimestamp() + (long)(RejoinAfterSeconds * Stopwatch.Frequency);
+        _rejoinAt = Game.WorldTime + RejoinAfterSeconds;
         Keep();
         Catalog.MenuOpening();
     }
@@ -1733,7 +1722,7 @@ static partial class Sidekick
         // After a hot reload the name is in memory. At a game start it is in the settings file.
         var wanted = Survive.Get<string?>(Survive.SidekickWanted, null) ?? Settings.Kept(Section, OutKey) as string ?? "";
         _wanted = Array.Exists(Known, known => known.Name == wanted) && GameFiles.HasPackage(wanted) ? wanted : "";
-        _rejoinAt = Stopwatch.GetTimestamp() + (long)(RejoinAfterSeconds * Stopwatch.Frequency);
+        _rejoinAt = Game.WorldTime + RejoinAfterSeconds;
 
         var botAt = (nint)Survive.Get(Survive.SidekickBot, 0L);
         var bodyAt = (nint)Survive.Get(Survive.SidekickBody, 0L);
@@ -1886,7 +1875,7 @@ static partial class Sidekick
 
     static bool Hurry(RRobinBotController bot)
     {
-        if (_leaving || bot.bInKismetMove || bot.bForceRun || bot.NavHandle is not { IsValid: true } path || bot.BotPawn is not { IsValid: true, bDeleteMe: false } follower
+        if (_leaving || bot.bInKismetMove || bot.bForceRun || bot.NavHandle is not { IsValid: true } path || bot.BotPawn is not { IsAlive: true } follower
             || !Game.TryGetPlayerController(out var controller) || controller.Pawn is not { } player)
         {
             return false;

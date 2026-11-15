@@ -107,7 +107,7 @@ static class MovementStyle
         }
 
         Undo();
-        if (ObjectTable.Headroom < Packages.Cost<RAddContentPlayerCharacter>(style) + Packages.Spare)
+        if (Game.ObjectHeadroom < Packages.Cost<RAddContentPlayerCharacter>(style) + Packages.Spare)
         {
             if (_tries >= Tries)
             {

@@ -110,7 +110,7 @@ static partial class Sidekick
 
         // The sidekick or an enemy who is still up, by what the crosshair touches or nearly does.
         var picked = Crosshair.Pick(OrderReach, null, static kind => kind is Things.Kind.Enemy or Things.Kind.Friendly,
-            actor => actor.Ptr == follower.Ptr || (actor is RPawnVillain { bHostile: true, bDeleteMe: false } enemy && !enemy.IsIncapacitated()), AimDegrees);
+            actor => actor.Ptr == follower.Ptr || (actor is RPawnVillain { IsAlive: true, bHostile: true } enemy && !enemy.IsIncapacitated()), AimDegrees);
         if ((picked is not null && picked.Ptr == follower.Ptr) || Aimed(follower, eye, way))
         {
             return new Target(Aim.Back, Feet(follower), player, null);
@@ -277,7 +277,7 @@ static partial class Sidekick
         _steering = false;
         _arrived = false;
         _walkedAt = -100f;
-        if (had && _bot is { IsValid: true, bDeleteMe: false } bot)
+        if (had && _bot is { IsAlive: true } bot)
         {
             ResetPath(bot);
         }
@@ -363,7 +363,7 @@ static partial class Sidekick
 
     static bool Keeps(RPawnVillain target, RPawnPlayer follower)
     {
-        if (!target.IsValid || target.bDeleteMe || !target.bHostile || target.IsIncapacitated() || World.Now < _focusSince
+        if (!target.IsAlive || !target.bHostile || target.IsIncapacitated() || World.Now < _focusSince
             || World.Now - _focusSince > FocusMost || World.Controller?.Pawn is not { } player
             || Flat(target.Location, player.Location) > FocusLeash * FocusLeash)
         {
@@ -406,7 +406,7 @@ static partial class Sidekick
 
     static void SteerFocus()
     {
-        if (_focus is not { IsValid: true, bDeleteMe: false } target || _bot is not { } bot || bot.BotPawn is not { IsValid: true, bDeleteMe: false } follower
+        if (_focus is not { IsAlive: true } target || _bot is not { } bot || bot.BotPawn is not { IsAlive: true } follower
             || follower.CombatMove is not null || follower.CurrentSpecialMove is not null)
         {
             return;
@@ -463,7 +463,7 @@ static partial class Sidekick
     // A strike at an ordered target, if it is in reach. The game's ground strike when it is down.
     static bool Focused(RRobinBotController bot, RPawnPlayerCombat body, RPawnVillain target)
     {
-        if (!target.IsValid || target.bDeleteMe || target.IsIncapacitated() || Flat(target.Location, body.Location) > StrikeReach * StrikeReach)
+        if (!target.IsAlive || target.IsIncapacitated() || Flat(target.Location, body.Location) > StrikeReach * StrikeReach)
         {
             return false;
         }
@@ -515,12 +515,12 @@ static partial class Sidekick
                 Ring(held, accent with { A = 90 }, 1f);
             }
 
-            if (_focus is { IsValid: true, bDeleteMe: false } chased)
+            if (_focus is { IsAlive: true } chased)
             {
                 Brackets(chased, Height(chased), OrderEnemy with { A = 120 }, 1f);
             }
 
-            if (_bot?.BotPawn is { IsValid: true, bDeleteMe: false, bHidden: false } marked)
+            if (_bot?.BotPawn is { IsAlive: true, bHidden: false } marked)
             {
                 Mark(marked, accent, time);
             }

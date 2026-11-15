@@ -19,9 +19,7 @@ static partial class PoisonIvy
     const string HarleyPackage = "Playable_DLCHarleyQuinn";
     const string TrapClassPath = "BmScript.RThugEatingPlant";
 
-    // The plant's own bite, which picks its move by how far away the meal is, and the control
-    // that turns its head.
-    const string BitePath = "BmScript.RThugEatingPlant.StartEatAnim";
+    // The control that turns the plant's head.
     static readonly FName HeadTurn = new("RotationSkelNode");
 
     // How far away she can plant one, how close an enemy must come to be eaten, how long until
@@ -163,7 +161,7 @@ static partial class PoisonIvy
     // Grows fast and settles, like something forcing its way up.
     static void Sprouting(Trap trap)
     {
-        if (trap.Grown || trap.Plant is not { IsValid: true, bDeleteMe: false } plant)
+        if (trap.Grown || trap.Plant is not { IsAlive: true } plant)
         {
             return;
         }
@@ -178,7 +176,7 @@ static partial class PoisonIvy
     // the ground the way it came up.
     static void Age(Trap trap)
     {
-        if (!trap.Grown || trap.Sinking || trap.Meal is not null || trap.Plant is not { IsValid: true, bDeleteMe: false } plant)
+        if (!trap.Grown || trap.Sinking || trap.Meal is not null || trap.Plant is not { IsAlive: true } plant)
         {
             return;
         }
@@ -195,7 +193,7 @@ static partial class PoisonIvy
     // Shrinks slowly at first, then drops away. True once it is back in the ground.
     static bool Sunk(Trap trap)
     {
-        if (!trap.Sinking || trap.Plant is not { IsValid: true, bDeleteMe: false } plant)
+        if (!trap.Sinking || trap.Plant is not { IsAlive: true } plant)
         {
             return trap.Sinking;
         }
@@ -231,7 +229,7 @@ static partial class PoisonIvy
         _nextFeed = World.Now + FeedEvery;
         for (var i = Traps.Count - 1; i >= 0; i--)
         {
-            if (Traps[i].Plant is not { IsValid: true, bDeleteMe: false })
+            if (Traps[i].Plant is not { IsAlive: true })
             {
                 Traps.RemoveAt(i);
             }
@@ -297,13 +295,10 @@ static partial class PoisonIvy
             }
         }
 
-        // The bite reads its target field to pick its move. The field's binding only takes armed
-        // thugs, but the bite only reads where the target is, so any enemy is written there.
+        // The bite picks its move by how far away its target is. The target field's binding only
+        // takes armed thugs, but the bite only reads where the target is, so any enemy is written there.
         *(nint*)(plant.Ptr + Offsets.FlytrapTarget) = thug.Ptr;
-        if (!ScriptCall.Run(plant, BitePath))
-        {
-            return;
-        }
+        plant.StartEatAnim();
 
         trap.Meal = thug;
         trap.BitAt = World.Now;
@@ -318,7 +313,7 @@ static partial class PoisonIvy
             return;
         }
 
-        if (trap.Meal is not { IsValid: true, bDeleteMe: false } meal)
+        if (trap.Meal is not { IsAlive: true } meal)
         {
             return;
         }
@@ -369,7 +364,7 @@ static partial class PoisonIvy
     // Once the meal is down the plant closes back to its hungry look and can bite again.
     static void Digest(Trap trap)
     {
-        if (World.Now - trap.SwallowedAt < DigestSeconds || trap.Plant is not { IsValid: true, bDeleteMe: false } plant)
+        if (World.Now - trap.SwallowedAt < DigestSeconds || trap.Plant is not { IsAlive: true } plant)
         {
             return;
         }
@@ -398,13 +393,13 @@ static partial class PoisonIvy
     {
         foreach (var meal in trap.Eaten)
         {
-            if (meal is { IsValid: true, bDeleteMe: false })
+            if (meal is { IsAlive: true })
             {
                 meal.SetHidden(false);
             }
         }
 
-        if (trap.Plant is { IsValid: true, bDeleteMe: false } plant)
+        if (trap.Plant is { IsAlive: true } plant)
         {
             plant.Destroy();
         }

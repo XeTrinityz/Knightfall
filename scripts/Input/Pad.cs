@@ -45,8 +45,6 @@ static class Pad
         Button.A, Button.B, Button.X, Button.Y,
     };
 
-    static readonly Dictionary<Button, string[]> Engine = new();
-
     static readonly Dictionary<string, Button> Names = new(StringComparer.OrdinalIgnoreCase)
     {
         ["A"] = Button.A, ["B"] = Button.B, ["X"] = Button.X, ["Y"] = Button.Y,
@@ -62,7 +60,7 @@ static class Pad
 
     static Button _held;
     static Style _lastUsed;
-    static bool _xinputOff;
+    static bool _xboxSeen;
     static bool _sonyOff;
 
     // Kept as buttons under [pad] in settings.toml, next to the pad's other settings.
@@ -75,7 +73,7 @@ static class Pad
         Changed = Hotkeys.Relabel,
     };
 
-    public static bool Connected => XInputPad.Connected || SonyPad.Connected;
+    public static bool Connected => Gamepad.IsConnected || SonyPad.Connected;
 
     public static Style Look => Prompts.Index switch
     {
@@ -88,7 +86,19 @@ static class Pad
     public static Button Held => _held;
 
     // The right stick, -1 to 1 with right and down positive, while the game is in front.
-    public static System.Numerics.Vector2 Right => GameWindow.InFront ? Clamp(XInputPad.Right.LengthSquared() > SonyPad.Right.LengthSquared() ? XInputPad.Right : SonyPad.Right) : default;
+    public static System.Numerics.Vector2 Right
+    {
+        get
+        {
+            if (!Keyboard.HasFocus)
+            {
+                return default;
+            }
+
+            var xbox = new System.Numerics.Vector2(Gamepad.RightStick.X, -Gamepad.RightStick.Y);
+            return Clamp(xbox.LengthSquared() > SonyPad.Right.LengthSquared() ? xbox : SonyPad.Right);
+        }
+    }
 
     static System.Numerics.Vector2 Clamp(System.Numerics.Vector2 stick) =>
         stick.LengthSquared() > 1f ? System.Numerics.Vector2.Normalize(stick) : stick;
@@ -100,8 +110,13 @@ static class Pad
 
     public static void Poll()
     {
-        var xbox = ReadXInput();
+        var xbox = (Button)Gamepad.Held;
         var sony = ReadSony();
+        if (Gamepad.IsConnected != _xboxSeen)
+        {
+            _xboxSeen = Gamepad.IsConnected;
+            Log.Info($"pad.xbox.{_xboxSeen}", _xboxSeen ? "Controller connected." : "Controller disconnected.");
+        }
 
         if (sony != Button.None)
         {
@@ -111,7 +126,7 @@ static class Pad
         {
             _lastUsed = Style.Xbox;
         }
-        else if (SonyPad.Connected != XInputPad.Connected)
+        else if (SonyPad.Connected != Gamepad.IsConnected)
         {
             _lastUsed = SonyPad.Connected ? Style.PlayStation : Style.Xbox;
         }
@@ -119,37 +134,16 @@ static class Pad
         // Both readers report buttons even when another window is in front. They count there
         // only when the game is taking the controller there too.
         var held = xbox | sony;
-        _held = held != Button.None && (GameWindow.InFront || GameTweaks.PadInBackground.On) ? held : Button.None;
+        _held = held != Button.None && (Keyboard.HasFocus || GameTweaks.PadInBackground.On) ? held : Button.None;
     }
 
     public static void Stop()
     {
         _held = Button.None;
-        XInputPad.Stop();
         SonyPad.Stop();
     }
 
     // A reader that fails is switched off for the session. Keyboard input must not go down with it.
-    static Button ReadXInput()
-    {
-        if (_xinputOff)
-        {
-            return Button.None;
-        }
-
-        try
-        {
-            return XInputPad.Read();
-        }
-        catch (Exception error)
-        {
-            _xinputOff = true;
-            XInputPad.Stop();
-            Log.Error("pad.xinput", "Xbox controller support is off", error);
-            return Button.None;
-        }
-    }
-
     static Button ReadSony()
     {
         if (_sonyOff)
@@ -279,44 +273,5 @@ static class Pad
 
     // Everything the game knows this button by. A trigger is both a button and an axis, and the
     // game reads both, so both have to be kept from it.
-    public static string[] EngineNames(Button button)
-    {
-        if (!Engine.TryGetValue(button, out var names))
-        {
-            names = button switch
-            {
-                Button.LT => new[] { "XboxTypeS_LeftTrigger", "XboxTypeS_LeftTriggerAxis" },
-                Button.RT => new[] { "XboxTypeS_RightTrigger", "XboxTypeS_RightTriggerAxis" },
-                _ => EngineName(button) is { Length: > 0 } name ? new[] { name } : Array.Empty<string>(),
-            };
-
-            Engine[button] = names;
-        }
-
-        return names;
-    }
-
-    // The names the game's key bindings use, which is what Keyboard.Swallow(string) takes. The
-    // game uses the Xbox names for every kind of pad.
-    static string EngineName(Button button)
-    {
-        return button switch
-        {
-            Button.DPadUp => "XboxTypeS_DPad_Up",
-            Button.DPadDown => "XboxTypeS_DPad_Down",
-            Button.DPadLeft => "XboxTypeS_DPad_Left",
-            Button.DPadRight => "XboxTypeS_DPad_Right",
-            Button.Start => "XboxTypeS_Start",
-            Button.Back => "XboxTypeS_Back",
-            Button.LeftStick => "XboxTypeS_LeftThumbstick",
-            Button.RightStick => "XboxTypeS_RightThumbstick",
-            Button.LB => "XboxTypeS_LeftShoulder",
-            Button.RB => "XboxTypeS_RightShoulder",
-            Button.A => "XboxTypeS_A",
-            Button.B => "XboxTypeS_B",
-            Button.X => "XboxTypeS_X",
-            Button.Y => "XboxTypeS_Y",
-            _ => "",
-        };
-    }
+    public static string[] EngineNames(Button button) => Gamepad.EngineNames((GamepadButton)button);
 }

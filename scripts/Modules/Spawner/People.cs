@@ -249,7 +249,7 @@ static class People
             var toYou = mover.Location - floor;
             var facing = new Rotator(0f, MathF.Atan2(toYou.Y, toYou.X) * 180f / MathF.PI, 0f);
             var body = people.SpawnPawn(picked.Pawn, picked.Define, picked.Type, floor + new System.Numerics.Vector3(0f, 0f, 100f), facing);
-            if (body is not { IsValid: true, bDeleteMe: false })
+            if (body is not { IsAlive: true })
             {
                 continue;
             }
@@ -354,7 +354,7 @@ static class People
     // Another of someone already in the world, the way this tab and PLACE say.
     public static Outcome Copy(RBMPawnAI body)
     {
-        if (!body.IsValid || body.bDeleteMe)
+        if (!body.IsAlive)
         {
             return Outcome.Failed("GONE");
         }
@@ -387,7 +387,7 @@ static class People
             // Written before the native call, so a crash inside it names who.
             Log.Info($"Spawner: spawning {picked.Label} ({picked.Pawn.Name}, {picked.Define.GetPathName(null)}, {picked.Type.Name}).");
             var body = people.SpawnPawn(picked.Pawn, picked.Define, picked.Type, spot.Floor + new System.Numerics.Vector3(0f, 0f, 100f), spot.Facing);
-            if (body is not { IsValid: true, bDeleteMe: false })
+            if (body is not { IsAlive: true })
             {
                 continue;
             }
@@ -434,7 +434,7 @@ static class People
     // Once the brain has taken over. FIGHT goes the way the game pulls a street thug into a fight.
     static void Start(RBMPawnAI body, int behaviour, bool passive)
     {
-        if (!body.IsValid || body.bDeleteMe || body.AIController is not { IsValid: true } brain)
+        if (!body.IsAlive || body.AIController is not { IsValid: true } brain)
         {
             return;
         }
@@ -542,7 +542,7 @@ static class People
 
         foreach (var body in Game.FindObjects<RBMPawnAI>())
         {
-            if (body.IsValid && !body.bDeleteMe && !body.IsClassDefaultObject && body is not RPawnCrowdRagdoll && !ReferenceEquals(body, World.Player))
+            if (body.IsValid && !body.IsClassDefaultObject && body is not RPawnCrowdRagdoll && !ReferenceEquals(body, World.Player))
             {
                 Offer(body.Class, body.CharacterDefine, body.CharactersType, body.WeaponType);
             }

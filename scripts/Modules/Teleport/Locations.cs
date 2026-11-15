@@ -549,7 +549,7 @@ static class Locations
     {
         if (_room is { IsValid: true } room && ri.CurrentLevelVolume?.Ptr == room.Ptr)
         {
-            var city = _cityRoom is { IsValid: true, bDeleteMe: false } kept ? kept : CityRoom(ri);
+            var city = _cityRoom is { IsAlive: true } kept ? kept : CityRoom(ri);
             if (city is not null)
             {
                 ri.CurrentLevelVolume = city;
@@ -567,7 +567,7 @@ static class Locations
         var at = World.Player?.Location;
         foreach (var volume in Game.FindObjects<RLevelVolume>())
         {
-            if (!volume.IsValid || volume.bDeleteMe || !spot.Parts.Contains(volume.Level.ToString(), StringComparer.OrdinalIgnoreCase))
+            if (!volume.IsValid || !spot.Parts.Contains(volume.Level.ToString(), StringComparer.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -588,7 +588,7 @@ static class Locations
         var level = ri.CurrentLevel.ToString();
         foreach (var volume in Game.FindObjects<RLevelVolume>())
         {
-            if (volume.IsValid && !volume.bDeleteMe && string.Equals(volume.Level.ToString(), level, StringComparison.OrdinalIgnoreCase)
+            if (volume.IsValid && string.Equals(volume.Level.ToString(), level, StringComparison.OrdinalIgnoreCase)
                 && (_home is null || volume.EncompassesPoint(_home.At)))
             {
                 return volume;
@@ -804,7 +804,7 @@ static class Locations
         RChallengeModeStartPointBase? challenge = null;
         foreach (var point in Game.FindObjects<RChallengeModeStartPointBase>())
         {
-            if (point.IsValid && !point.bDeleteMe && InPlace(point)
+            if (point.IsValid && InPlace(point)
                 && (challenge is null || string.CompareOrdinal(point.Name.ToString(), challenge.Name.ToString()) < 0))
             {
                 challenge = point;
@@ -818,7 +818,7 @@ static class Locations
 
         foreach (var point in Game.FindObjects<PlayerStart>())
         {
-            if (point.IsValid && !point.bDeleteMe && InPlace(point))
+            if (point.IsValid && InPlace(point))
             {
                 return (point.Location, point.Rotation.Yaw, "player start", false);
             }
@@ -828,7 +828,7 @@ static class Locations
         var best = float.MaxValue;
         foreach (var point in Game.FindObjects<NavigationPoint>())
         {
-            if (!point.IsValid || point.bDeleteMe || !InPlace(point))
+            if (!point.IsValid || !InPlace(point))
             {
                 continue;
             }

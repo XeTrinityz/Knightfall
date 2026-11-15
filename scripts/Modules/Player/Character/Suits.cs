@@ -245,7 +245,7 @@ static class Suits
             return Outcome.Unchanged("WEARING IT");
         }
 
-        options.SetActivePlayerSkin(GameText.Once(requested));
+        options.SetActivePlayerSkin(requested);
         controller.SaveGameOptionsToMemory();
 
         // A character the player switched to is switched in again wearing it.

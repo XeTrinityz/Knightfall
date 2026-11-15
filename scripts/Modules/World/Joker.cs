@@ -78,7 +78,7 @@ static class Joker
             for (var i = Swapped.Count - 1; i >= 0; i--)
             {
                 var board = Swapped[i];
-                if (!board.IsValid || board.bDeleteMe)
+                if (!board.IsAlive)
                 {
                     SwappedAt.Remove(board.Ptr);
                     Swapped.RemoveAt(i);
@@ -99,7 +99,7 @@ static class Joker
         foreach (var board in Game.FindObjects<RJokerBillboard>())
         {
             // One the game forced belongs to a story moment, so it's left to the game.
-            if (!board.IsValid || board.bDeleteMe || board.IsClassDefaultObject || board.bCurrentlyForced || SwappedAt.Contains(board.Ptr)
+            if (!board.IsValid || board.IsClassDefaultObject || board.bCurrentlyForced || SwappedAt.Contains(board.Ptr)
                 || board.AlternateMaterial is not { IsValid: true } || board.StaticMeshComponent is not { IsValid: true })
             {
                 continue;
@@ -135,7 +135,7 @@ static class Joker
     {
         foreach (var board in Swapped)
         {
-            if (board.IsValid && !board.bDeleteMe && board.bCurrentlySwapped && !board.bCurrentlyForced)
+            if (board.IsAlive && board.bCurrentlySwapped && !board.bCurrentlyForced)
             {
                 board.SwapToOriginalVersion(false);
             }
@@ -162,7 +162,7 @@ static class Joker
         foreach (var known in brains.GlobalControllerInfoList)
         {
             if (known.Controller is not { IsValid: true } ai || ai.RiotBrain is not { IsValid: true, bIsJokerfied: false } brain
-                || brain.JokerDefine is not { IsValid: true } look || ai.Pawn is not RBMPawnAI { IsValid: true, bDeleteMe: false, bHidden: false } thug
+                || brain.JokerDefine is not { IsValid: true } look || ai.Pawn is not RBMPawnAI { IsAlive: true, bHidden: false } thug
                 || thug.Health <= 0 || thug is RPawnVillain { bGoodAsDead: true }
                 || thug.Mesh is not { IsValid: true } body || World.Now - body.LastRenderTime > SeenWithin)
             {

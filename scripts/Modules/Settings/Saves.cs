@@ -290,9 +290,9 @@ static class Saves
 
         // The story opens before the upgraded Batmobile exists, so the menu takes that one off.
         const string upgraded = "Playable_BatmobileMk2_Std";
-        if (string.Equals(options.GetActivePlayerSkin(GameText.Once("Batmobile"), true, false, false).ToString(), upgraded, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(options.GetActivePlayerSkin("Batmobile", true, false, false).ToString(), upgraded, StringComparison.OrdinalIgnoreCase))
         {
-            options.ClearActivePlayerSkin(GameText.Once("Batmobile"));
+            options.ClearActivePlayerSkin("Batmobile");
         }
 
         Log.Info("Saves: starting a fresh New Game + run.");
@@ -301,11 +301,11 @@ static class Saves
         manager.SetActiveStorySlotID(RSaveGameManager.StorySlots.StorySlot_StoryPlus);
         controller.Live_InvalidateStoryData();
         controller.SaveGameOptionsToMemory();
-        controller.SetReturnPoint(GameText.Once("FE_MainMenu"));
+        controller.SetReturnPoint("FE_MainMenu");
 
         // As a restart does, so nothing from this world plays on over the opening.
         BmSDK.Engine.AkWwise.FullReset(false);
-        game.Game_StartGameAt(GameText.Once("FE_NewGame"));
+        game.Game_StartGameAt("FE_NewGame");
         return Outcome.Done("STARTING");
     }
 
@@ -623,7 +623,7 @@ static class Saves
         }
 
         var key = manager.GetStringForLocationID(id).ToString() ?? "";
-        var name = key.Length > 0 ? GameObject.Localize(GameText.Of("Map"), GameText.Of(key), GameText.Of("GFxUI")).ToString() ?? "" : "";
+        var name = key.Length > 0 ? GameObject.Localize("Map", key, "GFxUI").ToString() ?? "" : "";
         if (name.Length == 0 || name.StartsWith('?'))
         {
             name = key;

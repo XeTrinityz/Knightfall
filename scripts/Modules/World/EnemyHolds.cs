@@ -154,7 +154,7 @@ static class EnemyHolds
         _lookedAt = World.Now;
         foreach (var body in Game.FindObjects<RBMPawnAI>())
         {
-            if (!body.IsValid || body.bDeleteMe || body.IsClassDefaultObject)
+            if (!body.IsValid || body.IsClassDefaultObject)
             {
                 continue;
             }

@@ -88,7 +88,7 @@ static class Crowd
     public static bool IsFriendly(RBMPawnAI body) => body is not RPawnVillain || Bodyguards.Is(body);
 
     public static bool Standing(RBMPawnAI body) =>
-        !body.bDeleteMe && !body.bHidden && body.Health > 0 && body is not RPawnVillain { bGoodAsDead: true };
+        body.IsAlive && !body.bHidden && body.Health > 0 && body is not RPawnVillain { bGoodAsDead: true };
 
     // Every enemy on their feet, for an attack to pick who it reaches.
     public static IEnumerable<RPawnVillain> StandingEnemies()

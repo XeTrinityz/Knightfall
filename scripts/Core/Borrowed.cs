@@ -160,7 +160,7 @@ static class Borrowed
             return found;
         }
 
-        if (ObjectTable.Headroom < MinHeadroom)
+        if (Game.ObjectHeadroom < MinHeadroom)
         {
             // The engine collects on its next tick. Asking again a moment later can work.
             if (Game.TryGetWorldInfo(out var world))
@@ -171,22 +171,15 @@ static class Borrowed
             throw new InvalidOperationException("the game is close to its object limit, so the package was not loaded");
         }
 
-        // Some packages are cooked with _SF on the end, and the game's loader adds it itself.
         foreach (var package in packages)
         {
-            foreach (var name in package.EndsWith("_SF", StringComparison.OrdinalIgnoreCase) ? new[] { package } : new[] { package, package + "_SF" })
+            try
             {
-                try
-                {
-                    if (Game.LoadPackage(name) is { IsValid: true })
-                    {
-                        break;
-                    }
-                }
-                catch (Exception error)
-                {
-                    Log.Error("borrowed.package", $"Package {name} failed to load", error);
-                }
+                Game.TryLoadPackage(package, out _);
+            }
+            catch (Exception error)
+            {
+                Log.Error("borrowed.package", $"Package {package} failed to load", error);
             }
         }
 

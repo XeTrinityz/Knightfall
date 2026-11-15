@@ -54,9 +54,7 @@ static class Marks
 
         try
         {
-            controller.GetPlayerViewPoint(out var eye, out var turn);
-            var fieldOfView = controller.PlayerCamera is { IsValid: true } camera ? camera.GetFOVAngle() : controller.GetFOVAngle();
-            Hologram.Frame(canvas, eye, turn, fieldOfView);
+            Hologram.Frame(canvas);
 
             var time = (float)(System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency % 3600.0);
             Markings.Render(time);

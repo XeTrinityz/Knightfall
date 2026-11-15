@@ -165,7 +165,7 @@ static class Controls
         for (var i = 0; i < Count; i++)
         {
             var onPad = (Act)i == Act.Open ? Pad.IsDown(_padOpen) : Pad.IsDown(PadOf[i]);
-            var down = onPad || Keyboard.IsDown(KeyOf[i]);
+            var down = onPad || Keyboard.IsDown(KeyOf[i]) || Keyboard.WasPressed(KeyOf[i]);
 
             Fired[i] = false;
             if (down && !Held[i])

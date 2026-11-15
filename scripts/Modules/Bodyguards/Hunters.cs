@@ -75,7 +75,7 @@ static class Hunters
         for (var i = List.Count - 1; i >= 0; i--)
         {
             var hunter = List[i];
-            if (!hunter.Body.IsValid || hunter.Body.bDeleteMe)
+            if (!hunter.Body.IsAlive)
             {
                 List.RemoveAt(i);
             }
@@ -245,7 +245,7 @@ static class Hunters
     static void Release(Hunter hunter)
     {
         var body = hunter.Body;
-        if (!body.IsValid || body.bDeleteMe)
+        if (!body.IsAlive)
         {
             return;
         }

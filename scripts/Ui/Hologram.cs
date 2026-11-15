@@ -23,17 +23,8 @@ static unsafe class Hologram
     static Matrix4x4* _matrix;
     static bool _pushed;
 
-    // Set each frame by Frame, used by Place. The canvas's own Project gives the middle of the
-    // screen for everything in the callback we draw in, so points are projected here from the
-    // camera instead.
+    // Set each frame by Frame, used by Place.
     static Canvas? _canvas;
-    static Vector3 _eye;
-    static Vector3 _forward;
-    static Vector3 _right;
-    static Vector3 _up;
-    static float _focal;
-    static float _clipX;
-    static float _clipY;
 
     public static bool Available
     {
@@ -49,46 +40,24 @@ static unsafe class Hologram
         }
     }
 
-    // The camera's place, its turn, and how wide it sees across, in degrees.
-    public static void Frame(Canvas canvas, Vector3 eye, Rotator turn, float fieldOfView)
+    // The canvas the panels go on this frame. Points are projected with the view the frame is drawn
+    // with, since the canvas's own Project gives the middle of the screen for everything in the
+    // callback we draw in. False until the first frame of a world has been drawn.
+    public static bool Frame(Canvas canvas)
     {
         _canvas = canvas;
-        _eye = eye;
-
-        // The camera's own axes, roll included, since CAMERA TILT and the free camera lean it.
-        _forward = turn.ToDirection();
-        var yaw = new Rotator(0f, turn.Yaw, 0f).ToDirection();
-        _right = new Vector3(-yaw.Y, yaw.X, 0f);
-        _up = Vector3.Cross(_right, _forward) * -1f;
-        if (Vector3.Dot(_up, Vector3.UnitZ) < 0f)
-        {
-            _up = -_up;
-        }
-
-        // The engine's rotation matrix turns right down and up toward right for a positive roll.
-        var roll = turn.Roll * MathF.PI / 180f;
-        if (roll != 0f)
-        {
-            var (sin, cos) = MathF.SinCos(roll);
-            var right = _right * cos - _up * sin;
-            _up = _up * cos + _right * sin;
-            _right = right;
-        }
-
-        var half = Math.Clamp(fieldOfView, 10f, 170f) * MathF.PI / 360f;
-        _focal = canvas.ClipX / 2f / MathF.Tan(half);
-        _clipX = canvas.ClipX;
-        _clipY = canvas.ClipY;
+        return Game.View.IsValid;
     }
 
     // Where a point in the world lands on the canvas, in pixels.
-    static Vector2 Project(Canvas canvas, Vector3 point)
+    static Vector2 Project(Vector3 point)
     {
-        var toward = point - _eye;
-        var depth = MathF.Max(Vector3.Dot(toward, _forward), 1f);
+        var view = Game.View;
+        var toward = point - view.Location;
+        var depth = MathF.Max(Vector3.Dot(toward, view.Forward), 1f);
         return new Vector2(
-            canvas.ClipX / 2f + Vector3.Dot(toward, _right) / depth * _focal,
-            canvas.ClipY / 2f - Vector3.Dot(toward, _up) / depth * _focal);
+            view.ScreenSize.X / 2f + Vector3.Dot(toward, view.Right) / depth * view.Focal,
+            view.ScreenSize.Y / 2f - Vector3.Dot(toward, view.Up) / depth * view.Focal);
     }
 
     // A flat panel in the world. Its left edge, halfway down, sits on the anchor, and across and
@@ -96,46 +65,31 @@ static unsafe class Hologram
     public readonly record struct Panel(Vector3 Anchor, Vector3 Across, Vector3 Down);
 
     // How many pixels one unit of the world covers at this point, or 0 behind the eye.
-    public static float Pixels(Vector3 point)
-    {
-        var depth = Vector3.Dot(point - _eye, _forward);
-        return depth < 1f ? 0f : _focal / depth;
-    }
+    public static float Pixels(Vector3 point) => Game.View.PixelsPerUnit(point);
 
-    public static Vector3 Eye => _eye;
+    public static Vector3 Eye => Game.View.Location;
 
     // How many pixels a small turn of the view moves things on screen, per radian.
-    public static float Focal => _focal;
+    public static float Focal => Game.View.Focal;
 
-    public static Vector2 Middle => new(_clipX / 2f, _clipY / 2f);
+    public static Vector2 Middle => Game.View.ScreenSize / 2f;
 
-    // Where a point lands on screen with the camera of the last frame drawn. False behind it.
-    public static bool Screen(Vector3 point, out Vector2 at)
-    {
-        var toward = point - _eye;
-        var depth = Vector3.Dot(toward, _forward);
-        if (depth < 1f || _focal <= 0f)
-        {
-            at = default;
-            return false;
-        }
+    // Where a point lands on screen with the camera of the frame being drawn. False behind it.
+    public static bool Screen(Vector3 point, out Vector2 at) => Game.View.WorldToScreen(point, out at);
 
-        at = new Vector2(_clipX / 2f + Vector3.Dot(toward, _right) / depth * _focal, _clipY / 2f - Vector3.Dot(toward, _up) / depth * _focal);
-        return true;
-    }
+    public static Vector3 Forward => Game.View.Forward;
 
-    public static Vector3 Forward => _forward;
+    public static Vector3 Right => Game.View.Right;
 
-    public static Vector3 Right => _right;
-
-    public static Vector3 Up => _up;
+    public static Vector3 Up => Game.View.Up;
 
     // Which way a point lies from the middle of the screen, as a direction on the screen with y
     // pointing down. It works for points behind the camera too, for arrows on the screen's edge.
     public static Vector2 Direction(Vector3 point)
     {
-        var toward = point - _eye;
-        var across = new Vector2(Vector3.Dot(toward, _right), -Vector3.Dot(toward, _up));
+        var view = Game.View;
+        var toward = point - view.Location;
+        var across = new Vector2(Vector3.Dot(toward, view.Right), -Vector3.Dot(toward, view.Up));
         return across.LengthSquared() > 1e-6f ? Vector2.Normalize(across) : Vector2.UnitY;
     }
 
@@ -143,7 +97,7 @@ static unsafe class Hologram
     // nothing is pushed then. Pop before placing the next one.
     public static bool Place(Panel panel, float width, float height)
     {
-        if (_canvas is not { IsValid: true } canvas || !Available)
+        if (_canvas is not { IsValid: true } canvas || !Available || !Game.View.IsValid)
         {
             return false;
         }
@@ -158,7 +112,7 @@ static unsafe class Hologram
         Span<Vector2> screen = stackalloc Vector2[4];
         for (var i = 0; i < 4; i++)
         {
-            screen[i] = Project(canvas, corners[i]);
+            screen[i] = Project(corners[i]);
             if (MathF.Abs(screen[i].X - canvas.ClipX / 2f) > canvas.ClipX * 2f || MathF.Abs(screen[i].Y - canvas.ClipY / 2f) > canvas.ClipY * 2f)
             {
                 return false;
@@ -186,17 +140,17 @@ static unsafe class Hologram
     public static void Beams(Panel panel, Vector3 emitter, float shown, float width, float height, Rgba color)
     {
         if (_canvas is not { IsValid: true } canvas || !Corners(panel, width, height, out var corners, out _) ||
-            Vector3.Dot(emitter - _eye, _forward) < 10f)
+            Vector3.Dot(emitter - Eye, Forward) < 10f)
         {
             return;
         }
 
-        var from = Project(canvas, emitter) / Draw.Scale;
+        var from = Project(emitter) / Draw.Scale;
         Draw.Place(0f, 0f, 1f);
         Draw.Fade(shown * 0.8f);
         foreach (var corner in corners)
         {
-            var to = Project(canvas, corner) / Draw.Scale;
+            var to = Project(corner) / Draw.Scale;
             Draw.Line(from.X, from.Y, to.X, to.Y, color with { A = 60 });
         }
 
@@ -207,7 +161,7 @@ static unsafe class Hologram
     // Whether a panel of this size can be seen from the eye: in front of it and not behind a wall.
     public static bool Seen(Panel panel, float width, float height, Actor tracer)
     {
-        return Corners(panel, width, height, out _, out var middle) && tracer.FastTrace(middle, _eye, Vector3.Zero, false);
+        return Corners(panel, width, height, out _, out var middle) && tracer.FastTrace(middle, Eye, Vector3.Zero, false);
     }
 
     // The readout's left edge, halfway down, sits on the anchor.
@@ -219,7 +173,7 @@ static unsafe class Hologram
 
         // Light shows from both sides. Seen from behind it would read backwards, so it is laid on
         // the other way round there.
-        if (Vector3.Dot(Vector3.Cross(across, down), _eye - (topLeft + (across + down) / 2f)) <= 0f)
+        if (Vector3.Dot(Vector3.Cross(across, down), Eye - (topLeft + (across + down) / 2f)) <= 0f)
         {
             topLeft += across;
             across = -across;
@@ -233,7 +187,7 @@ static unsafe class Hologram
         // along the view, not toward the panel, which a panel behind the camera also passes.
         foreach (var corner in corners)
         {
-            if (Vector3.Dot(corner - _eye, _forward) < 10f)
+            if (Vector3.Dot(corner - Eye, Forward) < 10f)
             {
                 return false;
             }

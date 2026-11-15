@@ -722,7 +722,7 @@ static partial class RiddlerMech
 
     static void Unbuild()
     {
-        if (_on is { IsValid: true, bDeleteMe: false } owner)
+        if (_on is { IsAlive: true } owner)
         {
             foreach (var piece in Pilot)
             {

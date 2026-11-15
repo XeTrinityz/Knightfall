@@ -60,7 +60,7 @@ static class AutoFight
         }
 
         if (World.Driving is not null
-            || World.Player is not { Health: > 0, bDeleteMe: false } me
+            || World.Player is not { IsAlive: true, Health: > 0 } me
             || World.Controller is not RPlayerControllerCombat controller
             || !controller.IsInCombat(false))
         {
@@ -154,7 +154,7 @@ static class AutoFight
 
         foreach (var villain in Game.FindObjects<RPawnVillain>())
         {
-            if (!villain.IsValid || villain.bDeleteMe || Bodyguards.Is(villain))
+            if (!villain.IsValid || Bodyguards.Is(villain))
             {
                 continue;
             }

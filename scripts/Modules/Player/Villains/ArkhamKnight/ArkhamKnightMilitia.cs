@@ -100,7 +100,7 @@ static partial class ArkhamKnight
             return Outcome.Failed("NO ROAD NEAR");
         }
 
-        if (player.Spawn(humvee.Class, null, default, start + new Vector3(0f, 0f, SpawnLift), facing, humvee, false) is not RVehicleCar { IsValid: true, bDeleteMe: false } car)
+        if (player.Spawn(humvee.Class, null, default, start + new Vector3(0f, 0f, SpawnLift), facing, humvee, false) is not RVehicleCar { IsAlive: true } car)
         {
             return Outcome.Failed("THE GAME REFUSED");
         }
@@ -118,7 +118,7 @@ static partial class ArkhamKnight
 
     static void Squads()
     {
-        Brought.RemoveAll(body => !body.IsValid || body.bDeleteMe);
+        Brought.RemoveAll(body => !body.IsAlive);
         if (World.Player is not { IsValid: true } player)
         {
             return;
@@ -137,7 +137,7 @@ static partial class ArkhamKnight
     static bool Run(Ride ride, RPawnPlayer player)
     {
         var car = ride.Car;
-        var alive = car.IsValid && !car.bDeleteMe && !car.HasDied;
+        var alive = car.IsAlive && !car.HasDied;
         if (!ride.Seated)
         {
             if (!alive)
@@ -182,7 +182,7 @@ static partial class ArkhamKnight
         for (var i = ride.Crew.Count - 1; i >= 0; i--)
         {
             var (body, label, health) = ride.Crew[i];
-            if (!body.IsValid || body.bDeleteMe || body.Health <= 0)
+            if (!body.IsAlive || body.Health <= 0)
             {
                 ride.Crew.RemoveAt(i);
                 continue;
@@ -296,7 +296,7 @@ static partial class ArkhamKnight
     {
         foreach (var ride in Rides)
         {
-            if (ride.Car is { IsValid: true, bDeleteMe: false } car)
+            if (ride.Car is { IsAlive: true } car)
             {
                 car.Destroy();
             }
@@ -304,7 +304,7 @@ static partial class ArkhamKnight
 
         foreach (var body in Brought)
         {
-            if (!body.IsValid || body.bDeleteMe)
+            if (!body.IsAlive)
             {
                 continue;
             }

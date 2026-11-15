@@ -38,7 +38,7 @@ static class Car
             return driving;
         }
 
-        if (World.Info?.GetBatmobile() is { IsValid: true, bDeleteMe: false, IsClassDefaultObject: false } known)
+        if (World.Info?.GetBatmobile() is { IsAlive: true, IsClassDefaultObject: false } known)
         {
             return known;
         }
@@ -46,7 +46,7 @@ static class Car
         // The game's own pointer is empty in some places. Its list of Batmobiles also holds the
         // template new ones are made from, which sits at the world origin, so only a car placed
         // in a loaded level counts. Walking the list is only done now and then.
-        if (_found is { IsValid: true, bDeleteMe: false })
+        if (_found is { IsAlive: true })
         {
             return _found;
         }
@@ -60,7 +60,7 @@ static class Car
         _found = null;
         foreach (var car in Game.FindObjects<RVehicleBatmobileBase>())
         {
-            if (car.IsValid && !car.bDeleteMe && car.GetPathName(null).Contains("PersistentLevel", StringComparison.Ordinal))
+            if (car.IsValid && car.GetPathName(null).Contains("PersistentLevel", StringComparison.Ordinal))
             {
                 _found = car;
                 break;

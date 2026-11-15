@@ -214,7 +214,7 @@ static class Gadgets
     {
         foreach (var disruptor in Game.FindObjects<RDisruptorSniper>())
         {
-            if (disruptor.IsValid && !disruptor.bDeleteMe)
+            if (disruptor.IsValid)
             {
                 yield return disruptor;
             }
@@ -316,7 +316,7 @@ static class Gadgets
     {
         foreach (var mine in Game.FindObjects<RExplosiveGooMine>())
         {
-            if (mine.IsValid && !mine.bDeleteMe)
+            if (mine.IsValid)
             {
                 held.Hold(mine, value);
             }
@@ -327,7 +327,7 @@ static class Gadgets
     {
         foreach (var bomb in Game.FindObjects<RExplosiveGelBomb>())
         {
-            if (bomb.IsValid && !bomb.bDeleteMe)
+            if (bomb.IsValid)
             {
                 BombRadius.Hold(bomb, GelScaled);
             }
@@ -335,7 +335,7 @@ static class Gadgets
 
         foreach (var mine in Game.FindObjects<RExplosiveGooMine>())
         {
-            if (mine.IsValid && !mine.bDeleteMe)
+            if (mine.IsValid)
             {
                 MineRadius.Hold(mine, GelScaled);
             }
@@ -397,7 +397,7 @@ static class Gadgets
     {
         foreach (var spray in Game.FindObjects<RFreezeSpray>())
         {
-            if (spray.IsValid && !spray.bDeleteMe)
+            if (spray.IsValid)
             {
                 yield return spray;
             }

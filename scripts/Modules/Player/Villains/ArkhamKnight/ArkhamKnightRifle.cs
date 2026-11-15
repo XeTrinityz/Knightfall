@@ -307,7 +307,7 @@ static partial class ArkhamKnight
         (float Ahead, RVehicleNPC Car)? best = null;
         foreach (var car in Game.FindObjects<RVehicleNPC>())
         {
-            if (car is not { IsValid: true, IsClassDefaultObject: false, bDeleteMe: false, bHidden: false, DroneHacked: false, IsFriendly: false, Health: > 0 })
+            if (car is not { IsValid: true, IsClassDefaultObject: false, bHidden: false, DroneHacked: false, IsFriendly: false, Health: > 0 })
             {
                 continue;
             }

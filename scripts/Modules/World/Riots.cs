@@ -123,7 +123,7 @@ static class Riots
                 BreakAt.Hold(brain, 0);
 
                 if (you is { } here && fighting < all
-                    && ai.Pawn is RPawnVillain { IsValid: true, bDeleteMe: false, bGoodAsDead: false, bSpawnedInRiot: true, bIsCurrentCombatant: false } thug
+                    && ai.Pawn is RPawnVillain { IsAlive: true, bGoodAsDead: false, bSpawnedInRiot: true, bIsCurrentCombatant: false } thug
                     && thug.Health > 0 && Vector3.DistanceSquared(thug.Location, here) < PullRange * PullRange)
                 {
                     thug.ForceIntoCombat();

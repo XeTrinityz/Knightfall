@@ -96,7 +96,6 @@ static partial class PoisonIvy
         Aim.Update(player, controller, false);
         Lash(player);
         Plant(player);
-        KeepVoice();
         Pose(player);
         ShowHud();
     }

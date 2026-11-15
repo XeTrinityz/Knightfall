@@ -258,7 +258,7 @@ static class Enemies
         var near = new List<RBMPawnAI>();
         foreach (var body in Game.FindObjects<RBMPawnAI>())
         {
-            if (body.IsValid && !body.bDeleteMe && !body.IsClassDefaultObject && side(body) && Vector3.DistanceSquared(body.Location, at) < NearRange * NearRange)
+            if (body.IsValid && !body.IsClassDefaultObject && side(body) && Vector3.DistanceSquared(body.Location, at) < NearRange * NearRange)
             {
                 near.Add(body);
             }

@@ -175,7 +175,7 @@ static class GuardBrain
     {
         guard.Post = at;
         guard.Returning = false;
-        if (guard.PostMark is { IsValid: true, bDeleteMe: false } mark)
+        if (guard.PostMark is { IsAlive: true } mark)
         {
             mark.SetLocation(at);
         }
@@ -184,7 +184,7 @@ static class GuardBrain
     // The game's follow only follows an actor, so the post gets a hidden one with no model.
     static Actor? PostMark(Guard guard)
     {
-        if (guard.PostMark is { IsValid: true, bDeleteMe: false } mark)
+        if (guard.PostMark is { IsAlive: true } mark)
         {
             return mark;
         }
@@ -205,7 +205,7 @@ static class GuardBrain
     {
         guard.Posted = false;
         guard.Returning = false;
-        if (guard.PostMark is { IsValid: true, bDeleteMe: false } mark)
+        if (guard.PostMark is { IsAlive: true } mark)
         {
             if (here)
             {
@@ -658,7 +658,7 @@ static class GuardBrain
     public static void Release(Guard guard, bool hostile)
     {
         var body = guard.Body;
-        var here = body.IsValid && !body.bDeleteMe;
+        var here = body.IsAlive;
         DropPost(guard, here);
         if (!here)
         {

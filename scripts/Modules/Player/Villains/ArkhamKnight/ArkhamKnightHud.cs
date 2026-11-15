@@ -63,7 +63,7 @@ static partial class ArkhamKnight
             _standing = 0;
             foreach (var body in Brought)
             {
-                if (body.IsValid && !body.bDeleteMe && body.Health > 0 && Crowd.Standing(body) && Bodyguards.Is(body))
+                if (body.IsAlive && body.Health > 0 && Crowd.Standing(body) && Bodyguards.Is(body))
                 {
                     _standing++;
                 }

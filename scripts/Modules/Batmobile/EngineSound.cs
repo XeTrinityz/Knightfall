@@ -65,7 +65,7 @@ static class EngineSound
     static void Keep()
     {
         var id = Sound.CurrentId;
-        if (Missing.Contains(id) || Car.Find() is not { bDeleteMe: false } car || car.NewVehicleSound is not { IsValid: true } player)
+        if (Missing.Contains(id) || Car.Find() is not { IsAlive: true } car || car.NewVehicleSound is not { IsValid: true } player)
         {
             return;
         }
@@ -96,7 +96,7 @@ static class EngineSound
         _applied = "";
         _waitingFor = "";
 
-        if (car is { IsValid: true, bDeleteMe: false } && original is { IsValid: true } &&
+        if (car is { IsAlive: true } && original is { IsValid: true } &&
             car.NewVehicleSound is { IsValid: true } player && !ReferenceEquals(player.m_VehicleInfo, original))
         {
             Swap(car, player, original);

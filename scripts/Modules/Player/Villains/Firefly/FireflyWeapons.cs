@@ -471,7 +471,7 @@ static partial class Firefly
 
     static void Torch(RPawnPlayer player, RAbandonedVehicle car, Vector3 push)
     {
-        if (!car.IsValid || car.bDeleteMe || car.Health <= 0)
+        if (!car.IsAlive || car.Health <= 0)
         {
             return;
         }
@@ -598,7 +598,7 @@ static partial class Firefly
         for (var i = Grenades.Count - 1; i >= 0; i--)
         {
             var thrown = Grenades[i];
-            if (!thrown.Grenade.IsValid || thrown.Grenade.bDeleteMe)
+            if (!thrown.Grenade.IsAlive)
             {
                 Grenades.RemoveAt(i);
                 continue;
@@ -678,7 +678,7 @@ static partial class Firefly
     // are written for. Its fire is lit or kept going.
     static void Ignite(RPawnPlayer player, RVehicleNPC car, Vector3 push)
     {
-        if (!car.IsValid || car.bDeleteMe || car.Health <= 0)
+        if (!car.IsAlive || car.Health <= 0)
         {
             return;
         }
@@ -716,7 +716,7 @@ static partial class Firefly
         foreach (var (key, alight) in OnFire.ToArray())
         {
             var car = alight.Car;
-            var over = !car.IsValid || car.bDeleteMe || World.Now >= alight.Until;
+            var over = !car.IsAlive || World.Now >= alight.Until;
             if (over)
             {
                 if (alight.Fire is { IsValid: true, bHidden: false } old && old.ParticleSystemComponent is { IsValid: true } effect)
@@ -798,7 +798,7 @@ static partial class Firefly
             Cars.Clear();
             foreach (var car in Game.FindObjects<RVehicleNPC>())
             {
-                if (car is { IsValid: true, IsClassDefaultObject: false, bDeleteMe: false, bHidden: false, DroneHacked: false, IsFriendly: false, Health: > 0 })
+                if (car is { IsValid: true, IsClassDefaultObject: false, bHidden: false, DroneHacked: false, IsFriendly: false, Health: > 0 })
                 {
                     Cars.Add(car);
                 }
@@ -807,16 +807,16 @@ static partial class Firefly
             Parked.Clear();
             foreach (var car in Game.FindObjects<RAbandonedVehicle>())
             {
-                if (car is { IsValid: true, IsClassDefaultObject: false, bDeleteMe: false, bHidden: false, Health: > 0 })
+                if (car is { IsValid: true, IsClassDefaultObject: false, bHidden: false, Health: > 0 })
                 {
                     Parked.Add(car);
                 }
             }
         }
 
-        Thugs.RemoveAll(thug => !thug.IsValid || thug.bDeleteMe || thug.Health <= 0 || !Crowd.Standing(thug));
-        Cars.RemoveAll(car => !car.IsValid || car.bDeleteMe || car.Health <= 0);
-        Parked.RemoveAll(car => !car.IsValid || car.bDeleteMe || car.Health <= 0);
+        Thugs.RemoveAll(thug => !thug.IsAlive || thug.Health <= 0 || !Crowd.Standing(thug));
+        Cars.RemoveAll(car => !car.IsAlive || car.Health <= 0);
+        Parked.RemoveAll(car => !car.IsAlive || car.Health <= 0);
     }
 
     static void StopWeapons()

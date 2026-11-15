@@ -216,7 +216,7 @@ static class Radial
     public static void Poll()
     {
         var usable = On.On && Favourites.Count > 0 && !Menu.Showing && !World.Paused && Hotkeys.Listening is null && World.Controller is not null
-            && GameWindow.InFront;
+            && Keyboard.HasFocus;
         Keep(usable);
 
         var down = (_key != Keys.None && Keyboard.IsDown(_key)) || Pad.IsDown(_button);

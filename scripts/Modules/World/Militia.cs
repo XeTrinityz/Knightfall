@@ -70,7 +70,7 @@ static class Militia
         // their AI to the switch and froze for the rest of the session.
         foreach (var known in vehicles.VehicleEnemyList)
         {
-            if (known.Enemy is not RVehicleTank { IsValid: true, bDeleteMe: false, bHidden: false, IsFriendly: false, IsHackedFriendly: false } tank
+            if (known.Enemy is not RVehicleTank { IsAlive: true, bHidden: false, IsFriendly: false, IsHackedFriendly: false } tank
                 || tank is RVehicleStaticTank || tank.Health <= 0
                 || Vector3.DistanceSquared(tank.Location, you.Location) > HackRange * HackRange)
             {
@@ -110,7 +110,7 @@ static class Militia
             }
 
             Checking.RemoveAt(i);
-            if (!tank.IsValid || tank.bDeleteMe || tank.Health <= 0)
+            if (!tank.IsAlive || tank.Health <= 0)
             {
                 continue;
             }
@@ -141,7 +141,7 @@ static class Militia
         var count = 0;
         foreach (var tank in Game.FindObjects<RVehicleTank>())
         {
-            if (tank.IsValid && !tank.bDeleteMe && !tank.IsClassDefaultObject && tank.Health > 0 && tank.IsHackedFriendly)
+            if (tank.IsValid && !tank.IsClassDefaultObject && tank.Health > 0 && tank.IsHackedFriendly)
             {
                 tank.ClearTimer(new FName(HackTimer));
                 tank.BatmobileHackTimeout();
@@ -158,7 +158,7 @@ static class Militia
         var count = 0;
         foreach (var gun in Game.FindObjects<RSentryGunBase>())
         {
-            if (gun.IsValid && !gun.bDeleteMe && !gun.IsClassDefaultObject && !gun.bHidden && !gun.bDisabled && !gun.bGoneRagdoll)
+            if (gun.IsValid && !gun.IsClassDefaultObject && !gun.bHidden && !gun.bDisabled && !gun.bGoneRagdoll)
             {
                 gun.DisableSentryGun();
                 count++;
@@ -167,7 +167,7 @@ static class Militia
 
         foreach (var turret in Game.FindObjects<RTurretBase>())
         {
-            if (turret.IsValid && !turret.bDeleteMe && !turret.IsClassDefaultObject && !turret.bHidden && !turret.bDisabled)
+            if (turret.IsValid && !turret.IsClassDefaultObject && !turret.bHidden && !turret.bDisabled)
             {
                 turret.Disrupted();
                 count++;
@@ -184,7 +184,7 @@ static class Militia
         var count = 0;
         foreach (var gun in Game.FindObjects<RSentryGunBase>())
         {
-            if (!gun.IsValid || gun.bDeleteMe || gun.IsClassDefaultObject || gun.bHidden || gun.bGoneRagdoll)
+            if (!gun.IsValid || gun.IsClassDefaultObject || gun.bHidden || gun.bGoneRagdoll)
             {
                 continue;
             }

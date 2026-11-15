@@ -129,7 +129,7 @@ static class Streets
     // Only computer-driven vehicles, so never your Batmobile. Police cars are the ones the game
     // calls friendly. Drones are left out, since they fly and would only spin.
     static bool Enemy(RVehicle? vehicle) =>
-        vehicle is RVehicleNPC { IsValid: true, bDeleteMe: false, IsFriendly: false, IsHackedFriendly: false }
+        vehicle is RVehicleNPC { IsAlive: true, IsFriendly: false, IsHackedFriendly: false }
         and not RVehicleFlying
         and not RVehicleNPCBatmobile;
 }

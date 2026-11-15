@@ -205,7 +205,7 @@ static partial class Sidekick
         var list = game.CombatPawnList;
         for (var i = 0; i < list.Count; i++)
         {
-            if (list[i] is not RPawnVillain { IsValid: true, bDeleteMe: false } villain || villain.GetTargetPawn() is not { } target || target.Ptr != player.Ptr
+            if (list[i] is not RPawnVillain { IsAlive: true } villain || villain.GetTargetPawn() is not { } target || target.Ptr != player.Ptr
                 || !villain.IsAttacking())
             {
                 continue;
@@ -270,7 +270,7 @@ static partial class Sidekick
         var list = game.CombatPawnList;
         for (var i = 0; i < list.Count; i++)
         {
-            if (list[i] is not RPawnVillain { IsValid: true, bDeleteMe: false, bHostile: true, HealthMax: > 0 } villain || villain.Health >= villain.HealthMax
+            if (list[i] is not RPawnVillain { IsAlive: true, bHostile: true, HealthMax: > 0 } villain || villain.Health >= villain.HealthMax
                 || villain.IsIncapacitated() || Flat(villain.Location, body.Location) > StrikeReach * StrikeReach || villain.IsTargettedBy(player))
             {
                 continue;
@@ -362,7 +362,7 @@ static partial class Sidekick
         var list = game.CombatPawnList;
         for (var i = 0; i < list.Count; i++)
         {
-            if (list[i] is not RPawnVillain { IsValid: true, bDeleteMe: false, bHostile: true } villain || !villain.IsCurrentCombatant() || villain.IsIncapacitated())
+            if (list[i] is not RPawnVillain { IsAlive: true, bHostile: true } villain || !villain.IsCurrentCombatant() || villain.IsIncapacitated())
             {
                 continue;
             }

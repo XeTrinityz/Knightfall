@@ -235,7 +235,7 @@ static class DisguiseFit
         }
 
         // The body may no longer be the player's, like a partner left behind in a team fight.
-        if (_fitMesh is { IsValid: true, Owner: { IsValid: true, bDeleteMe: false } } own)
+        if (_fitMesh is { IsValid: true, Owner: { IsAlive: true } } own)
         {
             var list = own.Attachments;
             for (var i = 0; i < list.Count; i++)

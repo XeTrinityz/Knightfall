@@ -59,12 +59,9 @@ static class Dash
         try
         {
             // Checked even while hidden, so it knows when to come back.
-            if (onCar && World.Controller is { } controller && World.Driving is { } car)
+            if (onCar && World.Driving is { } car)
             {
-                controller.GetPlayerViewPoint(out var eye, out var turn);
-                var fieldOfView = controller.PlayerCamera is { IsValid: true } camera ? camera.GetFOVAngle() : controller.GetFOVAngle();
-                Hologram.Frame(canvas, eye, turn, fieldOfView);
-                _inSight = !Hologram.Available || Hologram.Seen(View.Panel, HoloDash.Width, HoloDash.Height, car);
+                _inSight = !Hologram.Frame(canvas) || !Hologram.Available || Hologram.Seen(View.Panel, HoloDash.Width, HoloDash.Height, car);
             }
 
             if (View.Shown <= 0f)

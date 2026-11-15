@@ -14,10 +14,6 @@ static class GameTweaks
     // game's settings file.
     const double Settle = 0.4;
 
-    // A gap this long between ticks means the game was paused, and its graphics menu may have put
-    // its own values back.
-    const double PausedGap = 0.5;
-
     const float Uncapped = 1000f;
 
     // The game ships with pause on focus loss turned on in its ini. The engine reads it every time
@@ -39,7 +35,7 @@ static class GameTweaks
 
     static int _capSet = -1;
     static double _detailSet = -1;
-    static long _lastTick;
+    static int _resumed;
 
     public static readonly Toggle KeepRunning = new(
         "settings.game.keep_running", "KEEP RUNNING IN BACKGROUND",
@@ -93,14 +89,17 @@ static class GameTweaks
         }
     }
 
-    // Once a tick for the render rows. A long gap since the last one means the game was paused,
-    // so the render values are sent again.
+    // The game's graphics menu may have put its own values back while it was paused, and a new
+    // world loads them again, so the render values are sent again after either.
     static bool CameBack()
     {
-        var now = Stopwatch.GetTimestamp();
-        var gap = _lastTick == 0 ? 0 : (now - _lastTick) / (double)Stopwatch.Frequency;
-        _lastTick = now;
-        return gap > PausedGap;
+        if (_resumed == World.Resumed)
+        {
+            return false;
+        }
+
+        _resumed = World.Resumed;
+        return true;
     }
 
     static bool Settled(Feature feature) =>
@@ -130,10 +129,6 @@ static class GameTweaks
         {
             _capSet = FrameCap.Index;
         }
-
-        // Sending a value takes about half a second in the city. Counted in the gap, it would look
-        // like a pause and be sent again every tick.
-        _lastTick = Stopwatch.GetTimestamp();
     }
 
     static void ReleaseCap()
@@ -156,8 +151,6 @@ static class GameTweaks
         {
             _detailSet = CharacterDetail.Value;
         }
-
-        _lastTick = Stopwatch.GetTimestamp();
     }
 
     static void ReleaseDetail()

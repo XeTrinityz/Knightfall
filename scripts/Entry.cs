@@ -19,6 +19,10 @@ public sealed class Entry : Script
 
     public override void OnEnterGame() => Kernel.EnterGame();
 
+    public override void OnWorldChanged() => Kernel.WorldChanged();
+
+    public override void OnExit() => Kernel.Exit();
+
     public override void OnTick() => Kernel.Tick();
 
     public override void OnDraw(Canvas canvas) => Kernel.Frame(canvas);

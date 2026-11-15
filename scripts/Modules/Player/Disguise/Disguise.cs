@@ -396,7 +396,7 @@ static partial class Disguise
         {
             // A body the player left that is still in the world, like a partner in a team fight or a
             // swapped sidekick, gets its own look back. One that was destroyed took its parts with it.
-            if (_wearer is { IsValid: true, bDeleteMe: false, bPendingDelete: false })
+            if (_wearer is { IsAlive: true })
             {
                 Strip();
                 Uncover();
@@ -860,7 +860,7 @@ static partial class Disguise
 
     static void TakeOffProps()
     {
-        var wearer = _wearer is { IsValid: true, bDeleteMe: false } alive ? alive : null;
+        var wearer = _wearer is { IsAlive: true } alive ? alive : null;
         foreach (var (shown, holder, follows) in Carried)
         {
             if (!shown.IsValid)
@@ -1079,7 +1079,7 @@ static partial class Disguise
     static Model? Suit(string suit)
     {
         RAddContentPlayerCharacterMesh data;
-        var room = ObjectTable.Headroom >= Packages.Cost<RAddContentPlayerCharacterMesh>(suit) + Packages.Spare;
+        var room = Game.ObjectHeadroom >= Packages.Cost<RAddContentPlayerCharacterMesh>(suit) + Packages.Spare;
         try
         {
             data = Packages.Main<RAddContentPlayerCharacterMesh>(suit);
@@ -1373,7 +1373,7 @@ static partial class Disguise
     {
         TakeOffProps();
         TakeOffRest(_wearer);
-        if (_wearer is { IsValid: true, bDeleteMe: false } wearer)
+        if (_wearer is { IsAlive: true } wearer)
         {
             foreach (var (piece, _) in Worn)
             {

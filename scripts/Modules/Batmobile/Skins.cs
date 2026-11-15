@@ -104,7 +104,7 @@ static class Skins
     // Both skin calls are script functions that rewrite their text parameter, so each call gets
     // its own string.
     static string ActiveSkin(RPersistentOptions options) =>
-        options.GetActivePlayerSkin(GameText.Once("Batmobile"), true, false, true).ToString() ?? "";
+        options.GetActivePlayerSkin("Batmobile", true, false, true).ToString() ?? "";
 
     static Outcome Start()
     {
@@ -119,7 +119,7 @@ static class Skins
             return Outcome.NoPlayer;
         }
 
-        options.SetActivePlayerSkin(GameText.Once(requested));
+        options.SetActivePlayerSkin(requested);
         controller.SaveGameOptionsToMemory();
 
         var resolved = ActiveSkin(options);
@@ -207,7 +207,7 @@ static class Skins
                     var mesh = after.PlayerBatmobiles_0.MeshName.ToString() ?? "";
                     if (mesh.Length > 0)
                     {
-                        after.ClearOutRootSetBatmobiles(GameText.Of(mesh));
+                        after.ClearOutRootSetBatmobiles(mesh);
                     }
                 }
 

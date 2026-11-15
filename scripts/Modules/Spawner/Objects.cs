@@ -651,7 +651,7 @@ static class Objects
     // empty bounds, bounds that aren't around the copy, or a size other than expected (0 when unknown).
     static bool Sit(DynamicSMActor copy, Vector3 floor, float expected)
     {
-        if (!copy.IsValid || copy.bDeleteMe || copy.StaticMeshComponent is not { IsValid: true } part)
+        if (!copy.IsAlive || copy.StaticMeshComponent is not { IsValid: true } part)
         {
             return false;
         }
@@ -671,7 +671,7 @@ static class Objects
     // Shown, and physics copies let go.
     static void Release(DynamicSMActor copy, Spawned.Spawn spawn, bool physics, string label)
     {
-        if (!copy.IsValid || copy.bDeleteMe || copy.StaticMeshComponent is not { IsValid: true } part)
+        if (!copy.IsAlive || copy.StaticMeshComponent is not { IsValid: true } part)
         {
             return;
         }
@@ -687,7 +687,7 @@ static class Objects
 
         var from = copy.Location;
         var until = World.Now + SettleTime;
-        spawn.Ready = () => !copy.IsValid || copy.bDeleteMe || copy.Location.Z < from.Z - FellTooFar || World.Now >= until;
+        spawn.Ready = () => !copy.IsAlive || copy.Location.Z < from.Z - FellTooFar || World.Now >= until;
         spawn.StartAt = World.Now;
         spawn.Start = () => Hold(copy, from, label);
     }
@@ -695,7 +695,7 @@ static class Objects
     // A mesh with no physics shape falls through the world, so it's put back and held still.
     static void Hold(DynamicSMActor copy, Vector3 from, string label)
     {
-        if (!copy.IsValid || copy.bDeleteMe || copy.Location.Z >= from.Z - FellTooFar)
+        if (!copy.IsAlive || copy.Location.Z >= from.Z - FellTooFar)
         {
             return;
         }

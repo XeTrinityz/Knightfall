@@ -115,7 +115,7 @@ static class AutoCombat
     }
 
     static bool Hostile(RVehicleNPC foe) =>
-        foe is { IsValid: true, bDeleteMe: false, bHidden: false, DroneHacked: false, IsFriendly: false, CivilianVehicle: false, Health: > 0 };
+        foe is { IsAlive: true, bHidden: false, DroneHacked: false, IsFriendly: false, CivilianVehicle: false, Health: > 0 };
 
     // The cannon fires at whatever its lock-on holds, so the lock is pointed at the target first.
     // The reload is the game's own, counted down by the cannon.
@@ -186,7 +186,7 @@ static class AutoCombat
     static void Pursue(RVehicleBatmobileBase car)
     {
         if (Weapons.First<RBatmobileEMPMissile>(car) is not { } launcher || launcher.CoolDown > 0f || launcher.LockOnTime < 1f ||
-            launcher.LockOnTarget is not { IsValid: true, bDeleteMe: false, CivilianVehicle: false, IsFriendly: false, IsPenguinVan: false, Health: > 0 } target ||
+            launcher.LockOnTarget is not { IsAlive: true, CivilianVehicle: false, IsFriendly: false, IsPenguinVan: false, Health: > 0 } target ||
             Vector3.Distance(target.Location, car.Location) > (float)Range.Value * UnitsPerMetre || !launcher.IsInState(Holstered))
         {
             return;
@@ -215,7 +215,7 @@ static class AutoCombat
 
         foreach (var missile in Game.FindObjects<RTankMissile>())
         {
-            if (!missile.IsValid || missile.bDeleteMe || missile.WasShotOutOfSky || missile.Target is not { } target ||
+            if (!missile.IsValid || missile.WasShotOutOfSky || missile.Target is not { } target ||
                 !(ReferenceEquals(target, player) || ReferenceEquals(target, car)))
             {
                 continue;

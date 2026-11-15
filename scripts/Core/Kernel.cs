@@ -112,6 +112,17 @@ static class Kernel
         Run("enter game", static () => Log.Info("Entered a game world."));
     }
 
+    public static void WorldChanged()
+    {
+        Run("world changed", static () => World.Changed());
+    }
+
+    // A change made just before quitting would otherwise wait for a settle that never comes.
+    public static void Exit()
+    {
+        Run("exit", static () => Settings.Save());
+    }
+
     // The game tick is where options act on the game. It stops while the game is paused.
     public static void Tick()
     {

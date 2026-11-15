@@ -141,7 +141,7 @@ static class SuperPunch
 
     static void Launch(RPawnVillain thug, RPawnCombat.FDamageInfo info, Vector3 launch)
     {
-        if (!thug.IsValid || thug.bDeleteMe)
+        if (!thug.IsAlive)
         {
             return;
         }
@@ -171,7 +171,7 @@ static class SuperPunch
             var thug = waiting.Thug;
 
             // Game time starts over with a new world.
-            if (!thug.IsValid || thug.bDeleteMe || thug.Mesh is not { IsValid: true } mesh || now > waiting.Until || now < waiting.Until - GiveUpAfter - 1f)
+            if (!thug.IsAlive || thug.Mesh is not { IsValid: true } mesh || now > waiting.Until || now < waiting.Until - GiveUpAfter - 1f)
             {
                 Throws.RemoveAt(i);
                 continue;

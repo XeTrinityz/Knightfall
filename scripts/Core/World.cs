@@ -30,6 +30,9 @@ static class World
     // Goes up by one each time a new world takes over, like a load, a restart or a retry.
     public static int Epoch { get; private set; }
 
+    // Goes up by one each time the game carries on after a pause or a new world.
+    public static int Resumed { get; private set; }
+
     static WorldInfo? _seen;
     static bool? _inCity;
 
@@ -48,8 +51,21 @@ static class World
         }
     }
 
-    // Runs every drawn frame. A new world took the last one's player and controller with it, so
-    // what was looked up in the last tick is dropped before anything drawn can ask for it.
+    // A new world took the last one's player and controller with it, so what was looked up in the
+    // last tick is dropped before anything can ask for it.
+    public static void Changed()
+    {
+        Epoch++;
+        Resumed++;
+        Player = null;
+        Controller = null;
+        Info = null;
+        Driving = null;
+        _seen = null;
+        _inCity = null;
+    }
+
+    // Runs every drawn frame.
     public static void Refresh()
     {
         if (!Game.TryGetWorldInfo(out var world))
@@ -58,23 +74,14 @@ static class World
             return;
         }
 
+        var was = Paused;
         Paused = world.Pauser is not null;
-
-        // The SDK keeps one wrapper for each live object, so another wrapper is another world.
-        if (!ReferenceEquals(world, _seen))
+        if (was && !Paused)
         {
-            if (_seen is not null)
-            {
-                Epoch++;
-                Player = null;
-                Controller = null;
-                Info = null;
-                Driving = null;
-            }
-
-            _seen = world;
-            _inCity = null;
+            Resumed++;
         }
+
+        _seen ??= world;
     }
 
     public static void Tick()
@@ -103,8 +110,8 @@ static class World
             // and the character being played is still the original pawn.
             var pawn = controller.Pawn as RPawnPlayer ?? controller.CombatPawn ?? controller.OriginalPawn;
             // A pawn being torn down, like during a level change, can point at freed data.
-            Player = pawn is { IsValid: true, bDeleteMe: false, bPendingDelete: false } ? pawn : null;
-            Driving = controller.Pawn is RVehicleBatmobileBase { IsValid: true, bDeleteMe: false, bPendingDelete: false } car ? car : null;
+            Player = pawn is { IsAlive: true } ? pawn : null;
+            Driving = controller.Pawn is RVehicleBatmobileBase { IsAlive: true } car ? car : null;
         }
     }
 }

@@ -255,7 +255,7 @@ static class Threats
         var vehicles = game.Vehicles;
         for (var i = 0; i < vehicles.Count; i++)
         {
-            if (vehicles[i] is not RVehicleNPC { IsValid: true, bDeleteMe: false, bHidden: false, IsFriendly: false, IsHackedFriendly: false } vehicle
+            if (vehicles[i] is not RVehicleNPC { IsAlive: true, bHidden: false, IsFriendly: false, IsHackedFriendly: false } vehicle
                 || vehicle.Health <= 0 || vehicle is RVehicleStaticTank or RVehicleNPCBatmobile)
             {
                 continue;
