@@ -70,6 +70,8 @@ static class Villains
         new(ArkhamKnight.Option, ArkhamKnight.Sections, ArkhamKnight.AimView, ArkhamKnight.KeepAimFacing, ArkhamKnight.DefaultKeys, ArkhamKnight.Marking, ArkhamKnight.Marks),
         new(KillerCroc.Option, KillerCroc.Sections, KillerCroc.Fit, KillerCroc.KeepFacing, KillerCroc.DefaultKeys, Hit: KillerCroc.Hit, Walks: true, Steps: KillerCroc.Steps),
         new(Scarecrow.Option, Scarecrow.Sections, BeforeCamera: Scarecrow.KeepFacing, Keys: Scarecrow.DefaultKeys, Walks: true, Steps: Scarecrow.Steps),
+        new(ManBat.Option, ManBat.Sections, ManBat.Fit, ManBat.KeepFacing, ManBat.DefaultKeys, ManBat.Marking, ManBat.Marks, ManBat.Hit, Walks: true,
+            Steps: ManBat.Steps),
     };
 
     // PLAYER > VILLAINS, each villain's rows under their own heading.
