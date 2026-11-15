@@ -111,7 +111,7 @@ static partial class Scarecrow
         var target = _move == Move.Needle && _hit ? 0.1f : 1f;
         _plunger = target < _plunger ? MathF.Max(target, _plunger - seconds * PlungeRate) : MathF.Min(target, _plunger + seconds * DrawBackRate);
 
-        var height = HeaderHeight + Inset + TrayHeight + LabelHeight + CaptionHeight + CaseRow * CaseRows + Inset;
+        var height = HeaderHeight + Inset + TrayHeight + LabelHeight + Inset + CaptionHeight + CaseRow * CaseRows + Inset;
         var x = HudLeft;
         var y = Draw.ScreenHeight - HudBottom - height + rise;
         var right = x + HudWidth;
@@ -149,7 +149,7 @@ static partial class Scarecrow
             OnAir ? "ON AIR" : airReady < 1f ? Wait(_nextBroadcast) : "READY", OnAir ? Blood : airReady < 1f ? Dim : Green, pulse);
         Set(cx + width / 2f, row, airReady, time);
 
-        row += TrayHeight + LabelHeight;
+        row += TrayHeight + LabelHeight + Inset;
         Seam(x + 1f, right - 1f, row);
         Notes(x + Inset, row + 4f, right - Inset, time);
     }
@@ -206,32 +206,36 @@ static partial class Scarecrow
         _ => _speed > OwnFades ? "STALKING" : _speed > StillSpeed ? "CREEPING" : "WATCHING",
     };
 
-    // A slot on the tray, with the move's name, its key and how it stands under it.
+    // A slot on the tray. Under the instrument, inside the same box, the move's name, its key
+    // and how it stands.
     static void Column(float x, float y, float width, string name, string key, bool lit, string status, Rgba statusColour, float pulse)
     {
+        const float height = TrayHeight + LabelHeight;
         if (lit)
         {
-            Draw.Rect(x - 2f, y - 2f, width + 4f, TrayHeight + 4f, Green with { A = (byte)(40f + 60f * pulse) });
-            Draw.Rect(x, y, width, TrayHeight, LitFill);
-            Draw.Frame(x, y, width, TrayHeight, 1f, Green);
+            Draw.Rect(x - 2f, y - 2f, width + 4f, height + 4f, Green with { A = (byte)(40f + 60f * pulse) });
+            Draw.Rect(x, y, width, height, LitFill);
         }
         else
         {
-            Draw.Rect(x, y, width, TrayHeight, TileFill);
-            Draw.Frame(x, y, width, TrayHeight, 1f, Rule);
+            Draw.Rect(x, y, width, height, TileFill);
         }
 
+        var edge = lit ? Green : Rule;
+        Draw.Rect(x + 1f, y + TrayHeight, width - 2f, 1f, edge with { A = 120 });
+        Draw.Frame(x, y, width, height, 1f, edge);
+
         Draw.Tracked(name, x + (width - Draw.TrackedWidth(name, 8.5f, 1.5f)) / 2f, y + TrayHeight + 4f, 8.5f, 1.5f, lit ? GreenGlow : Words);
-        var keyRight = x;
+        var keyRight = x + 5f;
         if (key.Length > 0)
         {
             var keyWidth = Draw.TextWidth(key, 8.5f) + 8f;
-            Draw.Rect(x, y + TrayHeight + 16f, keyWidth, 11f, lit ? Green : Chip);
-            Draw.Text(key, x + 4f, y + TrayHeight + 16.5f, 8.5f, lit ? Solid : Words);
-            keyRight = x + keyWidth + 4f;
+            Draw.Rect(x + 5f, y + TrayHeight + 16f, keyWidth, 11f, lit ? Green : Chip);
+            Draw.Text(key, x + 9f, y + TrayHeight + 16.5f, 8.5f, lit ? Solid : Words);
+            keyRight = x + 5f + keyWidth + 4f;
         }
 
-        Draw.TextRightFit(status, x + width, y + TrayHeight + 16.5f, 8.5f, statusColour, keyRight);
+        Draw.TextRightFit(status, x + width - 5f, y + TrayHeight + 16.5f, 8.5f, statusColour, keyRight);
     }
 
     // The injector's syringe. The plunger drives home as the needle lands and draws back after.
