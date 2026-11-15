@@ -9,8 +9,8 @@ using View = BmSDK.GameObject.FTPOV;
 namespace Knightfall;
 
 // CAMERA > VIEW, FIRST PERSON. The game's own first person camera is only for crawlspaces, so the
-// view is moved here instead and works whatever Batman is doing on foot. The Batmobile has its
-// own bonnet camera. Scenes keep the game's camera.
+// view is moved here instead and works whatever Batman is doing on foot or in the Batmobile's
+// seat. Scenes keep the game's camera.
 static class FirstPerson
 {
     static readonly FName Head = new("Bip01_Head");
@@ -26,6 +26,8 @@ static class FirstPerson
     static readonly List<(SkeletalMeshComponent Mesh, int Bone)> Hidden = new();
     static Vector3 _eye;
     static bool _following;
+    static Vector3 _seat;
+    static nint _seatOf;
     static SkeletalMeshComponent? _askedMesh;
     static SkeletalMesh? _askedModel;
     static bool _meshHasHead;
@@ -41,6 +43,14 @@ static class FirstPerson
         Restore = ShowHead,
     };
 
+    public static readonly Toggle InCar = new(
+        "camera.view.first_person_car", "BATMOBILE FIRST PERSON",
+        "Puts the camera in Batman's eyes in the Batmobile's seat. It turns with the car and looks where the game's camera looks. Scenes keep the game's camera.")
+    {
+        Tick = HideHead,
+        Restore = ShowHead,
+    };
+
     public static readonly Slider Eye = new(
         "camera.view.first_person_eye", "FIRST PERSON EYE",
         "Moves the first person view forward or back from Batman's eyes. Push it forward if bits of the cowl show at the edges.",
@@ -51,8 +61,11 @@ static class FirstPerson
 
     static bool Allowed(RPlayerController controller) => !controller.bCinematicMode && !Switcher.InScene(controller);
 
+    // In the Batmobile the controller's pawn is the car, but Batman is still posed in its seat.
+    static bool Wanted => World.Driving is null ? OnFoot.On : InCar.On;
+
     // True when the view will be put in the eyes, so the work on the place before it can be skipped.
-    public static bool Replaces => OnFoot.On && World.Driving is null && World.Player?.Mesh is { IsValid: true } mesh && HasHead(mesh);
+    public static bool Replaces => Wanted && World.Player?.Mesh is { IsValid: true } mesh && HasHead(mesh);
 
     // A mesh only has to be asked for its head bone once. A suit change can swap the model on
     // the same mesh, so the model counts too.
@@ -92,18 +105,21 @@ static class FirstPerson
     public static void Fit(ref View view, RPlayerController controller, float deltaTime)
     {
         // The free camera or someone else's eyes replace the view after this anyway.
-        if (!OnFoot.On || World.Driving is not null || FreeCamera.HasView || Eyes.HasView || !Allowed(controller))
+        if (!Wanted || FreeCamera.HasView || Eyes.HasView || !Allowed(controller) || World.Player?.Mesh is not { IsValid: true } mesh || !HasHead(mesh))
         {
             _following = false;
+            _seatOf = 0;
             return;
         }
 
-        if (World.Player?.Mesh is not { IsValid: true } mesh || !HasHead(mesh))
+        if (World.Driving is { } car)
         {
             _following = false;
+            InSeat(ref view, car, Seen(mesh).GetBoneLocation(Head, 0), deltaTime);
             return;
         }
 
+        _seatOf = 0;
         var turn = controller.Rotation;
         var flat = new Rotator(0f, turn.Yaw, 0f).ToDirection();
         var at = Seen(mesh).GetBoneLocation(Head, 0) + flat * (EyeForward + (float)Eye.Value) + new Vector3(0f, 0f, EyeUp);
@@ -119,12 +135,43 @@ static class FirstPerson
         view.Rotation = new Rotator(turn.Pitch, turn.Yaw, view.Rotation.Roll);
     }
 
+    // The head is followed in the car's own frame. Smoothed in the world it would fall behind the
+    // seat at speed. The view turns with the car, and only the game's look left, right or back is
+    // kept, so it never looks down at a car that isn't there.
+    static void InSeat(ref View view, RVehicleBatmobileBase car, Vector3 head, float deltaTime)
+    {
+        var (forward, up) = Turns.Axes(car.Rotation);
+        var right = Vector3.Cross(up, forward);
+        var from = head - car.Location;
+        var seat = new Vector3(Vector3.Dot(from, forward), Vector3.Dot(from, right), Vector3.Dot(from, up));
+        if (!float.IsFinite(seat.X) || !float.IsFinite(seat.Y) || !float.IsFinite(seat.Z))
+        {
+            return;
+        }
+
+        _seat = _seatOf == car.Ptr ? Vector3.Lerp(_seat, seat, 1f - MathF.Exp(-Follow * MathF.Max(0f, deltaTime))) : seat;
+        _seatOf = car.Ptr;
+
+        var look = view.Rotation.ToDirection();
+        var (sin, cos) = MathF.SinCos(MathF.Atan2(Vector3.Dot(look, right), Vector3.Dot(look, forward)));
+        var facing = forward * cos + right * sin;
+        view.Location = car.Location + forward * _seat.X + right * _seat.Y + up * _seat.Z
+            + facing * (EyeForward + (float)Eye.Value) + up * EyeUp;
+
+        // The roll that keeps the car's roof at the top of the screen, plus any CAMERA TILT.
+        var pointed = Rotator.FromDirection(facing);
+        var (_, level) = Turns.Axes(new Rotator(pointed.Pitch, pointed.Yaw, 0f));
+        var side = Vector3.Cross(level, facing);
+        var roll = MathF.Atan2(Vector3.Dot(up, side), Vector3.Dot(up, level)) * 180f / MathF.PI;
+        view.Rotation = new Rotator(pointed.Pitch, pointed.Yaw, roll + view.Rotation.Roll);
+    }
+
     // The head is hidden on Batman and on any disguise worn over him, but only while the view is
     // actually in it.
     static void HideHead()
     {
         // The free camera and someone else's eyes see Batman from outside, so he keeps his head then.
-        var want = World.Controller is { } controller && Allowed(controller) && World.Driving is null && World.Player is not null && !FreeCamera.Free.On && !Eyes.Watching;
+        var want = Wanted && World.Controller is { } controller && Allowed(controller) && World.Player is not null && !FreeCamera.Free.On && !Eyes.Watching;
         if (!want)
         {
             ShowHead();

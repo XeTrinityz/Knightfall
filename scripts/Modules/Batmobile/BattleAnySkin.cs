@@ -368,7 +368,7 @@ static class BattleAnySkin
     static void BattleWheel(Fitted fitted, int index, SVehicleWheel wheel)
     {
         var car = fitted.Car;
-        var (forward, _) = Axes(car.Rotation);
+        var (forward, _) = Turns.Axes(car.Rotation);
         forward = forward with { Z = 0f };
         var right = new Vector3(-forward.Y, forward.X, 0f);
         var flat = car.Velocity with { Z = 0f };
@@ -408,7 +408,7 @@ static class BattleAnySkin
             return;
         }
 
-        var (forward, _) = Axes(car.Rotation);
+        var (forward, _) = Turns.Axes(car.Rotation);
         var along = Vector3.Dot(car.Velocity with { Z = 0f }, forward with { Z = 0f });
         if (MathF.Abs(along) < LearnSpeed)
         {
@@ -518,7 +518,7 @@ static class BattleAnySkin
         }
 
         var car = fitted.Car;
-        var (forward, up) = Axes(car.Rotation);
+        var (forward, up) = Turns.Axes(car.Rotation);
         var root = body.GetBoneName(RootBone);
         var rootAt = body.GetBoneLocation(root, 0);
         var rootX = body.GetBoneAxis(root, GameObject.EAxis.AXIS_X);
@@ -578,22 +578,6 @@ static class BattleAnySkin
                 : car.Location + up * GunFallbackUp;
             Place(guns, roof);
         }
-    }
-
-    // Which way the car's nose and roof point in the world.
-    static (Vector3 Forward, Vector3 Up) Axes(Rotator turn)
-    {
-        const float toRadians = MathF.PI / 180f;
-        var (sinPitch, cosPitch) = MathF.SinCos(turn.Pitch * toRadians);
-        var (sinYaw, cosYaw) = MathF.SinCos(turn.Yaw * toRadians);
-        var (sinRoll, cosRoll) = MathF.SinCos(turn.Roll * toRadians);
-
-        var forward = new Vector3(cosPitch * cosYaw, cosPitch * sinYaw, sinPitch);
-        var up = new Vector3(
-            -(cosRoll * sinPitch * cosYaw + sinRoll * sinYaw),
-            cosYaw * sinRoll - cosRoll * sinPitch * sinYaw,
-            cosRoll * cosPitch);
-        return (forward, up);
     }
 
     // Everything the car was given comes off again, in the opposite order to how it went on.

@@ -154,7 +154,7 @@ static class CameraView
         "Raises or lowers the camera behind the Batmobile.",
         min: -1, max: 3, step: 0.1, value: 0, unit: " M", zero: "GAME");
 
-    static readonly Feature[] Rows = { FieldOfView, AimZoom, Tilt, Bars, Steady, NoShake, FirstPerson.OnFoot, FirstPerson.Eye, Distance, Height, Shoulder, LeftShoulder, GlideDistance, GlideFieldOfView, CarFieldOfView, CarDistance, CarHeight };
+    static readonly Feature[] Rows = { FieldOfView, AimZoom, Tilt, Bars, Steady, NoShake, FirstPerson.OnFoot, FirstPerson.InCar, FirstPerson.Eye, Distance, Height, Shoulder, LeftShoulder, GlideDistance, GlideFieldOfView, CarFieldOfView, CarDistance, CarHeight };
 
     public static readonly Command ResetAll = new(
         "camera.view.reset", "RESET CAMERA",
@@ -190,15 +190,15 @@ static class CameraView
         "Sets the camera rows to the picked PRESET. Change any of them after. RESET CAMERA puts them all back.",
         Apply);
 
-    // What a preset shapes. NO CAMERA SHAKE, FIRST PERSON, FIRST PERSON EYE and LEFT SHOULDER are
-    // a matter of taste, so a preset leaves them as they are.
+    // What a preset shapes. NO CAMERA SHAKE, the FIRST PERSON rows and LEFT SHOULDER are a matter
+    // of taste, so a preset leaves them as they are.
     static readonly Feature[] Shaped = { FieldOfView, AimZoom, Tilt, Bars, Steady, Distance, Height, Shoulder, GlideDistance, GlideFieldOfView, CarFieldOfView, CarDistance, CarHeight };
 
     public static readonly Catalog.Section[] Sections =
     {
         new("PRESET", PresetPick, ApplyPreset, ResetAll),
         new("VIEW", FieldOfView, AimZoom, Tilt, Steady, NoShake, Bars),
-        new("FIRST PERSON", FirstPerson.OnFoot, FirstPerson.Eye),
+        new("FIRST PERSON", FirstPerson.OnFoot, FirstPerson.InCar, FirstPerson.Eye),
         new("ON FOOT", Distance, Height, Shoulder, LeftShoulder),
         new("GLIDING", GlideDistance, GlideFieldOfView),
         new("BATMOBILE", CarFieldOfView, CarDistance, CarHeight),
