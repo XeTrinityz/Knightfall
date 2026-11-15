@@ -3,6 +3,7 @@
 using System.Numerics;
 using BmSDK;
 using BmSDK.BmGame;
+using BmSDK.BmScript;
 using BmSDK.Engine;
 using BmSDK.Framework;
 
@@ -38,10 +39,6 @@ static partial class JokerVillain
     const float ArcPerReach = 0.15f;
     const float SpinPerSecond = 720f;
     const float LaunchKick = 6f;
-
-    // The rifles Harley's gadget gives the armed reaction to, and any kind of them. One isn't in
-    // the SDK, so all are known by name.
-    static readonly string[] Rifles = { "RBMWeaponGuardRifle", "RBMWeaponCombatRifleBase", "RBMWeaponCombatRifle", "RBMWeaponRiflePredLite" };
 
     static MLaughingGasScreenBase? _gasCloud;
     static SkeletalMesh? _canisterMesh;
@@ -283,19 +280,10 @@ static partial class JokerVillain
             return null;
         }
 
-        if (thug.CurrWeapon is { IsValid: true } held)
-        {
-            for (Struct? kind = held.Class; kind is { IsValid: true }; kind = kind.SuperStruct)
-            {
-                var name = kind.Name.ToString() ?? "";
-                if (Array.Exists(Rifles, rifle => rifle.Equals(name, StringComparison.OrdinalIgnoreCase)))
-                {
-                    return _armedReaction;
-                }
-            }
-        }
-
-        return _unarmedReaction;
+        // The rifles Harley's gadget gives the armed reaction to, and any kind of them.
+        return thug.CurrWeapon is { IsValid: true } and (RBMWeaponGuardRifle or RBMWeaponCombatRifleBase or RBMWeaponRiflePredLite)
+            ? _armedReaction
+            : _unarmedReaction;
     }
 
     // A canister in flight when the car or a cutscene takes over is dropped.

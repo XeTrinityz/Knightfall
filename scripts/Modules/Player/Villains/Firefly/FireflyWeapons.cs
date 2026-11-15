@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using BmSDK;
 using BmSDK.BmGame;
+using BmSDK.BmScript;
 using BmSDK.Engine;
 using BmSDK.Framework;
 
@@ -92,7 +93,6 @@ static partial class Firefly
     const float LookEvery = 1f;
 
     const string GrenadeClassPath = "BmScript.RProjectile_GrenadeFirefly";
-    const string GrenadeFirePath = "EFX_City.City_Firefly.Particles.Firefly_Grenade";
     const string LaunchSoundPath = "Ww_CHR_Firefly.Play_Firefly_Grenade_Launch";
     const string FireSoundPath = "ww_vfx_fireheavy.Play_VFX_FireHeavy";
 
@@ -741,20 +741,8 @@ static partial class Firefly
         }
     }
 
-    static bool Fire(Actor grenade)
-    {
-        foreach (var component in grenade.Components)
-        {
-            if (component is ParticleSystemComponent { IsValid: true, bIsActive: true } effect
-                && effect.Template is { IsValid: true } template
-                && template.GetPathName().Equals(GrenadeFirePath, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    // The grenade's own test for burning: its blast lit the fire and it hasn't started fading.
+    static bool Fire(Actor grenade) => grenade is RProjectile_GrenadeFirefly { bDoneBlast: true, bFadingOut: false };
 
     static void Hurt(RPawnPlayer player, RPawnVillain thug, Vector3 push, bool fall)
     {

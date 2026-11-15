@@ -130,7 +130,7 @@ static unsafe class Hologram
         }
 
         *_matrix = warp;
-        _push(Marshal.ReadIntPtr(canvas.Ptr + Offsets.CanvasNative), _matrix);
+        _push(canvas._Canvas, _matrix);
         _pushed = true;
         Draw.Place(0f, 0f, 1f);
         return true;

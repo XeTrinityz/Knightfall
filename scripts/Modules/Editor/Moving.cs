@@ -21,7 +21,7 @@ static class Moving
     const float ThrowFastest = 4000f;
 
     // A surface at least this upright is a floor, anything steeper a wall.
-    const float Floorish = 0.7f;
+    const float Floorish = Actor.MINFLOORZ;
 
     const float FloorReach = 5000f;
 

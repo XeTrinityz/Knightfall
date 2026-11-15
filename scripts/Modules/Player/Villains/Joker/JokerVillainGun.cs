@@ -121,7 +121,7 @@ static partial class JokerVillain
         aim = aim.LengthSquared() > 1f ? Vector3.Normalize(aim) : barrel.Way;
         var range = gun.FireRange > 0f ? gun.FireRange : FallbackRange;
         var pellets = Math.Max(1, gun.BlunderbusShots);
-        var spread = gun.BlunderbusRandom * 360f / 65536f;
+        var spread = gun.BlunderbusRandom * GameObject.UnrRotToDeg;
         Struck.Clear();
         _dropped = false;
         for (var i = 0; i < pellets; i++)

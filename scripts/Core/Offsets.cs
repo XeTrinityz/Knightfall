@@ -22,10 +22,9 @@ static class Offsets
     public const nint MusicStates = 0x3AF5E4C;
     public const int MusicStatePairs = 4;
 
-    // A script Canvas keeps its native canvas here, and a native Function keeps its code here.
-    // The code of PushTranslationMatrix is searched this far for the call to the push that
-    // takes any matrix. Checked in Hologram by the first bytes of that push.
-    public const int CanvasNative = 148;
+    // A native Function keeps its code here. The code of PushTranslationMatrix is searched this
+    // far for the call to the push that takes any matrix. Checked in Hologram by the first bytes
+    // of that push.
     public const int FunctionNativeCode = 188;
     public const int MatrixPushSearch = 0x100;
     public static readonly byte[] MatrixPushStart = { 0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x08 };

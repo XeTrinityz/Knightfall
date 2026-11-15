@@ -350,7 +350,7 @@ static class Villains
 
     // The step a villain takes over a kerb when the game doesn't give one, and how far down a
     // slope he is let for each unit forward, about 40 degrees.
-    const float StepHeight = 35f;
+    const float StepHeight = Actor.ACTORMAXSTEPHEIGHT;
     const float SlopeDrop = 0.85f;
 
     // Moves the pawn along the ground the way walking does, for a villain's own moves that carry

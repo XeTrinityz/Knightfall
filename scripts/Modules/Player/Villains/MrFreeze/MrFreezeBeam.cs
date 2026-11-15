@@ -3,6 +3,7 @@
 using System.Numerics;
 using BmSDK;
 using BmSDK.BmGame;
+using BmSDK.BmScript;
 using BmSDK.Engine;
 
 namespace Knightfall;
@@ -316,7 +317,7 @@ static partial class MrFreeze
         if (thug.AIController is not { IsValid: true } brain || !thug.bHostile || brain.GetBehaviour(0) is RBMBehaviour_BeingTakenDown
             || (thug.CombatMove is { IsValid: true } move && player.CombatMove is { IsValid: true } mine && move.Ptr == mine.Ptr)
             || (thug.CannotBeTargettedByPlayer is { IsValid: true } blocked && player.Controller is { } controller && blocked.Ptr == controller.Ptr)
-            || (thug.Class.Name.ToString() ?? "").EndsWith("RiddlerMechPilot", StringComparison.OrdinalIgnoreCase))
+            || thug is RPawnVillainThug_RiddlerMechPilot)
         {
             return false;
         }
