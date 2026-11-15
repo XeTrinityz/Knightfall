@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Compile check only. The game compiles scripts/ itself and never loads this build. -->
+  <!-- Builds the release Knightfall.dll (dev/pack.py) and checks that scripts/ compiles.
+       While developing, the game compiles scripts/ itself. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>14</LangVersion>
