@@ -18,7 +18,7 @@ namespace Knightfall;
 //   A transform node with no animation. The game treats that as an instant transform.
 //   A Batmobile wheel control on every wheel. Once a car has a transform node its physics reads
 //   one from each wheel without checking it is there, so these go on first and come off last.
-//   The two winch sockets, which these skins also lack.
+//   The winch and gun sockets, which these skins also lack.
 static class BattleAnySkin
 {
     // A wheel control with no wheel bone is skipped wherever the physics would follow the bone.
@@ -44,6 +44,12 @@ static class BattleAnySkin
     static readonly FName BattleState = new("BattleMode");
     static readonly FName PursuitState = new("PursuitMode");
     static readonly FName[] WinchSockets = { new("WinchOrigin"), new("WinchAttach") };
+    static readonly FName[] GunSockets = { new("RiotSuppressorMuzzle"), new("ChainGunMuzzle") };
+
+    // Gun sockets sit just clear of the roof. If the mesh's size looks wrong they go where the
+    // game's own cannon aims from, this high above the car.
+    const float GunAbove = 10f;
+    const float GunFallbackUp = 200f;
 
     // Battle mode wheels turn toward the way the car is moving, at this many degrees a second,
     // and hold their angle below this speed so they don't flick about at a standstill.
@@ -239,11 +245,11 @@ static class BattleAnySkin
 
         try
         {
-            AddWinchSockets(fitted, body);
+            AddSockets(fitted, body);
         }
         catch (Exception error)
         {
-            Log.Error("battle.sockets", "The winch sockets could not be added, so the winch may not find targets on this skin", error);
+            Log.Error("battle.sockets", "The winch and gun sockets could not be added, so the winch and tracers may not work on this skin", error);
         }
     }
 
@@ -493,62 +499,84 @@ static class BattleAnySkin
     // The winch aims from a socket called WinchOrigin and fires from WinchAttach. Without them
     // every target is measured from the middle of the world. Both go just ahead of the front
     // wheels, on the root bone.
-    static void AddWinchSockets(Fitted fitted, SkeletalMeshComponent body)
+    // The guns draw their tracers and muzzle flashes from their own sockets in the same way, so
+    // without them the riot suppressor's tracer starts at the middle of the world too. These go on
+    // the roof, where the turret sits on the Arkham Knight car.
+    static void AddSockets(Fitted fitted, SkeletalMeshComponent body)
     {
         if (body.SkeletalMesh is not { IsValid: true } mesh)
         {
             return;
         }
 
-        var missing = WinchSockets.Where(name => body.GetSocketByName(name) is not { IsValid: true }).ToList();
-        if (missing.Count == 0)
+        bool Missing(FName name) => body.GetSocketByName(name) is not { IsValid: true };
+        var winch = WinchSockets.Where(Missing).ToList();
+        var guns = GunSockets.Where(Missing).ToList();
+        if (winch.Count == 0 && guns.Count == 0)
         {
             return;
         }
 
         var car = fitted.Car;
         var (forward, up) = Axes(car.Rotation);
+        var root = body.GetBoneName(RootBone);
+        var rootAt = body.GetBoneLocation(root, 0);
+        var rootX = body.GetBoneAxis(root, GameObject.EAxis.AXIS_X);
+        var rootY = body.GetBoneAxis(root, GameObject.EAxis.AXIS_Y);
+        var rootZ = body.GetBoneAxis(root, GameObject.EAxis.AXIS_Z);
+        fitted.Mesh = mesh;
 
-        // The two wheels furthest forward give the front axle.
-        var wheels = new List<Vector3>();
-        foreach (var wheel in car.Wheels)
+        // A socket's place is measured along its bone's own axes.
+        void Place(List<FName> names, Vector3 at)
         {
-            if (wheel is { IsValid: true } && wheel.BoneName.Index != 0 && body.MatchRefBone(wheel.BoneName) >= 0)
+            var offset = at - rootAt;
+            var local = new Vector3(Vector3.Dot(offset, rootX), Vector3.Dot(offset, rootY), Vector3.Dot(offset, rootZ));
+            foreach (var name in names)
             {
-                wheels.Add(body.GetBoneLocation(wheel.BoneName, 0));
+                var socket = Made.Tracked(new SkeletalMeshSocket(mesh));
+                socket.SocketName = name;
+                socket.BoneName = root;
+                socket.RelativeLocation = local;
+                socket.RelativeRotation = default;
+                socket.RelativeScale = Vector3.One;
+                mesh.Sockets.Add(socket);
+                fitted.Sockets.Add(socket);
             }
         }
 
-        Vector3 front;
-        if (wheels.Count >= 2)
+        if (winch.Count > 0)
         {
-            wheels.Sort((a, b) => Vector3.Dot(b, forward).CompareTo(Vector3.Dot(a, forward)));
-            front = (wheels[0] + wheels[1]) / 2f;
-        }
-        else
-        {
-            front = car.Location + forward * MathF.Max(car.PursuitModeLength / 2f, 200f);
+            // The two wheels furthest forward give the front axle.
+            var wheels = new List<Vector3>();
+            foreach (var wheel in car.Wheels)
+            {
+                if (wheel is { IsValid: true } && wheel.BoneName.Index != 0 && body.MatchRefBone(wheel.BoneName) >= 0)
+                {
+                    wheels.Add(body.GetBoneLocation(wheel.BoneName, 0));
+                }
+            }
+
+            Vector3 front;
+            if (wheels.Count >= 2)
+            {
+                wheels.Sort((a, b) => Vector3.Dot(b, forward).CompareTo(Vector3.Dot(a, forward)));
+                front = (wheels[0] + wheels[1]) / 2f;
+            }
+            else
+            {
+                front = car.Location + forward * MathF.Max(car.PursuitModeLength / 2f, 200f);
+            }
+
+            Place(winch, front + forward * WinchAhead + up * WinchUp);
         }
 
-        // A socket's place is measured along its bone's own axes.
-        var root = body.GetBoneName(RootBone);
-        var offset = front + forward * WinchAhead + up * WinchUp - body.GetBoneLocation(root, 0);
-        var local = new Vector3(
-            Vector3.Dot(offset, body.GetBoneAxis(root, GameObject.EAxis.AXIS_X)),
-            Vector3.Dot(offset, body.GetBoneAxis(root, GameObject.EAxis.AXIS_Y)),
-            Vector3.Dot(offset, body.GetBoneAxis(root, GameObject.EAxis.AXIS_Z)));
-
-        fitted.Mesh = mesh;
-        foreach (var name in missing)
+        if (guns.Count > 0)
         {
-            var socket = Made.Tracked(new SkeletalMeshSocket(mesh));
-            socket.SocketName = name;
-            socket.BoneName = root;
-            socket.RelativeLocation = local;
-            socket.RelativeRotation = default;
-            socket.RelativeScale = Vector3.One;
-            mesh.Sockets.Add(socket);
-            fitted.Sockets.Add(socket);
+            var box = body.Bounds;
+            var roof = box.BoxExtent.Z is > 20f and < 400f
+                ? box.Origin + up * (box.BoxExtent.Z + GunAbove)
+                : car.Location + up * GunFallbackUp;
+            Place(guns, roof);
         }
     }
 
