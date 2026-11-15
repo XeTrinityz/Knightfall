@@ -289,10 +289,9 @@ SETTINGS > GAME
 
 ## Install
 
-1. Install [BmSDK-AK v0.21.0](https://github.com/Team-BmSDK/BmSDK-AK).
-2. Unzip the [BmSDK-AK fork release](https://github.com/XeTrinityz/BmSDK-AK/releases/latest) over your game folder. It replaces `Binaries\Win64\sdk\BmSDK.dll` and `Binaries\Win64\plugins\BmSDK.Host.asi`.
-3. Put this folder in `BmGame/Mods/Knightfall`, so you end up with `BmGame/Mods/Knightfall/mod.toml`.
-4. Start the game and press F1.
+1. Install [BmSDK-AK v0.22.0](https://github.com/XeTrinityz/BmSDK-AK/releases/tag/v0.22.0) or newer. Run its installer, or copy the `Binaries` and `BmGame` folders from its zip into your game folder. Older BmSDK builds, including the fork.6 release, don't run Knightfall right.
+2. Put this folder in `BmGame/Mods/Knightfall`, so you end up with `BmGame/Mods/Knightfall/mod.toml`.
+3. Start the game and press F1.
 
 ## Controls
 
