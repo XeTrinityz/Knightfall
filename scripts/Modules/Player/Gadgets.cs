@@ -93,6 +93,11 @@ static class Gadgets
         "player.gadgets.auto_password_hack", "AUTO PASSWORD HACK",
         "Password cracks with the remote hacking device solve themselves a moment after they start.");
 
+    public static readonly Slider BatarangDamage = new(
+        "player.gadgets.batarang_damage", "BATARANG DAMAGE",
+        "Health your batarangs take off an enemy they hit. A street thug has about 25, so that drops him in one throw. OFF is the normal game, where a batarang only stuns. Shields still block it.",
+        min: 0, max: 200, step: 5, value: 0, unit: " HP", zero: "OFF");
+
     public static readonly Toggle LethalGel = new(
         "player.gadgets.lethal_gel", "LETHAL EXPLOSIVE GEL",
         "A thug with gel stuck to him is knocked out when it blows, anywhere and as often as you like. Vantage point mines do too. Brutes and bosses shrug it off.")
@@ -172,6 +177,7 @@ static class Gadgets
         new("USE", UnlockAll, UseWhileRecharging, VentsAndCover),
         new("DISRUPTOR", UnlimitedDisruptor, DisruptAnything),
         new("HACKING", AutoPasswordHack),
+        new("BATARANG", BatarangDamage),
         new("EXPLOSIVE GEL", LethalGel, GelDamage, GelRadius),
         new("FREEZE BLAST", AllFreezeUpgrades, FreezeClusterRadius),
         new("BATCLAW", BatclawRange, ZipKick.Option),
@@ -310,6 +316,31 @@ static class Gadgets
         }
 
         return result;
+    }
+
+    // Outside a combo a thrown batarang brings no damage at all, so ONE HIT KO can't catch it.
+    // The raised damage ends up in the same DamagedBy a punch goes through. The batclaw also
+    // lands here, but its projectile isn't a batarang.
+    [Redirect(typeof(RPawnVillain), nameof(RPawnVillain.HitByBatarang))]
+    static RPawnCombat.DamageResult HitByBatarang(RPawnVillain self, int damage, Controller instigatedBy, Vector3 hitLocation, Vector3 momentum, Class damageType, Actor.FTraceHitInfo hitInfo, Actor damageCauser)
+    {
+        var passed = damage;
+        try
+        {
+            if (!BatarangDamage.IsDefault
+                && damageCauser is RBatarangProjectile
+                && instigatedBy is { IsValid: true } thrower
+                && thrower.Ptr == World.Controller?.Ptr)
+            {
+                passed = Math.Max(damage, (int)BatarangDamage.Value);
+            }
+        }
+        catch (Exception error)
+        {
+            Log.Error("gadgets.batarang", "Batarang damage could not be raised, so the hit went through unchanged", error);
+        }
+
+        return self.HitByBatarang(passed, instigatedBy, hitLocation, momentum, damageType, hitInfo, damageCauser);
     }
 
     static void HoldMines<TValue>(Held<RExplosiveGooMine, TValue> held, TValue value)
