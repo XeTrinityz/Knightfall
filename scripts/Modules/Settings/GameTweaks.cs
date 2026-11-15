@@ -79,6 +79,7 @@ static class GameTweaks
     {
         new("WINDOW", KeepRunning, PadInBackground),
         new("PERFORMANCE", FrameCap, CharacterDetail, Buildings.Detail),
+        new("KEYS", DebugKeys.Block),
     };
 
     static void Hold<T>(Held<GameEngine, T> held, T value)
