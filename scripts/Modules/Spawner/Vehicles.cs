@@ -34,7 +34,19 @@ static class Vehicles
     // Abstract templates, mission vehicles and the Batmobiles.
     static readonly string[] Refused = { "_BASE", "Boss.", "Static.", "Interrogation", "GordonChase", "Batmobile" };
 
-    sealed record Recipe(string Key, string Label, string Group, RVehicleNPC Template);
+    // Armed means the vehicle has a fight of its own. Civilian cars don't, so they can't be put
+    // on your side.
+    sealed record Recipe(string Key, string Label, string Group, RVehicleNPC Template, bool Armed);
+
+    // A spawned ally and what it was told to do. A fighting one waits parked until the combat
+    // manager hands it an enemy, since with none a tank or drone aims at you instead.
+    sealed class Ally
+    {
+        public required RVehicleNPC Vehicle;
+        public required string Behaviour;
+    }
+
+    static readonly List<Ally> Allies = new();
 
     static List<Recipe> _recipes = new();
     static RGameInfo? _world;
@@ -71,7 +83,7 @@ static class Vehicles
 
     public static readonly Choice Side = new(
         "spawner.vehicles.side", "SIDE",
-        "HOSTILE vehicles are the militia's. ON YOUR SIDE hacks them like the Batmobile's drone hacker, with no self-destruct, so they stay yours until deleted.",
+        "HOSTILE vehicles are the militia's. ON YOUR SIDE hacks them like the Batmobile's drone hacker, with no self-destruct, so they stay yours until deleted. Only vehicles that can fight can be on your side. With nothing to fight, those set to fight wait parked.",
         new[] { ("hostile", "HOSTILE"), ("ally", "ON YOUR SIDE") })
     {
         Preference = true,
@@ -79,7 +91,7 @@ static class Vehicles
 
     public static readonly Choice Behaviour = new(
         "spawner.vehicles.behaviour", "BEHAVIOUR",
-        "THEIR OWN is what the vehicle does by itself. ATTACK starts a fight. GUARD holds and shoots. PARKED stays still. Cars can also WANDER or RUN AWAY.",
+        "THEIR OWN is what the vehicle does by itself. ATTACK starts a fight. GUARD holds and shoots. PARKED stays still. Cars can also WANDER or RUN AWAY, which need a road close by.",
         new[] { ("own", "THEIR OWN"), ("attack", "ATTACK"), ("guard", "GUARD"), ("parked", "PARKED"), ("wander", "WANDER"), ("runaway", "RUN AWAY") })
     {
         Preference = true,
@@ -99,7 +111,10 @@ static class Vehicles
         SpawnPicked)
     {
         Preview = static signs => Placing.Show(signs, Room, "SPAWN"),
+        Block = static () => Side.Index == 1 && _recipes.Find(recipe => recipe.Key == Vehicle.CurrentId) is { Armed: false } ? Unarmed : null,
     };
+
+    const string Unarmed = "CAN'T FIGHT FOR YOU";
 
     public static readonly Catalog.Section[] Sections =
     {
@@ -122,6 +137,11 @@ static class Vehicles
         if (Group.CurrentId != _listedGroup)
         {
             ListVehicles();
+        }
+
+        if (Allies.Count > 0)
+        {
+            KeepAllies();
         }
     }
 
@@ -203,6 +223,10 @@ static class Vehicles
         var lift = template is RVehicleFlying ? AirLift : GroundLift;
         var behaviour = Behaviour.CurrentId;
         var ally = Side.Index == 1;
+        if (ally && !picked.Armed)
+        {
+            return Outcome.Failed(Unarmed);
+        }
 
         // Written before the native call, so a crash inside it names what.
         Log.Info($"Spawner: spawning {spots.Count} x {picked.Label} ({picked.Key}, {Side.CurrentId}, {behaviour}).");
@@ -217,6 +241,11 @@ static class Vehicles
             }
 
             SetUp(vehicle);
+            if (ally)
+            {
+                Befriend(vehicle, behaviour);
+            }
+
             var spawn = Spawned.Add(vehicle, picked.Label, passive: false);
             spawn.Ready = () => !vehicle.IsTimerActive(OwnStart);
             spawn.Start = () => Start(vehicle, spawn, behaviour, ally);
@@ -237,8 +266,25 @@ static class Vehicles
         }
     }
 
+    // What the drone hacker does to each target, then its self-destruct is taken away. Done the
+    // moment it spawns and parked straight away, which also stops the vehicle's own start, so it
+    // never has a moment as an enemy.
+    static void Befriend(RVehicleNPC vehicle, string behaviour)
+    {
+        vehicle.EndDroneHack();
+        vehicle.SwitchAllegiance(Forever);
+        vehicle.ClearTimer(SelfDestruct);
+        Park(vehicle);
+        Allies.Add(new Ally { Vehicle = vehicle, Behaviour = behaviour });
+    }
+
+    static void Park(RVehicleNPC vehicle) => vehicle.GotoBehaviourClass(RVehicleBehaviour_Idle.StaticClass());
+
+    static bool Fights(string behaviour) => behaviour is "own" or "attack" or "guard";
+
     // The vehicle starts its own behaviour on a short timer after it begins play, which would undo
-    // anything set before, so this waits for that to have run.
+    // anything set before, so this waits for that to have run. A fighting ally is left parked for
+    // KeepAllies to send in.
     static void Start(RVehicleNPC vehicle, Spawned.Spawn spawn, string behaviour, bool ally)
     {
         if (!vehicle.IsAlive || vehicle.HasDied)
@@ -246,22 +292,106 @@ static class Vehicles
             return;
         }
 
-        Steer(vehicle, behaviour);
+        if (!ally || !Fights(behaviour))
+        {
+            Steer(vehicle, behaviour);
+            Roadless(vehicle, behaviour);
+        }
+
         if (!ally)
         {
             return;
         }
 
-        // What the drone hacker does to each target, then its self-destruct is taken away.
-        var before = vehicle.CurrentBehaviour;
-        vehicle.EndDroneHack();
-        vehicle.SwitchAllegiance(Forever);
-        vehicle.ClearTimer(SelfDestruct);
-
         spawn.Ready = null;
         spawn.StartAt = World.Now + CheckAfter;
-        spawn.Start = () => Check(vehicle, before);
+        spawn.Start = () => Check(vehicle);
     }
+
+    // WANDER and RUN AWAY need a road within about 20 m. Without one the game falls back on the
+    // vehicle's default behaviour, and a spawned one has none, so it would sit there with no AI.
+    static bool Roadless(RVehicleNPC vehicle, string behaviour)
+    {
+        if (behaviour is not ("wander" or "runaway") || vehicle.CurrentBehaviour is { IsValid: true })
+        {
+            return false;
+        }
+
+        Park(vehicle);
+        Spawn.Report(Outcome.Failed("NO ROAD NEARBY, PARKED"));
+        return true;
+    }
+
+    // Every tick. With no enemy from the combat manager a fighting ally waits parked, and goes in
+    // when one turns up. One that drove off into a fight by itself, like a wandering tank meeting
+    // the Batmobile, is put back to what it was told.
+    static void KeepAllies()
+    {
+        for (var i = Allies.Count - 1; i >= 0; i--)
+        {
+            var ally = Allies[i];
+            var vehicle = ally.Vehicle;
+            if (!vehicle.IsAlive || vehicle.HasDied || !Spawned.Has(vehicle))
+            {
+                Allies.RemoveAt(i);
+                continue;
+            }
+
+            if (Spawned.Settling(vehicle))
+            {
+                continue;
+            }
+
+            var enemy = vehicle.CombatManagerTargetOverride is { IsValid: true } target && target.IsAlive;
+            var parked = vehicle.CurrentBehaviour is RVehicleBehaviour_Idle;
+
+            // A vehicle that sees you plays its spotted sound when what it's doing can be broken
+            // off for a fight. The behaviour is the spawn's own object, so this goes with it.
+            if (!enemy && vehicle.CurrentBehaviour is { IsValid: true, CanBeInteruptedByCombat: true } calm)
+            {
+                calm.CanBeInteruptedByCombat = false;
+            }
+            if (Fights(ally.Behaviour))
+            {
+                if (enemy && parked)
+                {
+                    Steer(vehicle, ally.Behaviour == "own" ? "attack" : ally.Behaviour);
+                }
+                else if (!enemy && !parked)
+                {
+                    Park(vehicle);
+                }
+
+                continue;
+            }
+
+            if (enemy || Doing(vehicle.CurrentBehaviour, ally.Behaviour))
+            {
+                continue;
+            }
+
+            if (ally.Behaviour == "parked")
+            {
+                Park(vehicle);
+                continue;
+            }
+
+            Steer(vehicle, ally.Behaviour);
+            if (Roadless(vehicle, ally.Behaviour))
+            {
+                ally.Behaviour = "parked";
+            }
+        }
+    }
+
+    // Wander is a kind of run away, so run away means exactly that.
+    static bool Doing(RVehicleBehaviour? current, string behaviour) => behaviour switch
+    {
+        "parked" => current is RVehicleBehaviour_Idle,
+        "wander" => current is RVehicleBehaviour_Wander,
+        "runaway" => current is RVehicleBehaviour_RunAway and not RVehicleBehaviour_Wander,
+        _ => true,
+    };
 
     static void Steer(RVehicleNPC vehicle, string behaviour)
     {
@@ -285,26 +415,93 @@ static class Vehicles
         }
     }
 
-    // The game's switch to friendly swaps the AI, and on some behaviours it leaves none at all,
-    // which froze tanks in Oracle. That one case gets its own AI back and stays hostile.
-    static void Check(RVehicleNPC vehicle, RVehicleBehaviour? before)
+    // The vehicle combat manager blows up every friendly vehicle once no enemy vehicle is left to
+    // fight, which is how the game ends a drone hack. Our own allies are kept out of that.
+    [Redirect(typeof(RVehicleNPC), nameof(RVehicleNPC.DroneHackedSuicide))]
+    static void DroneHackedSuicide(RVehicleNPC self)
+    {
+        try
+        {
+            if (self.IsHackedFriendly && Spawned.Has(self))
+            {
+                return;
+            }
+
+            self.DroneHackedSuicide();
+        }
+        catch (Exception error)
+        {
+            Log.Error("spawner.vehicles.suicide", "The friendly vehicle self-destruct check failed", error);
+        }
+    }
+
+    // Each tick the combat manager asks every vehicle whether it's fighting its target, and those
+    // that are join the fight, which starts the combat music and the commander's lines. With no
+    // enemy to give an ally, its target falls back to you, so an ally only says yes about the
+    // enemy it was handed.
+    [Redirect(typeof(RVehicleTank), nameof(RVehicleTank.InCombat))]
+    static bool TankInCombat(RVehicleTank self, Actor Target) => AllyInCombat(self, Target) ?? self.InCombat(Target);
+
+    [Redirect(typeof(RVehicleFlying), nameof(RVehicleFlying.InCombat))]
+    static bool DroneInCombat(RVehicleFlying self, Actor Target) => AllyInCombat(self, Target) ?? self.InCombat(Target);
+
+    // A tank or drone with no enemy handed to it targets you, and its turret tracks you with the
+    // lock-on sound even while parked. With no target the game turns the turret back to the front.
+    [Redirect(typeof(RVehicleTank), nameof(RVehicleTank.GetTargetActor))]
+    static Actor TankTarget(RVehicleTank self) => Unaimed(self) ? null! : self.GetTargetActor();
+
+    [Redirect(typeof(RVehicleFlying), nameof(RVehicleFlying.GetTargetActor))]
+    static Actor DroneTarget(RVehicleFlying self) => Unaimed(self) ? null! : self.GetTargetActor();
+
+    static bool Unaimed(RVehicleNPC self)
+    {
+        try
+        {
+            if (Allies.Count == 0 || !Allies.Exists(ally => ReferenceEquals(ally.Vehicle, self)))
+            {
+                return false;
+            }
+
+            return self.CombatManagerTargetOverride is not { IsValid: true } enemy || !enemy.IsAlive;
+        }
+        catch (Exception error)
+        {
+            Log.Error("spawner.vehicles.target", "The ally target check failed", error);
+            return false;
+        }
+    }
+
+    // False when an ally is asked about anything but its enemy, null to let the game answer.
+    static bool? AllyInCombat(RVehicleNPC self, Actor? target)
+    {
+        try
+        {
+            if (Allies.Count == 0 || !Allies.Exists(ally => ReferenceEquals(ally.Vehicle, self)))
+            {
+                return null;
+            }
+
+            var enemy = self.CombatManagerTargetOverride;
+            return enemy is { IsValid: true } && enemy.IsAlive && ReferenceEquals(enemy, target) ? null : false;
+        }
+        catch (Exception error)
+        {
+            Log.Error("spawner.vehicles.in_combat", "The ally fight check failed", error);
+            return null;
+        }
+    }
+
+    // The game's switch to friendly can leave a vehicle with no AI at all, which froze tanks in
+    // Oracle. Such an ally is parked, so it still has one.
+    static void Check(RVehicleNPC vehicle)
     {
         if (!vehicle.IsAlive || vehicle.HasDied || vehicle.CurrentBehaviour is { IsValid: true })
         {
             return;
         }
 
-        Log.Warn("spawner.vehicles.hack." + vehicle.Ptr, $"ON YOUR SIDE left {vehicle.Class.Name} with no AI, so it was put back hostile.");
-        vehicle.ClearTimer(SelfDestruct);
-        World.Info?.VehicleCombatManager?.SetVehicleAsFriendly(vehicle, false);
-        if (before is { IsValid: true })
-        {
-            vehicle.GotoBehaviour(before);
-        }
-        else
-        {
-            vehicle.SwitchToAssignedBehaviour();
-        }
+        Log.Warn("spawner.vehicles.hack." + vehicle.Ptr, $"ON YOUR SIDE left {vehicle.Class.Name} with no AI, so it was parked.");
+        Park(vehicle);
     }
 
     static List<Recipe> Recipes()
@@ -352,7 +549,8 @@ static class Vehicles
             return null;
         }
 
-        return new Recipe(path, People.Pretty(template.Name.ToString() ?? "VEHICLE"), GroupOf(template), template);
+        var armed = template.DefaultCombatBehaviour is { IsValid: true } || template.DefaultCombatBehaviourInstance is { IsValid: true };
+        return new Recipe(path, People.Pretty(template.Name.ToString() ?? "VEHICLE"), GroupOf(template), template, armed);
     }
 
     static string GroupOf(RVehicleNPC template) => template switch
