@@ -17,8 +17,6 @@ namespace Knightfall;
 // when it hides.
 static class Kept
 {
-    const string FileName = "edits.toml";
-
     const double LookEvery = 0.5;
 
     // The file is written this long after the last change, once nothing kept is still rolling,
@@ -164,7 +162,9 @@ static class Kept
     static int Loaded() =>
         Pieces.Count(piece => Things.Alive(piece.Actor)) + Copies.Count(copy => Things.Alive(copy.Actor)) + Folk.Count(person => Things.Alive(person.Actor));
 
-    static string FilePath => Path.Combine(GameFiles.Mod, FileName);
+    static string FilePath => ModFiles.Edits;
+
+    static string Broken => ModFiles.Backup("edits.bad.toml");
 
     static double Since(long from) => Stopwatch.GetElapsedTime(from).TotalSeconds;
 
@@ -1073,14 +1073,14 @@ static class Kept
         {
             try
             {
-                File.Copy(path, Path.Combine(GameFiles.Mod, "edits.bad.toml"), overwrite: true);
+                File.Copy(path, ModFiles.Ready(Broken), overwrite: true);
             }
             catch (Exception)
             {
                 // Only a courtesy. The changes can't be read either way.
             }
 
-            Log.Warn("kept.read", $"edits.toml could not be read, so nothing kept was put back. It was kept as edits.bad.toml. {error.Message}");
+            Log.Warn("kept.read", $"edits.toml could not be read, so nothing kept was put back. It was kept as {ModFiles.Shown(Broken)}. {error.Message}");
             return;
         }
 
@@ -1206,7 +1206,7 @@ static class Kept
         {
             // Written to a second file first, so a crash halfway never leaves a cut-off file.
             var path = FilePath;
-            var temp = path + ".tmp";
+            var temp = ModFiles.Ready(path) + ".tmp";
             File.WriteAllText(temp, written);
             File.Move(temp, path, overwrite: true);
             _written = written;

@@ -23,6 +23,8 @@ static class Settings
     static readonly Dictionary<string, Section> Sections = new();
     static TomlTable _file = new();
     static string _path = "";
+
+    static string Broken => ModFiles.Backup("settings.bad.toml");
     static bool _changed;
     static DateTime _changedAt;
 
@@ -46,7 +48,7 @@ static class Settings
         catch (Exception error)
         {
             KeepBroken(path);
-            Log.Warn("settings.read", $"settings.toml could not be read, so defaults are used. Your file was kept as settings.bad.toml. {error.Message}");
+            Log.Warn("settings.read", $"{ModFiles.Shown(path)} could not be read, so defaults are used. Your file was kept as {ModFiles.Shown(Broken)}. {error.Message}");
             Mark();
         }
     }
@@ -195,7 +197,7 @@ static class Settings
         try
         {
             // Written to a second file first, so a crash halfway never leaves a cut-off settings.toml.
-            var temp = _path + ".tmp";
+            var temp = ModFiles.Ready(_path) + ".tmp";
             File.WriteAllText(temp, text.ToString());
             File.Move(temp, _path, overwrite: true);
         }
@@ -277,7 +279,7 @@ static class Settings
     {
         try
         {
-            File.Copy(path, Path.Combine(Path.GetDirectoryName(path) ?? "", "settings.bad.toml"), overwrite: true);
+            File.Copy(path, ModFiles.Ready(Broken), overwrite: true);
         }
         catch (Exception)
         {

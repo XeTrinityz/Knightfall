@@ -291,6 +291,8 @@ SETTINGS > GAME
 
 1. Install [BmSDK-AK v0.24.0](https://github.com/XeTrinityz/BmSDK-AK/releases/tag/v0.24.0) or newer. Run its installer, or copy the `Binaries` and `BmGame` folders from its zip into your game folder. Older BmSDK builds don't run Knightfall.
 2. Put the `Knightfall` folder from the zip in `BmGame/Mods`, so you end up with `BmGame/Mods/Knightfall/Knightfall.dll`. When you update, copy it over the old one. Your settings stay. You can delete an old `scripts` folder in there. It isn't used any more.
+
+The folder only holds `Knightfall.dll` and `mod.toml`. Everything the mod writes goes in `Knightfall/data`. Files from older versions are moved there on the first start.
 3. Start the game and press F1.
 
 ## Controls
@@ -311,7 +313,7 @@ The menu hides while the game is paused.
 
 ## Settings
 
-Your choices are saved in `settings.toml` next to this file. The mod writes it on first start. You can change the keys there, including the keys some options have, like `jump_key` and `jump_pad`. Close the game before you edit it.
+Your choices are saved in `Knightfall/data/settings.toml`. The mod writes it on first start. You can change the keys there, including the keys some options have, like `jump_key` and `jump_pad`. Close the game before you edit it.
 
 ## Other mods
 
@@ -321,4 +323,4 @@ Another BmSDK script mod can clash if it redirects the same game functions. The 
 
 ## Something broke
 
-Send me `Knightfall.log` from this folder. `Knightfall.prev.log` is the log from the session before.
+Send me `Knightfall.log` from `Knightfall/data/logs`. `Knightfall.prev.log` next to it is the log from the session before.

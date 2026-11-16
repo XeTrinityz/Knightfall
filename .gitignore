@@ -1,11 +1,3 @@
-Knightfall.log
-Knightfall.prev.log
-settings.toml
-settings.bad.toml
-system_values.txt
+data/
 Knightfall.zip
-edits.toml
-edits.bad.toml
 Knightfall.dll
-Knightfall.pdb
-assets.txt

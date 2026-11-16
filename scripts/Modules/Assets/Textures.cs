@@ -129,7 +129,7 @@ static class Textures
 
     public static readonly Command Save = new(
         "assets.textures.save", "SAVE LIST",
-        "Writes every texture loaded right now, with its size, format and group, to assets.txt in the Knightfall folder.",
+        "Writes every texture loaded right now, with its size, format and group, to data/exports/assets.txt in the Knightfall folder.",
         SaveList)
     {
         Cap = "SAVE",
@@ -510,9 +510,9 @@ static class Textures
             }
         }
 
-        var file = Path.Combine(GameFiles.Mod, "assets.txt");
+        var file = ModFiles.Ready(ModFiles.Export("assets.txt"));
         File.WriteAllText(file, text.ToString());
-        Log.Info($"Assets: saved {rows.Count} textures to assets.txt.");
+        Log.Info($"Assets: saved {rows.Count} textures to {ModFiles.Shown(file)}.");
         return Outcome.Done($"SAVED {rows.Count}");
     }
 

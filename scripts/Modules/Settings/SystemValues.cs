@@ -8,7 +8,7 @@ namespace Knightfall;
 // The game's render settings, the ones its graphics menu doesn't reach. They're changed live with
 // the game's own "scale set" command. That command also saves every live value to
 // BmSystemSettings.ini, so after each change the game's own values are written back there, and a
-// copy is kept in the mod folder so a crash can be put right on the next start.
+// copy is kept in the mod's data so a crash can be put right on the next start.
 static class SystemValues
 {
     const string Section = "[SystemSettings]";
@@ -26,7 +26,7 @@ static class SystemValues
 
     static string Ini => Path.Combine(GameFiles.Game, "Config", "BmSystemSettings.ini");
 
-    static string Copy => Path.Combine(GameFiles.Mod, Kept);
+    static string Copy => ModFiles.Backup(Kept);
 
     // A crash leaves our values live in the ini. They're put back to the game's before it reads them again.
     public static void Repair()
@@ -143,11 +143,15 @@ static class SystemValues
         {
             if (Originals.Count == 0)
             {
-                File.Delete(Copy);
+                if (File.Exists(Copy))
+                {
+                    File.Delete(Copy);
+                }
+
                 return;
             }
 
-            File.WriteAllLines(Copy, Originals.Select(pair => $"{pair.Key}={pair.Value}"));
+            File.WriteAllLines(ModFiles.Ready(Copy), Originals.Select(pair => $"{pair.Key}={pair.Value}"));
         }
         catch (Exception error)
         {

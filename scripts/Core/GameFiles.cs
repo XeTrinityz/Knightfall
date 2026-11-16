@@ -11,10 +11,8 @@ static class GameFiles
     // The folders are only listed once, so an answer holds for as long.
     static readonly Dictionary<string, bool> Installed = new(StringComparer.OrdinalIgnoreCase);
 
-    // BmGame, and the mod's own folder.
+    // BmGame.
     public static string Game { get; private set; } = "";
-
-    public static string Mod { get; private set; } = "";
 
     // The mod sits in BmGame/Mods, next to the base game's packages. Each DLC has its own folder
     // of them one level up. Skin and car mods put theirs anywhere under a DLC folder, and the game
@@ -27,7 +25,6 @@ static class GameFiles
         {
             var game = Path.GetFullPath(Path.Combine(modFolder, "..", ".."));
             Game = game;
-            Mod = Path.GetFullPath(modFolder);
             Add(found, Path.Combine(game, "CookedPCConsole"));
 
             var packs = Path.GetFullPath(Path.Combine(game, "..", "DLC"));

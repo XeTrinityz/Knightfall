@@ -13,6 +13,8 @@
     <DefineConstants>BATMAN4</DefineConstants>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- BmSDK only finds a .pdb beside the DLL, and the mod folder holds just the DLL and mod.toml. -->
+    <DebugType>embedded</DebugType>
     <NoWarn>$(NoWarn);CA1416</NoWarn>
     <SdkDir>..\..\..\..\Binaries\Win64\sdk\</SdkDir>
   </PropertyGroup>

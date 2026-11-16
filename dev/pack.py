@@ -13,8 +13,8 @@ import zipfile
 from pathlib import Path
 
 MOD = Path(__file__).resolve().parent.parent
-BUILT = ["Knightfall.dll", "Knightfall.pdb"]
-KEPT = ["mod.toml", "README.md"]
+BUILT = ["Knightfall.dll"]
+KEPT = ["mod.toml"]
 
 
 def main():

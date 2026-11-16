@@ -375,7 +375,7 @@ static class SaveFiles
             // In Documents, so the copies outlast a mod update. One folder for each account.
             Kept = id.Length > 0 && Directory.Exists(game)
                 ? Path.Combine(game, "Knightfall", id)
-                : Path.Combine(GameFiles.Mod, "saves");
+                : ModFiles.Saves;
         }
         catch (Exception error)
         {

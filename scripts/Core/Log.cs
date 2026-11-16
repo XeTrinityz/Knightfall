@@ -18,13 +18,22 @@ static class Log
     static string? _path;
 
     // Returns true the first time it runs in this game session.
-    public static bool Start(string modDir)
+    public static bool Start()
     {
         var firstLoad = !Survive.Get(Survive.LogStarted, false);
-        var path = Path.Combine(modDir, "Knightfall.log");
+        var path = ModFiles.Log;
 
         lock (Gate)
         {
+            try
+            {
+                ModFiles.Ready(path);
+            }
+            catch (Exception)
+            {
+                // Each line is written inside its own guard, so a folder that can't be made only loses the lines.
+            }
+
             if (firstLoad)
             {
                 KeepPrevious(path);
@@ -110,7 +119,7 @@ static class Log
         {
             if (File.Exists(path))
             {
-                File.Move(path, Path.ChangeExtension(path, ".prev.log"), overwrite: true);
+                File.Move(path, ModFiles.PreviousLog, overwrite: true);
             }
         }
         catch (Exception)

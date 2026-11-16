@@ -57,12 +57,13 @@ static class Kernel
                 Version = text;
             }
 
-            var firstLoad = Log.Start(folder);
+            ModFiles.Use(folder);
+            var firstLoad = Log.Start();
             Log.Info(firstLoad ? $"Knightfall {Version} started. {Facts()}" : "Scripts reloaded.");
         });
         Step("game folders", needed: true, () => GameFiles.Find(folder));
         Step("system values", needed: false, SystemValues.Repair);
-        Step("settings", needed: true, () => Settings.Load(Path.Combine(folder, "settings.toml")));
+        Step("settings", needed: true, () => Settings.Load(ModFiles.Settings));
         Step("menu keys", needed: true, Controls.Bind);
         Step("radial keys", needed: false, Radial.Bind);
         Step("menu layout", needed: true, Layout.Build);
