@@ -45,7 +45,8 @@ static class Layout
             .Add("DASHBOARD", Dashboard.Sections)
             .Add("SKIN",
                 new Catalog.Section("SKINS", Skins.Skin, Skins.Apply, Skins.Cancel),
-                new Catalog.Section("SOUND", EngineSound.Sound));
+                new Catalog.Section("SOUND", EngineSound.Sound),
+                new Catalog.Section("BODYWORK", CarWash.Clean, CarWash.KeepClean));
 
         Catalog.Background("batmobile.car", Car.Tick);
         Catalog.Background("batmobile.driving.autopilot", Autopilot.Tick, Autopilot.Release);
