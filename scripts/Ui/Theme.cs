@@ -7,7 +7,7 @@ namespace Knightfall;
 abstract class Theme
 {
     // The first one is the default.
-    public static readonly Theme[] All = { new ProtocolTheme(), new RailTheme(), new ConsoleTheme(), new MilitiaTheme(), new SignalTheme(), new WayneTheme(), new NightwingTheme(), new EnigmaTheme() };
+    public static readonly Theme[] All = { new ProtocolTheme(), new RailTheme(), new ConsoleTheme(), new MilitiaTheme(), new WayneTheme(), new NightwingTheme(), new EnigmaTheme() };
 
     public static Theme Current => All[Math.Clamp(Look.Theme.Index, 0, All.Length - 1)];
 
