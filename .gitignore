@@ -1,3 +1,7 @@
 data/
 Knightfall.zip
 Knightfall.dll
+
+# Nexus upload script and its settings, kept local
+dev/nexus.py
+dev/nexus.toml
