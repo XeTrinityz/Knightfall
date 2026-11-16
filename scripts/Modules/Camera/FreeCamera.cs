@@ -80,17 +80,21 @@ static class FreeCamera
     // The game's own button switch doesn't reach every button, so the ones flying uses, and the
     // ones that would make Batman act, are kept from the game too. Start and Back stay, for the
     // pause menu and the map.
-    static readonly Keys[] FlyKeys = { Keys.Space, Keys.ControlKey, Keys.ShiftKey, Keys.H, Keys.Left, Keys.Right, Keys.Up, Keys.Down, Keys.Home };
+    static readonly Keys[] FlyKeys = { Keys.Space, Keys.ControlKey, Keys.ShiftKey, Keys.H, Keys.F, Keys.Left, Keys.Right, Keys.Up, Keys.Down, Keys.Home };
 
     // Any of these says you're flying with the keyboard.
-    static readonly Keys[] KeyboardSigns = { Keys.W, Keys.A, Keys.S, Keys.D, Keys.Space, Keys.ControlKey, Keys.ShiftKey, Keys.H, Keys.Left, Keys.Right, Keys.Up, Keys.Down, Keys.Home };
+    static readonly Keys[] KeyboardSigns = { Keys.W, Keys.A, Keys.S, Keys.D, Keys.Space, Keys.ControlKey, Keys.ShiftKey, Keys.H, Keys.F, Keys.Left, Keys.Right, Keys.Up, Keys.Down, Keys.Home };
     const float StickSign = 0.3f;
+
+    const Keys FreezeKey = Keys.F;
+    const Pad.Button FreezeButton = Pad.Button.Y;
 
     static bool _onPad;
     static bool _guideHidden;
     static bool _hideWas;
     static bool _hidePadWas;
     static bool _padAlone;
+    static bool _freezeWas;
     static GuideLine[]? _keyboardGuide;
     static GuideLine[]? _padGuide;
     static Pad.Style _padGuideStyle;
@@ -440,6 +444,18 @@ static class FreeCamera
         _hideWas = hide;
         _hidePadWas = hidePad;
 
+        // EDITOR MODE has F and Y for its own FREEZE. Y doesn't count when it's part of the
+        // menu chord.
+        var freezePad = (Controls.ButtonFor(Act.Open) & FreezeButton) == Pad.Button.None && Pad.IsDown(FreezeButton);
+        var freeze = Keyboard.IsDown(FreezeKey) || Keyboard.WasPressed(FreezeKey) || freezePad;
+        if (flying && freeze && !_freezeWas && !Menu.Showing && !EditorMode.Active && !World.Paused)
+        {
+            WorldTime.Freeze.Press();
+            Toasts.Used(WorldTime.Freeze);
+        }
+
+        _freezeWas = freeze;
+
         // Here and not in the game tick, which stops in a pause. The keys and buttons go back to
         // the game then, so its own menus and the map still work.
         Keep(Free.On && Current == Kind.Fly && !World.Paused);
@@ -492,6 +508,7 @@ static class FreeCamera
                     new(new[] { Pad.Describe(Pad.Button.LeftStick) }, "FASTER"),
                     new(new[] { Pad.Describe(Pad.Button.DPadLeft), Pad.Describe(Pad.Button.DPadRight) }, "ROLL"),
                     new(new[] { Pad.Describe(Pad.Button.DPadUp), Pad.Describe(Pad.Button.DPadDown) }, "ZOOM"),
+                    new(new[] { Pad.Describe(FreezeButton) }, "FREEZE WORLD"),
                     new(new[] { hide }, "HIDE CONTROLS"),
                 };
                 _padShow = new GuideLine[] { new(new[] { hide }, "SHOW CONTROLS") };
@@ -511,6 +528,7 @@ static class FreeCamera
                 new(new[] { "LEFT", "RIGHT" }, "ROLL"),
                 new(new[] { "UP", "DOWN" }, "ZOOM"),
                 new(new[] { "HOME" }, "RESET ZOOM AND ROLL"),
+                new(new[] { "F" }, "FREEZE WORLD"),
                 new(new[] { "H" }, "HIDE CONTROLS"),
             };
             _keyboardShow ??= new GuideLine[] { new(new[] { "H" }, "SHOW CONTROLS") };
