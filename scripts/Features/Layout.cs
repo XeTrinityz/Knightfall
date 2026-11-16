@@ -130,6 +130,7 @@ static class Layout
         Catalog.Background("assets.fonts", Fonts.Tick);
         Catalog.Background("assets.viewer", Viewer.Tick, Viewer.Release);
         Menu.Beside = Viewer.Beside;
+        Menu.Beside += CaseFile.Beside;
 
         // Before SETTINGS, whose CONTROLS tab lists every option that has a key.
         DefaultKeys();

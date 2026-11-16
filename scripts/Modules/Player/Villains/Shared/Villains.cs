@@ -16,10 +16,11 @@ namespace Knightfall;
 // much lands and plays his own reaction, so Batman's hidden one is held off. Walks is for one
 // who has no business in the Batmobile, so it can't be called or got into while they are on.
 // Steps is for one with footsteps of their own. It says whether it took the step, and its sound.
-// Rest ends every wait they have running, for when NO COOLDOWNS is turned on.
+// Rest ends every wait they have running, for when NO COOLDOWNS is turned on. Dossier is their
+// page in the case file shown beside the menu.
 sealed record Villain(Toggle Option, Catalog.Section[] Sections, Villain.Fitter? Fit = null, Action? BeforeCamera = null, Action? Keys = null,
     Func<bool>? Marking = null, Action<float>? Marks = null, Func<RPawnPlayer, int, int>? Hit = null, bool Walks = false, Villain.Stepper? Steps = null,
-    Action? Rest = null)
+    Action? Rest = null, Dossier? Dossier = null)
 {
     public delegate void Fitter(ref View view, float deltaTime);
 
@@ -106,21 +107,58 @@ static class Villains
     // Made on first use, since each villain's own rows have to exist before it.
     static Villain[] Roster => _roster ??= new Villain[]
     {
-        new(Firefly.Option, Firefly.Sections, Firefly.AimView, Firefly.KeepAimFacing, Firefly.DefaultKeys, Firefly.Marking, Firefly.Marks, Rest: Firefly.Rest),
+        new(Firefly.Option, Firefly.Sections, Firefly.AimView, Firefly.KeepAimFacing, Firefly.DefaultKeys, Firefly.Marking, Firefly.Marks, Rest: Firefly.Rest,
+            Dossier: new(CaseFile.Portrait(9, 1), "Firefly_Desc", "Firefly")),
         new(RiddlerMech.Option, RiddlerMech.Sections, RiddlerMech.Fit, Keys: RiddlerMech.DefaultKeys, Marking: RiddlerMech.Marking, Marks: RiddlerMech.Marks,
-            Rest: RiddlerMech.Rest),
-        new(MrFreeze.Option, MrFreeze.Sections, MrFreeze.AimView, MrFreeze.KeepAimFacing, Marking: MrFreeze.Marking, Marks: MrFreeze.Marks, Rest: MrFreeze.Rest),
+            Rest: RiddlerMech.Rest, Dossier: new(CaseFile.Portrait(12, 3), "RiddlerMech_Desc", "Riddler")),
+        new(MrFreeze.Option, MrFreeze.Sections, MrFreeze.AimView, MrFreeze.KeepAimFacing, Marking: MrFreeze.Marking, Marks: MrFreeze.Marks, Rest: MrFreeze.Rest,
+            Dossier: new(CaseFile.FreezeEmblem, "DLCMr_Freeze_Desc",
+                Withheld: new("Victor Fries", "REDACTED", "Keeps his wife Nora frozen until he can cure her Huntington's."))),
         new(JokerVillain.Option, JokerVillain.Sections, JokerVillain.AimView, JokerVillain.KeepAimFacing, Marking: JokerVillain.Marking, Marks: JokerVillain.Marks,
-            Rest: JokerVillain.Rest),
-        new(PoisonIvy.Option, PoisonIvy.Sections, PoisonIvy.AimView, PoisonIvy.KeepAimFacing, Marking: PoisonIvy.Marking, Marks: PoisonIvy.Marks, Rest: PoisonIvy.Rest),
+            Rest: JokerVillain.Rest, Dossier: new(CaseFile.Portrait(9, 2), "Joker_Desc", "Joker")),
+        new(PoisonIvy.Option, PoisonIvy.Sections, PoisonIvy.AimView, PoisonIvy.KeepAimFacing, Marking: PoisonIvy.Marking, Marks: PoisonIvy.Marks, Rest: PoisonIvy.Rest,
+            Dossier: new(CaseFile.Portrait(5, 4), "PoisonIvy_Desc", "Poison_Ivy")),
         new(ArkhamKnight.Option, ArkhamKnight.Sections, ArkhamKnight.AimView, ArkhamKnight.KeepAimFacing, ArkhamKnight.DefaultKeys, ArkhamKnight.Marking, ArkhamKnight.Marks,
-            Rest: ArkhamKnight.Rest),
+            Rest: ArkhamKnight.Rest, Dossier: new(CaseFile.Portrait(3, 2), "ArkhamKnight_Desc", "Arkham_Knight")),
         new(KillerCroc.Option, KillerCroc.Sections, KillerCroc.Fit, KillerCroc.KeepFacing, KillerCroc.DefaultKeys, Hit: KillerCroc.Hit, Walks: true, Steps: KillerCroc.Steps,
-            Rest: KillerCroc.Rest),
-        new(Scarecrow.Option, Scarecrow.Sections, BeforeCamera: Scarecrow.KeepFacing, Keys: Scarecrow.DefaultKeys, Walks: true, Steps: Scarecrow.Steps, Rest: Scarecrow.Rest),
+            Rest: KillerCroc.Rest, Dossier: new(null, "DLCKillerCroc_Desc",
+                Withheld: new("Waylon Jones", "CLASSIFIED", "Tracked through the marshes outside Gotham and flown out by a unit that doesn't exist.", KillerCroc.InTheDark))),
+        new(Scarecrow.Option, Scarecrow.Sections, BeforeCamera: Scarecrow.KeepFacing, Keys: Scarecrow.DefaultKeys, Walks: true, Steps: Scarecrow.Steps, Rest: Scarecrow.Rest,
+            Dossier: new(CaseFile.Portrait(2, 3), "Scarecrow_Desc", "Scarecrow")),
         new(ManBat.Option, ManBat.Sections, ManBat.Fit, ManBat.KeepFacing, ManBat.DefaultKeys, ManBat.Marking, ManBat.Marks, ManBat.Hit, Walks: true,
-            Steps: ManBat.Steps, Rest: ManBat.Rest),
+            Steps: ManBat.Steps, Rest: ManBat.Rest, Dossier: new(CaseFile.Portrait(1, 4), "Manbat_Desc", "ManBat")),
     };
+
+    static Dictionary<Feature, int>? _owners;
+
+    public static int Count => Roster.Length;
+
+    // The villain whose heading a row sits under, and where he is on the tab. Null for the rows
+    // every villain shares.
+    public static (Villain Villain, int Index)? Owning(Feature? row)
+    {
+        if (row is null)
+        {
+            return null;
+        }
+
+        if (_owners is null)
+        {
+            _owners = new Dictionary<Feature, int>();
+            for (var i = 0; i < Roster.Length; i++)
+            {
+                foreach (var section in Roster[i].Sections)
+                {
+                    foreach (var owned in section.Rows)
+                    {
+                        _owners[owned] = i;
+                    }
+                }
+            }
+        }
+
+        return _owners.TryGetValue(row, out var index) ? (Roster[index], index) : null;
+    }
 
     public static readonly Toggle NoCooldowns = new(
         "player.villains.no_cooldowns", "NO COOLDOWNS",
