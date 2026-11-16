@@ -47,6 +47,12 @@ static partial class ArkhamKnight
     static float _nextStrike;
     static bool _strikeWas;
 
+    public static void Rest()
+    {
+        Villains.Rest(ref _nextStrike);
+        Villains.Rest(ref _nextCall);
+    }
+
     // Holding secondary fire shows where the strike will land, and letting go while still aiming
     // calls it.
     static void Strike(RPawnPlayer player)
@@ -55,7 +61,7 @@ static partial class ArkhamKnight
         _strikeWas = Aim.Secondary;
         if (released && World.Now >= _nextStrike && _markAt is { } at)
         {
-            _nextStrike = World.Now + StrikeEvery;
+            _nextStrike = World.Now + Villains.Wait(StrikeEvery);
             for (var i = 0; i < Shells; i++)
             {
                 var angle = Random.Shared.NextSingle() * MathF.Tau;

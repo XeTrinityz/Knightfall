@@ -115,7 +115,10 @@ static partial class Firefly
     static bool _secondaryWas;
     static float _nextFlameHit;
     static float _nextThrow;
+    static float _thrownAt = -10f;
     static float _nextLook;
+
+    public static void Rest() => Villains.Rest(ref _nextThrow);
 
     sealed class Alight
     {
@@ -232,7 +235,8 @@ static partial class Firefly
         if (!secondary && _secondaryWas && Aim.On && now >= _nextThrow)
         {
             Throw(player);
-            _nextThrow = now + ThrowWait;
+            _nextThrow = now + Villains.Wait(ThrowWait);
+            _thrownAt = now;
         }
 
         _secondaryWas = secondary;

@@ -16,8 +16,10 @@ namespace Knightfall;
 // much lands and plays his own reaction, so Batman's hidden one is held off. Walks is for one
 // who has no business in the Batmobile, so it can't be called or got into while they are on.
 // Steps is for one with footsteps of their own. It says whether it took the step, and its sound.
+// Rest ends every wait they have running, for when NO COOLDOWNS is turned on.
 sealed record Villain(Toggle Option, Catalog.Section[] Sections, Villain.Fitter? Fit = null, Action? BeforeCamera = null, Action? Keys = null,
-    Func<bool>? Marking = null, Action<float>? Marks = null, Func<RPawnPlayer, int, int>? Hit = null, bool Walks = false, Villain.Stepper? Steps = null)
+    Func<bool>? Marking = null, Action<float>? Marks = null, Func<RPawnPlayer, int, int>? Hit = null, bool Walks = false, Villain.Stepper? Steps = null,
+    Action? Rest = null)
 {
     public delegate void Fitter(ref View view, float deltaTime);
 
@@ -62,20 +64,60 @@ static class Villains
     // Made on first use, since each villain's own rows have to exist before it.
     static Villain[] Roster => _roster ??= new Villain[]
     {
-        new(Firefly.Option, Firefly.Sections, Firefly.AimView, Firefly.KeepAimFacing, Firefly.DefaultKeys, Firefly.Marking, Firefly.Marks),
-        new(RiddlerMech.Option, RiddlerMech.Sections, RiddlerMech.Fit, Keys: RiddlerMech.DefaultKeys, Marking: RiddlerMech.Marking, Marks: RiddlerMech.Marks),
-        new(MrFreeze.Option, MrFreeze.Sections, MrFreeze.AimView, MrFreeze.KeepAimFacing, Marking: MrFreeze.Marking, Marks: MrFreeze.Marks),
-        new(JokerVillain.Option, JokerVillain.Sections, JokerVillain.AimView, JokerVillain.KeepAimFacing, Marking: JokerVillain.Marking, Marks: JokerVillain.Marks),
-        new(PoisonIvy.Option, PoisonIvy.Sections, PoisonIvy.AimView, PoisonIvy.KeepAimFacing, Marking: PoisonIvy.Marking, Marks: PoisonIvy.Marks),
-        new(ArkhamKnight.Option, ArkhamKnight.Sections, ArkhamKnight.AimView, ArkhamKnight.KeepAimFacing, ArkhamKnight.DefaultKeys, ArkhamKnight.Marking, ArkhamKnight.Marks),
-        new(KillerCroc.Option, KillerCroc.Sections, KillerCroc.Fit, KillerCroc.KeepFacing, KillerCroc.DefaultKeys, Hit: KillerCroc.Hit, Walks: true, Steps: KillerCroc.Steps),
-        new(Scarecrow.Option, Scarecrow.Sections, BeforeCamera: Scarecrow.KeepFacing, Keys: Scarecrow.DefaultKeys, Walks: true, Steps: Scarecrow.Steps),
+        new(Firefly.Option, Firefly.Sections, Firefly.AimView, Firefly.KeepAimFacing, Firefly.DefaultKeys, Firefly.Marking, Firefly.Marks, Rest: Firefly.Rest),
+        new(RiddlerMech.Option, RiddlerMech.Sections, RiddlerMech.Fit, Keys: RiddlerMech.DefaultKeys, Marking: RiddlerMech.Marking, Marks: RiddlerMech.Marks,
+            Rest: RiddlerMech.Rest),
+        new(MrFreeze.Option, MrFreeze.Sections, MrFreeze.AimView, MrFreeze.KeepAimFacing, Marking: MrFreeze.Marking, Marks: MrFreeze.Marks, Rest: MrFreeze.Rest),
+        new(JokerVillain.Option, JokerVillain.Sections, JokerVillain.AimView, JokerVillain.KeepAimFacing, Marking: JokerVillain.Marking, Marks: JokerVillain.Marks,
+            Rest: JokerVillain.Rest),
+        new(PoisonIvy.Option, PoisonIvy.Sections, PoisonIvy.AimView, PoisonIvy.KeepAimFacing, Marking: PoisonIvy.Marking, Marks: PoisonIvy.Marks, Rest: PoisonIvy.Rest),
+        new(ArkhamKnight.Option, ArkhamKnight.Sections, ArkhamKnight.AimView, ArkhamKnight.KeepAimFacing, ArkhamKnight.DefaultKeys, ArkhamKnight.Marking, ArkhamKnight.Marks,
+            Rest: ArkhamKnight.Rest),
+        new(KillerCroc.Option, KillerCroc.Sections, KillerCroc.Fit, KillerCroc.KeepFacing, KillerCroc.DefaultKeys, Hit: KillerCroc.Hit, Walks: true, Steps: KillerCroc.Steps,
+            Rest: KillerCroc.Rest),
+        new(Scarecrow.Option, Scarecrow.Sections, BeforeCamera: Scarecrow.KeepFacing, Keys: Scarecrow.DefaultKeys, Walks: true, Steps: Scarecrow.Steps, Rest: Scarecrow.Rest),
         new(ManBat.Option, ManBat.Sections, ManBat.Fit, ManBat.KeepFacing, ManBat.DefaultKeys, ManBat.Marking, ManBat.Marks, ManBat.Hit, Walks: true,
-            Steps: ManBat.Steps),
+            Steps: ManBat.Steps, Rest: ManBat.Rest),
     };
 
-    // PLAYER > VILLAINS, each villain's rows under their own heading.
-    public static Catalog.Section[] Sections => Roster.SelectMany(villain => villain.Sections).ToArray();
+    public static readonly Toggle NoCooldowns = new(
+        "player.villains.no_cooldowns", "NO COOLDOWNS",
+        "Every villain's moves are ready again as soon as they are used. Mr. Freeze's coolant and Scarecrow's darts never run out. Guns still fire and reload at their own pace.")
+    {
+        Changed = Rested,
+    };
+
+    // PLAYER > VILLAINS, the rows every villain shares, then each villain's rows under their own
+    // heading.
+    public static Catalog.Section[] Sections => Roster.SelectMany(villain => villain.Sections).Prepend(new("ALL VILLAINS", NoCooldowns)).ToArray();
+
+    // How long a move waits before it can be used again.
+    public static float Wait(float seconds) => NoCooldowns.On ? 0f : seconds;
+
+    // A wait still running is over now. One held open while a move plays, like a broadcast on
+    // air, is left alone.
+    public static void Rest(ref float readyAt)
+    {
+        var now = World.Now;
+        if (readyAt > now && readyAt < float.MaxValue)
+        {
+            readyAt = now;
+        }
+    }
+
+    // Turning NO COOLDOWNS on ends the waits already running, so nothing is left counting down.
+    static void Rested()
+    {
+        if (!NoCooldowns.On)
+        {
+            return;
+        }
+
+        foreach (var villain in Roster)
+        {
+            villain.Rest?.Invoke();
+        }
+    }
 
     public static bool On
     {
@@ -416,6 +458,32 @@ static class Villains
         catch (Exception error)
         {
             Log.Error("villains.finished_combat", "The finished-fight move check failed", error);
+        }
+    }
+
+    // A car driven at Batman can be countered. He jumps onto its roof and plants a charge on it.
+    // That is his move, like landing on a drone from a glide, so while a villain is on no vehicle
+    // is picked for either. With none picked there is no counter icon or prompt, and the counter
+    // button does nothing to a car.
+    [Redirect(typeof(RPlayerController), nameof(RPlayerController.UpdateVehicleTakedownTarget))]
+    static void UpdateVehicleTakedownTarget(RPlayerController self)
+    {
+        try
+        {
+            if (!On)
+            {
+                self.UpdateVehicleTakedownTarget();
+                return;
+            }
+
+            if (self.CurrentVehicleTakedownTarget is not null)
+            {
+                self.CurrentVehicleTakedownTarget = null!;
+            }
+        }
+        catch (Exception error)
+        {
+            Log.Error("villains.car_counter", "The car counter check failed", error);
         }
     }
 

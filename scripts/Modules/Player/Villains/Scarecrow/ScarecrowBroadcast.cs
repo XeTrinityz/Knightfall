@@ -232,7 +232,7 @@ static partial class Scarecrow
 
         if (_feed is not null)
         {
-            _nextBroadcast = World.Now + BroadcastWait;
+            _nextBroadcast = World.Now + Villains.Wait(BroadcastWait);
         }
 
         _feed = null;

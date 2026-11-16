@@ -171,7 +171,7 @@ static partial class Firefly
         _mode = mode switch
         {
             _ when _flaming => "TORCHING",
-            _ when World.Now < _nextThrow - ThrowWait + ThrowShown => "GRENADE",
+            _ when World.Now - _thrownAt < ThrowShown && World.Now >= _thrownAt => "GRENADE",
             _ when Aiming => "AIMING",
             Mode.Flying => "FLYING",
             Mode.Hovering => "HOVER",

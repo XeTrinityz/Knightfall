@@ -75,6 +75,12 @@ static partial class PoisonIvy
     static bool _secondaryWas;
     static float _nextTrap;
 
+    public static void Rest()
+    {
+        Villains.Rest(ref _nextTrap);
+        Villains.Rest(ref _nextVine);
+    }
+
     // Hungry plants look for a meal this often, as it means looking through every thug.
     const float FeedEvery = 0.2f;
     static float _nextFeed;
@@ -125,7 +131,7 @@ static partial class PoisonIvy
             var turn = facing.LengthSquared() > 1e-4f ? Rotator.FromDirection(facing) : new Rotator(0f, 0f, 0f);
             if (player.Spawn(_trapClass, player, FName.None, at, turn, null!, true) is RThugEatingPlantBase { IsValid: true } plant)
             {
-                _nextTrap = now + TrapWait;
+                _nextTrap = now + Villains.Wait(TrapWait);
                 _castUntil = now + CastSeconds;
                 _plantedAt = now;
                 plant.SetDrawScale(SeedSize);

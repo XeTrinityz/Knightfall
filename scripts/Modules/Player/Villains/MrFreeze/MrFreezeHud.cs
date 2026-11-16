@@ -187,7 +187,7 @@ static partial class MrFreeze
     }
 
     // The ice spire shows as in use from its crack until a moment after it bursts.
-    static bool Spiring => _blastPending || World.Now < _nextBlast - BlastWait + BlastDelay + 0.6f;
+    static bool Spiring => _blastPending || World.Now < _blastWhen + 0.6f;
 
     // The coolant tube, a capsule filled to the coolant left. It bubbles while it refills and
     // its outline blinks amber while the suit vents.

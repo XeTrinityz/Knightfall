@@ -108,7 +108,11 @@ static partial class Scarecrow
     // As the dart leaves his wrist.
     static void Fire(RPawnPlayer player, SkeletalMeshComponent body)
     {
-        _darts = MathF.Max(0f, _darts - 1f);
+        if (!Villains.NoCooldowns.On)
+        {
+            _darts = MathF.Max(0f, _darts - 1f);
+        }
+
         _firedAt = World.Now;
         var from = body.MatchRefBone(Wrist) >= 0 ? body.GetBoneLocation(Wrist, 0)
             : body.MatchRefBone(RightHand) >= 0 ? body.GetBoneLocation(RightHand, 0) : player.Location;
@@ -144,6 +148,13 @@ static partial class Scarecrow
                 Panic(player, dart.Thug);
             }
         }
+    }
+
+    public static void Rest()
+    {
+        Villains.Rest(ref _nextToxin);
+        Villains.Rest(ref _nextBroadcast);
+        _darts = DartsMost;
     }
 
     static void Refill()

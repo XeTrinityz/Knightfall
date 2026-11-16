@@ -323,12 +323,12 @@ static partial class RiddlerMech
     {
         if (_move == Move.Fire)
         {
-            _nextBeam = World.Now + BeamWait;
+            _nextBeam = World.Now + Villains.Wait(BeamWait);
         }
 
         if (_move == Move.Surge)
         {
-            _nextSurge = World.Now + SurgeWait;
+            _nextSurge = World.Now + Villains.Wait(SurgeWait);
         }
 
         PutOutBeam();

@@ -181,7 +181,11 @@ static partial class MrFreeze
 
         if (Aim.Fire && !_venting && _coolant > 0f)
         {
-            _coolant = MathF.Max(0f, _coolant - delta / DrainSeconds);
+            if (!Villains.NoCooldowns.On)
+            {
+                _coolant = MathF.Max(0f, _coolant - delta / DrainSeconds);
+            }
+
             _refillAt = now + RefillDelay;
             if (_coolant <= 0f)
             {

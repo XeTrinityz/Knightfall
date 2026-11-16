@@ -55,6 +55,8 @@ static partial class ManBat
     static float _screechAt;
     static bool _shrieked;
 
+    public static void Rest() => Villains.Rest(ref _nextScreech);
+
     // How far his jaw has dropped, from 0 to 1.
     static float _shriek;
 
@@ -109,7 +111,7 @@ static partial class ManBat
 
         if (since >= ScreechSeconds || since < 0f)
         {
-            _nextScreech = World.Now + ScreechWait;
+            _nextScreech = World.Now + Villains.Wait(ScreechWait);
             Unact();
         }
     }

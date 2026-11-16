@@ -49,6 +49,12 @@ static partial class JokerVillain
     static bool _secondaryWas;
     static float _nextGas;
 
+    public static void Rest()
+    {
+        Villains.Rest(ref _nextGas);
+        Villains.Rest(ref _nextGoons);
+    }
+
     static SkeletalMeshComponent? _canister;
     static RPawnPlayer? _canisterOn;
     static Vector3 _flightFrom;
@@ -160,7 +166,7 @@ static partial class JokerVillain
             pool.SpawnEmitter(flash, barrel.From, Rotator.FromDirection(barrel.Way), 0, 1f);
         }
 
-        _nextGas = World.Now + GasEvery;
+        _nextGas = World.Now + Villains.Wait(GasEvery);
     }
 
     static void Launch(RPawnPlayer player, Vector3 from, Vector3 to)

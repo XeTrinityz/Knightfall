@@ -542,12 +542,12 @@ static partial class KillerCroc
 
         if (_move == Move.Charge)
         {
-            _nextCharge = World.Now + ChargeWait;
+            _nextCharge = World.Now + Villains.Wait(ChargeWait);
         }
 
         if (_move == Move.Roar)
         {
-            _nextRoar = World.Now + RoarWait;
+            _nextRoar = World.Now + Villains.Wait(RoarWait);
         }
 
         // A haul that never started leaves no stand-in to see the thug through.

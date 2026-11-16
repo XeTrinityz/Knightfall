@@ -77,7 +77,7 @@ static partial class JokerVillain
             Goons.Add(new Goon { Body = body, DressAt = World.Now + DressAfter });
         }
 
-        _nextGoons = World.Now + GoonsEvery;
+        _nextGoons = World.Now + Villains.Wait(GoonsEvery);
         Say("laugh", always: true);
         return Outcome.Done($"{made.Count} GOONS");
     }

@@ -79,7 +79,7 @@ static partial class ArkhamKnight
             return Outcome.Failed($"READY IN {(int)MathF.Ceiling(_nextCall - World.Now)} S");
         }
 
-        if (Bodyguards.Room < SquadSize)
+        if (Bodyguards.Room < SquadSize * (Rides.Count + 1))
         {
             return Outcome.Failed("TOO MANY BODYGUARDS");
         }
@@ -107,7 +107,7 @@ static partial class ArkhamKnight
 
         car.BehaviourDeactivateRange = Anywhere;
         Rides.Add(new Ride { Car = car, GiveUpAt = World.Now + DriveFor });
-        _nextCall = World.Now + CallEvery;
+        _nextCall = World.Now + Villains.Wait(CallEvery);
         return Outcome.Done("MILITIA ON THE WAY");
     }
 

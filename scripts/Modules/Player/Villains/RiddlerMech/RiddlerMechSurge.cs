@@ -41,6 +41,12 @@ static partial class RiddlerMech
 
     static float SurgeReady => Math.Clamp(1f - (_nextSurge - World.Now) / SurgeWait, 0f, 1f);
 
+    public static void Rest()
+    {
+        Villains.Rest(ref _nextSurge);
+        Villains.Rest(ref _nextBeam);
+    }
+
     // The slam, then the move that rises out of it.
     static void Surging(RPawnPlayer player, AnimNodeSequence played)
     {

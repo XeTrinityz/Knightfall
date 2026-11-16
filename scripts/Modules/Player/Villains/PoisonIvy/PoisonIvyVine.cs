@@ -274,7 +274,7 @@ static partial class PoisonIvy
         // Holding fire shows where the vine will go, and letting go while still aiming casts it.
         if (!fire && _fireWas && Aim.On && now >= _nextVine && _vineMesh is not null && _vineMoves is not null && Casting(player) is { } cast)
         {
-            _nextVine = now + VineWait;
+            _nextVine = now + Villains.Wait(VineWait);
             _castUntil = now + CastSeconds;
             switch (cast.Kind)
             {

@@ -51,7 +51,13 @@ static partial class MrFreeze
     static float _nextBlast;
     static bool _blastPending;
     static Vector3 _blastAt;
-    static float _blastWhen;
+    static float _blastWhen = -10f;
+
+    public static void Rest()
+    {
+        Villains.Rest(ref _nextBlast);
+        _coolant = 1f;
+    }
 
     // From nothing to full as the next blast gets ready, for the HUD.
     static float BlastReady => Math.Clamp(1f - (_nextBlast - World.Now) / BlastWait, 0f, 1f);
@@ -76,7 +82,7 @@ static partial class MrFreeze
         // aiming bursts it.
         if (!secondary && _secondaryWas && Aim.On && !_blastPending && now >= _nextBlast && Aim.Ground(player, BlastReach, out var at))
         {
-            _nextBlast = now + BlastWait;
+            _nextBlast = now + Villains.Wait(BlastWait);
             _blastPending = true;
             _blastAt = at;
             _blastWhen = now + BlastDelay;
@@ -187,6 +193,7 @@ static partial class MrFreeze
     static void StopBlast()
     {
         _blastPending = false;
+        _blastWhen = -10f;
         _secondaryWas = false;
     }
 

@@ -22,6 +22,12 @@ static partial class KillerCroc
     static float _roarAt;
     static bool _roared;
 
+    public static void Rest()
+    {
+        Villains.Rest(ref _nextRoar);
+        Villains.Rest(ref _nextCharge);
+    }
+
     static Outcome Roar()
     {
         if (!Option.On || _body is not { IsValid: true } || World.Player is not { IsValid: true } player || World.Controller is not { } controller)

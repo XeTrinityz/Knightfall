@@ -386,7 +386,7 @@ static partial class Scarecrow
     {
         if (_move == Move.Toxin)
         {
-            _nextToxin = World.Now + ToxinWait;
+            _nextToxin = World.Now + Villains.Wait(ToxinWait);
         }
 
         _move = Move.None;
