@@ -122,6 +122,15 @@ static class Layout
 
         Catalog.Background("sounds.game_sounds", GameSounds.Tick, GameSounds.Release);
 
+        Catalog.AddPage("ASSETS")
+            .Add("TEXTURES", Textures.Sections)
+            .Add("FONTS", Fonts.Sections);
+
+        Catalog.Background("assets.textures", Textures.Tick);
+        Catalog.Background("assets.fonts", Fonts.Tick);
+        Catalog.Background("assets.viewer", Viewer.Tick, Viewer.Release);
+        Menu.Beside = Viewer.Beside;
+
         // Before SETTINGS, whose CONTROLS tab lists every option that has a key.
         DefaultKeys();
 

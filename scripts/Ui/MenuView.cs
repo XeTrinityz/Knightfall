@@ -89,3 +89,21 @@ sealed class ModalView
 
     public IReadOnlyList<GuideLine> Hints = Array.Empty<GuideLine>();
 }
+
+// A screen that takes the menu's place and keys while it's up. Back takes it down again.
+abstract class Overlay
+{
+    // Every frame it's up, in place of the menu's own keys.
+    public abstract void Keys();
+
+    public abstract void Render(MenuView view);
+
+    public virtual void Shown()
+    {
+    }
+
+    // Once when it goes, however it goes.
+    public virtual void Gone()
+    {
+    }
+}

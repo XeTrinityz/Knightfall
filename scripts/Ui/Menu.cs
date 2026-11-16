@@ -86,10 +86,15 @@ static class Menu
             }
             else if (_wanted && Controls.Pressed(Act.Back))
             {
-                // Back answers a question no, and leaves the menu open.
+                // Back answers a question no, and leaves the menu open. A cover goes back to the
+                // menu under it.
                 if (Asking)
                 {
                     Answer(false);
+                }
+                else if (Covering is not null)
+                {
+                    Uncover();
                 }
                 else
                 {
@@ -122,6 +127,7 @@ static class Menu
                 }
 
                 View.Modal = null;
+                Uncover();
             }
         }
 
@@ -160,6 +166,19 @@ static class Menu
 
         try
         {
+            // A cover is always on the screen, wherever the menu would be.
+            if (Covering is { } cover)
+            {
+                Theme.NoMenu();
+                cover.Render(View);
+                if (View.Modal is { } over)
+                {
+                    Theme.Current.RenderModal(View, over);
+                }
+
+                return;
+            }
+
             // A menu that closes on the wrist fades out there, even once the arm is on its way down.
             if (Gauntlet.Hosting || (View.Closing && _onWrist))
             {
@@ -189,6 +208,7 @@ static class Menu
             _onWrist = false;
             Theme.BeginMenu();
             Theme.Current.Render(View);
+            Beside?.Invoke(View);
             if (View.Modal is { } modal)
             {
                 Theme.Current.RenderModal(View, modal);
@@ -249,6 +269,12 @@ static class Menu
         if (View.Modal is not null)
         {
             Choose();
+            return;
+        }
+
+        if (Covering is { } cover)
+        {
+            cover.Keys();
             return;
         }
 
@@ -378,6 +404,35 @@ static class Menu
     }
 
     public static void Close() => Want(false);
+
+    // Drawn after the menu on the screen, for a panel that sits beside it like the asset viewer.
+    public static Action<MenuView>? Beside;
+
+    // A screen over the menu that takes its keys while it's up, like the asset light table.
+    public static Overlay? Covering { get; private set; }
+
+    // Puts a cover up. The menu opens for it if it was shut.
+    public static void Lift(Overlay cover)
+    {
+        if (!ReferenceEquals(Covering, cover))
+        {
+            Uncover();
+            Covering = cover;
+            cover.Shown();
+        }
+
+        if (!_wanted)
+        {
+            Want(true);
+        }
+    }
+
+    public static void Uncover()
+    {
+        var cover = Covering;
+        Covering = null;
+        cover?.Gone();
+    }
 
     static bool Asking => View.Modal is { Leaving: false };
 

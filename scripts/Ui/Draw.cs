@@ -63,6 +63,9 @@ static class Draw
 
     public static float Scale { get; private set; } = 1f;
 
+    // How much the current place scales what is drawn.
+    public static float Zoom => _zoom;
+
     // Drawing has begun and not ended yet.
     public static bool Busy => _canvas is not null;
 
@@ -314,6 +317,89 @@ static class Draw
 
         _canvas.SetPos(left, top, 0f);
         _canvas.DrawTile(texture, right - left, bottom - top, u, v, ul, vl, tint, false, EngineTypes.EBlendMode.BLEND_Additive);
+    }
+
+    // Part of a texture as it is, see-through where its alpha says. Solid leaves the alpha out and
+    // fills the whole box with its colour. u, v, ul and vl are in the texture's own pixels.
+    public static void Image(Texture texture, float x, float y, float width, float height, float u, float v, float ul, float vl, Rgba color, bool solid = false)
+    {
+        if (_canvas is null || !texture.IsValid)
+        {
+            return;
+        }
+
+        var left = PixelX(x);
+        var top = PixelY(y);
+        var right = PixelX(x + width);
+        var bottom = PixelY(y + height);
+        if (right <= left || bottom <= top)
+        {
+            return;
+        }
+
+        // A solid tile can't fade, so it waits until whatever it's on has faded in.
+        if (solid && _fade < 0.99f)
+        {
+            return;
+        }
+
+        var tint = new GameObject.FLinearColor
+        {
+            R = Linear(color.R),
+            G = Linear(color.G),
+            B = Linear(color.B),
+            A = _fade * color.A / 255f,
+        };
+
+        _canvas.SetPos(left, top, 0f);
+        _canvas.DrawTile(texture, right - left, bottom - top, u, v, ul, vl, tint, false,
+            solid ? EngineTypes.EBlendMode.BLEND_Opaque : EngineTypes.EBlendMode.BLEND_Translucent);
+    }
+
+    // A line in another font, at that font's own pixel size times scale, to show what the font
+    // looks like. The menu's font is put back after.
+    public static void Sample(Font font, string text, float x, float y, float scale, Rgba color)
+    {
+        if (_canvas is null || !font.IsValid || text.Length == 0)
+        {
+            return;
+        }
+
+        var own = _canvas.Font;
+        try
+        {
+            _canvas.Font = font;
+            Canvas.FFontRenderInfo info = default;
+            var pixels = MathF.Max(0.05f, scale * _zoom * Scale);
+            _canvas.SetPos(PixelX(x), PixelY(y), 0f);
+            _canvas.SetDrawColor(color.R, color.G, color.B, Alpha(color));
+            _canvas.DrawText(text, false, pixels, pixels, out info);
+        }
+        finally
+        {
+            _canvas.Font = own;
+        }
+    }
+
+    // How wide and tall some text is in that font, in its own pixels.
+    public static (float Width, float Height) SampleSize(Font font, string text)
+    {
+        if (_canvas is null || !font.IsValid)
+        {
+            return (0f, 0f);
+        }
+
+        var own = _canvas.Font;
+        try
+        {
+            _canvas.Font = font;
+            _canvas.TextSize(text, out var width, out var height, 1f, 1f);
+            return (width, height);
+        }
+        finally
+        {
+            _canvas.Font = own;
+        }
     }
 
     // The game turns draw colours into linear light this way, so a tile tinted with the same
