@@ -43,9 +43,10 @@ static partial class Scarecrow
         Block = Locked,
     };
 
-    // Everything he needs ships with the game. One already on is let run, so it can still be
-    // turned off.
-    static string? Locked() => Installed || Option.On ? null : "GAME FILES MISSING";
+    // Everything he needs ships with the game.
+    static string? Locked() => Villains.Lock(Option, Installed, "GAME FILES MISSING", Needs);
+
+    static readonly string[] Needs = { MovesPackage, LookPackage };
 
     public static readonly Command NeedleKey = new(
         "player.villains.scarecrow_needle", "NEEDLE",
@@ -118,7 +119,7 @@ static partial class Scarecrow
         Dress();
         if (!Load())
         {
-            Option.Reset();
+            Villains.LoadFailed(Option, Needs);
             return;
         }
 

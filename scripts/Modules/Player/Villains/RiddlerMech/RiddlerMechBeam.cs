@@ -73,9 +73,6 @@ static partial class RiddlerMech
     static bool _falling;
     static float _fallTop;
 
-    static bool BeamLoaded() =>
-        Game.FindObject<ParticleSystem>(BeamPath) is { IsValid: true } && Game.FindObject<ParticleSystem>(GlowPath) is { IsValid: true };
-
     static void LoadBeam()
     {
         _beamLook = Kept(Game.FindObject<ParticleSystem>(BeamPath));

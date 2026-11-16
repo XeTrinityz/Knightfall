@@ -117,8 +117,9 @@ static partial class KillerCroc
 
         _loadTried = true;
         var actors = Find();
-        if (actors.Count == 0 && LoadPackage(LookPackage))
+        if (actors.Count == 0)
         {
+            LoadPackage(LookPackage, Packages.World(LookPackage));
             actors = Find();
         }
 
@@ -154,11 +155,7 @@ static partial class KillerCroc
 
         // Anything not kept from it before is gone again, so the level is loaded whenever any
         // part of it is missing.
-        if (Game.FindObject<AnimSet>(MovesPath) is not { IsValid: true } || Game.FindObject<AnimSet>(ThugMovesPath) is not { IsValid: true }
-            || Game.FindObject<AkEvent>(LightStepPath) is not { IsValid: true })
-        {
-            LoadPackage(FightPackage);
-        }
+        LoadPackage(FightPackage, MovesPath, ThugMovesPath, LightStepPath);
 
         _moves = Kept(Game.FindObject<AnimSet>(MovesPath));
         _thugMoves = Kept(Game.FindObject<AnimSet>(ThugMovesPath));
@@ -197,8 +194,8 @@ static partial class KillerCroc
         return FName.None;
     }
 
-    static bool LoadPackage(string package) =>
-        Packages.TryLoad(package, $"{package} for Killer Croc", "killer_croc.load");
+    static bool LoadPackage(string package, params string[] wanted) =>
+        Packages.TryLoad(package, $"{package} for Killer Croc", "killer_croc.load", wanted);
 
     static bool IsBody(SkeletalMeshComponent source) =>
         source.SkeletalMesh is { IsValid: true } mesh && mesh.GetPathName().Equals(BodyPath, StringComparison.OrdinalIgnoreCase);

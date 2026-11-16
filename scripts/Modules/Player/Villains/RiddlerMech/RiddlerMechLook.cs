@@ -114,8 +114,9 @@ static partial class RiddlerMech
 
         _loadTried = true;
         var actors = Find();
-        if (actors.Count == 0 && LoadPackage(LookPackage))
+        if (actors.Count == 0)
         {
+            LoadPackage(LookPackage, Packages.World(LookPackage));
             actors = Find();
         }
 
@@ -160,10 +161,7 @@ static partial class RiddlerMech
 
         // Anything not kept from it before is gone again, so the level is loaded whenever any
         // part of it is missing.
-        if (Game.FindObject<AnimSet>(PilotMovesPath) is not { IsValid: true } || !BeamLoaded())
-        {
-            LoadPackage(FightPackage);
-        }
+        LoadPackage(FightPackage, PilotMovesPath, BeamPath, GlowPath);
 
         _pilotMoves = Kept(Game.FindObject<AnimSet>(PilotMovesPath));
         LoadBeam();
@@ -176,8 +174,8 @@ static partial class RiddlerMech
         return true;
     }
 
-    static bool LoadPackage(string package) =>
-        Packages.TryLoad(package, $"{package} for the Riddler mech", "riddler_mech.load");
+    static bool LoadPackage(string package, params string[] wanted) =>
+        Packages.TryLoad(package, $"{package} for the Riddler mech", "riddler_mech.load", wanted);
 
     static bool IsMech(SkeletalMeshComponent source) =>
         source.SkeletalMesh is { IsValid: true } mesh && mesh.GetPathName().Equals(MechMeshPath, StringComparison.OrdinalIgnoreCase);

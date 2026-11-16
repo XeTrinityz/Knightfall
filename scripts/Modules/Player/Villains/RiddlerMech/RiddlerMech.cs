@@ -32,7 +32,11 @@ static partial class RiddlerMech
     {
         Tick = Keep,
         Restore = Stop,
+        Block = static () => Villains.Lock(Option, true, "", Needs),
     };
+
+    // Its showcase ships with the game. Riddler's own moves in the mech are a plus.
+    static readonly string[] Needs = { LookPackage };
 
     public static readonly Slider CameraBack = new(
         "player.villains.riddler_mech_camera_back", "CAMERA DISTANCE",
@@ -124,7 +128,7 @@ static partial class RiddlerMech
 
         if (!Load())
         {
-            Option.Reset();
+            Villains.LoadFailed(Option, Needs);
             return;
         }
 

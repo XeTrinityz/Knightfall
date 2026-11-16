@@ -289,7 +289,7 @@ SETTINGS > GAME
 
 ## Install
 
-1. Install [BmSDK-AK v0.24.0](https://github.com/XeTrinityz/BmSDK-AK/releases/tag/v0.24.0) or newer. Run its installer, or copy the `Binaries` and `BmGame` folders from its zip into your game folder. Older BmSDK builds don't run Knightfall.
+1. Install [BmSDK-AK v0.25.0](https://github.com/XeTrinityz/BmSDK-AK/releases/tag/v0.25.0) or newer. Run its installer, or copy the `Binaries` and `BmGame` folders from its zip into your game folder. Older BmSDK builds don't run Knightfall.
 2. Put the `Knightfall` folder from the zip in `BmGame/Mods`, so you end up with `BmGame/Mods/Knightfall/Knightfall.dll`. When you update, copy it over the old one. Your settings stay. You can delete an old `scripts` folder in there. It isn't used any more.
 
 The folder only holds `Knightfall.dll` and `mod.toml`. Everything the mod writes goes in `Knightfall/data`. Files from older versions are moved there on the first start.

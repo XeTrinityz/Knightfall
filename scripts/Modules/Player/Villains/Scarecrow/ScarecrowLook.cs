@@ -111,17 +111,10 @@ static partial class Scarecrow
         }
 
         _loadTried = true;
-        if (Game.FindObject<AnimSet>(MovesPath) is not { IsValid: true } || Game.FindObject<AkEvent>(StabPath) is not { IsValid: true })
-        {
-            LoadPackage(MovesPackage);
-        }
+        LoadPackage(MovesPackage, MovesPath, StabPath);
 
         // The dart is a plus. Without it the rest of him still works and the dart locks.
-        if (Game.FindObject<AnimSet>(WristPath) is not { IsValid: true } || Game.FindObject<ParticleSystem>(PuffPath) is not { IsValid: true }
-            || Game.FindObject<AkEvent>(DartFirePath) is not { IsValid: true })
-        {
-            LoadPackage(DartPackage);
-        }
+        LoadPackage(DartPackage, WristPath, PuffPath, DartFirePath);
 
         _moves = Kept(Game.FindObject<AnimSet>(MovesPath));
         _wrist = Kept(Game.FindObject<AnimSet>(WristPath));
@@ -156,8 +149,8 @@ static partial class Scarecrow
         return true;
     }
 
-    static bool LoadPackage(string package) =>
-        Packages.TryLoad(package, $"{package} for the Scarecrow", "scarecrow.load");
+    static bool LoadPackage(string package, params string[] wanted) =>
+        Packages.TryLoad(package, $"{package} for the Scarecrow", "scarecrow.load", wanted);
 
     static T? Kept<T>(T? thing)
         where T : GameObject => Borrowed.KeepFound(thing, Lender);

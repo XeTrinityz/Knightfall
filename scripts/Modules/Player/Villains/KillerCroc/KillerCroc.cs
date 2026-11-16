@@ -43,9 +43,10 @@ static partial class KillerCroc
         Preference = true,
     };
 
-    // His body and moves are in the Season of Infamy pack. One already on is let run, so it can
-    // still be turned off.
-    static string? Locked() => Installed || Option.On ? null : "NEEDS SEASON OF INFAMY";
+    // His body and moves are in the Season of Infamy pack.
+    static string? Locked() => Villains.Lock(Option, Installed, "NEEDS SEASON OF INFAMY", Needs);
+
+    static readonly string[] Needs = { LookPackage, FightPackage };
 
     public static readonly Command SwipeKey = new(
         "player.villains.killer_croc_swipe", "SWIPE",
@@ -129,7 +130,7 @@ static partial class KillerCroc
 
         if (!Load())
         {
-            Option.Reset();
+            Villains.LoadFailed(Option, Needs);
             return;
         }
 

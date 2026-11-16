@@ -58,6 +58,48 @@ static class Villains
     static readonly Held<RPawnPlayerCombat, FName> BarkName = new("villain bark name", pawn => pawn.CharacterNameFlag, (pawn, name) => pawn.CharacterNameFlag = name);
     static readonly Held<RPawnPlayerCombat, FName> BarkGender = new("villain bark gender", pawn => pawn.CharacterGender, (pawn, gender) => pawn.CharacterGender = gender);
 
+    // Villains whose packages loaded without what they need. Trying again won't change that.
+    static readonly HashSet<Toggle> Unloadable = new();
+
+    // The lock for a villain who loads packages of his own. One already on is let run, so it can
+    // still be turned off.
+    public static string? Lock(Toggle option, bool installed, string notInstalled, IReadOnlyList<string> packages)
+    {
+        if (option.On)
+        {
+            return null;
+        }
+
+        if (!installed)
+        {
+            return notInstalled;
+        }
+
+        if (Unloadable.Contains(option))
+        {
+            return CantLoad;
+        }
+
+        return Packages.HasRoom(packages) ? null : NoRoom;
+    }
+
+    // A villain whose packages couldn't be had switches back off and says why.
+    public static void LoadFailed(Toggle option, IReadOnlyList<string> packages)
+    {
+        var why = NoRoom;
+        if (Packages.HasRoom(packages))
+        {
+            Unloadable.Add(option);
+            why = CantLoad;
+        }
+
+        Toasts.Show(option.Plain, why, OutcomeKind.Failed, option, always: true);
+        option.Reset();
+    }
+
+    const string NoRoom = "NO ROOM HERE";
+    const string CantLoad = "CAN'T LOAD";
+
     static Villain[]? _roster;
 
     // Every villain, in the order the tab lists them. A new one is added here and nowhere else.

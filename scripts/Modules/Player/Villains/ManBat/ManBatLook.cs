@@ -127,8 +127,9 @@ static partial class ManBat
 
         _loadTried = true;
         var actors = Find();
-        if (actors.Count == 0 && LoadPackage(LookPackage))
+        if (actors.Count == 0)
         {
+            LoadPackage(LookPackage, Packages.World(LookPackage));
             actors = Find();
         }
 
@@ -168,15 +169,10 @@ static partial class ManBat
 
         // The city may have these levels in already. Anything not kept from them before is gone
         // again, so each is loaded whenever what it holds is missing.
-        if (Game.FindObject<AnimSet>(MovesPath) is not { IsValid: true } || Game.FindObject<AkEvent>(SquealPath) is not { IsValid: true }
-            || Game.FindObject<AkEvent>(ImpactPath) is not { IsValid: true })
+        LoadPackage(FlightPackage, MovesPath, SquealPath, ImpactPath);
+        if (GameFiles.HasPackage(AttackPackage))
         {
-            LoadPackage(FlightPackage);
-        }
-
-        if (Game.FindObject<AnimSet>(AttackPath) is not { IsValid: true } && GameFiles.HasPackage(AttackPackage))
-        {
-            LoadPackage(AttackPackage);
+            LoadPackage(AttackPackage, AttackPath);
         }
 
         _moves = Kept(Game.FindObject<AnimSet>(MovesPath));
@@ -201,8 +197,8 @@ static partial class ManBat
         return true;
     }
 
-    static bool LoadPackage(string package) =>
-        Packages.TryLoad(package, $"{package} for Man-Bat", "man_bat.load");
+    static bool LoadPackage(string package, params string[] wanted) =>
+        Packages.TryLoad(package, $"{package} for Man-Bat", "man_bat.load", wanted);
 
     static List<RCinematicActor> Find()
     {

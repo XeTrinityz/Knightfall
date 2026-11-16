@@ -40,9 +40,10 @@ static partial class ManBat
         Preference = true,
     };
 
-    // His body and flight ship with the game. One already on is let run, so it can still be
-    // turned off.
-    static string? Locked() => Installed || Option.On ? null : "GAME FILES MISSING";
+    // His body and flight ship with the game.
+    static string? Locked() => Villains.Lock(Option, Installed, "GAME FILES MISSING", Needs);
+
+    static readonly string[] Needs = { LookPackage, FlightPackage };
 
     public static readonly Command SwoopKey = new(
         "player.villains.man_bat_swoop", "SWOOP",
@@ -116,7 +117,7 @@ static partial class ManBat
 
         if (!Load())
         {
-            Option.Reset();
+            Villains.LoadFailed(Option, Needs);
             return;
         }
 
