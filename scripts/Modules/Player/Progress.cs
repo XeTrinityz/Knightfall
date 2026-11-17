@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using BmSDK;
 using BmSDK.BmGame;
 using BmSDK.Engine;
@@ -69,28 +70,27 @@ static class Progress
         Block = static () => PlayerLocks.InChallenge(),
     };
 
-    // The game's own character ids for challenges. People play the on-foot challenges and the
-    // Batmobile skins play the Batmobile ones, and every challenge counts three medals for each.
-    // The AR challenges out in the city are scored for the game's default character instead.
-    static readonly (string Id, string Label, int[] Ids)[] MedalWho =
+    // Picks by the names the challenge rosters use. No names is everyone. CITY AR CHALLENGES is
+    // the default slot on the maps placed in the city.
+    static readonly (string Id, string Label, string[] Names)[] MedalWho =
     {
-        ("all", "EVERYONE", Array.Empty<int>()),
-        ("city", "CITY AR CHALLENGES", new[] { City }),
-        ("batman", "BATMAN", new[] { 10 }),
-        ("robin", "ROBIN", new[] { 11 }),
-        ("nightwing", "NIGHTWING", new[] { 12 }),
-        ("azrael", "AZRAEL", new[] { 13 }),
-        ("catwoman", "CATWOMAN", new[] { 14 }),
-        ("harley", "HARLEY QUINN", new[] { 50 }),
-        ("redhood", "RED HOOD", new[] { 51 }),
-        ("batgirl", "BATGIRL", new[] { 52 }),
-        ("cars", "BATMOBILES", new[] { 100, 101, 102, 103, 104, 105, 110 }),
+        ("all", "EVERYONE", Array.Empty<string>()),
+        ("city", "CITY AR CHALLENGES", Array.Empty<string>()),
+        ("batman", "BATMAN", new[] { "Batman" }),
+        ("robin", "ROBIN", new[] { "Robin" }),
+        ("nightwing", "NIGHTWING", new[] { "Nightwing" }),
+        ("azrael", "AZRAEL", new[] { "Azrael" }),
+        ("catwoman", "CATWOMAN", new[] { "Catwoman" }),
+        ("harley", "HARLEY QUINN", new[] { "DLCHarleyQuinn" }),
+        ("redhood", "RED HOOD", new[] { "DLCRedhood" }),
+        ("batgirl", "BATGIRL", new[] { "DLCBatgirl" }),
+        ("cars", "BATMOBILES", new[] { "Batmobile", "BatmobileBurton", "BatmobileClassic", "BatmobileSnyder", "BatmobileTumbler", "BatmobileAsylum" }),
     };
 
-    const int City = 0;
+    const int CityPick = 1;
 
-    static readonly int[] People = { 10, 11, 12, 13, 14, 50, 51, 52 };
-    static readonly int[] Cars = { 100, 101, 102, 103, 104, 105, 110 };
+    // The challenge menu shows times in hundredths of a second.
+    const int Second = 100;
 
     public static readonly Choice MedalsFor = new(
         "player.progress.medals_for", "MEDALS FOR",
@@ -102,7 +102,7 @@ static class Progress
 
     public static readonly Command ChallengeMedals = new(
         "player.progress.challenge_medals", "GET ALL CHALLENGE MEDALS",
-        "Gives three medals on every challenge to whoever is picked in MEDALS FOR, so they show as done, and clears the orange new marks on them. Scores stay as they are. Kept in your save. This can't be undone.",
+        "Gives three medals on every challenge to whoever is picked in MEDALS FOR, so they show as done, and clears the orange new marks on them. A score short of three medals is raised to the three medal mark. Better scores stay. Kept in your save. This can't be undone.",
         GiveMedals)
     {
         Block = static () => PlayerLocks.InChallenge(),
@@ -245,8 +245,8 @@ static class Progress
         return Outcome.Done();
     }
 
-    // The game's own debug call sets the medals, the way its cheat does. Only challenge maps the
-    // save has open, and only the pairs of map and character that are short of three.
+    // The game's own debug calls set the medals and scores, the way its cheats do. Only challenge
+    // maps the save has open, and only the entries short of three medals or of the score for them.
     static Outcome GiveMedals()
     {
         if (Story(out var refusal) is not { } game)
@@ -259,8 +259,16 @@ static class Progress
             return Outcome.Failed("NO SAVE DATA");
         }
 
-        var who = MedalWho[MedalsFor.Index].Ids;
-        var wanted = new List<(int Challenge, int Character)>();
+        var ids = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var table = game.ChallengeCharacterIds;
+        for (var i = 0; i < table.Count; i++)
+        {
+            ids.TryAdd(table[i].Name.ToString(), table[i].Id);
+        }
+
+        var who = MedalWho[MedalsFor.Index].Names;
+        var cityOnly = MedalsFor.Index == CityPick;
+        var wanted = new List<(int Challenge, int Slot, bool Medals, int? Score)>();
         var fresh = new List<int>();
         var maps = game.ChallengeMapList;
         for (var i = 0; i < maps.Count; i++)
@@ -283,14 +291,27 @@ static class Progress
                 continue;
             }
 
-            // Only the maps placed in the city have a city entry. The rest are menu only.
             var inCity = map.ChallengeFrontendState.ToString().EndsWith("_Default", StringComparison.Ordinal);
-            var cars = group.Contains("Batmobile", StringComparison.Ordinal);
-            foreach (var character in (cars ? Cars : People).Concat(inCity ? new[] { City } : Array.Empty<int>()))
+            if (cityOnly && !inCity)
             {
-                if ((who.Length == 0 || Array.IndexOf(who, character) >= 0) && options.GetChallengeMedals(map.Id, character) < 3)
+                continue;
+            }
+
+            var cars = group.Contains("Batmobile", StringComparison.Ordinal);
+            foreach (var (slot, name) in Roster(map.Id, cars, ids))
+            {
+                if (cityOnly ? slot != 0 : who.Length > 0 && Array.IndexOf(who, name) < 0)
                 {
-                    wanted.Add((map.Id, character));
+                    continue;
+                }
+
+                var medals = options.GetChallengeMedals(map.Id, slot) < 3;
+                var score = Bar(map.Id, name, map.ChallengeRankMode) is { } bar
+                    ? Raised(options.GetChallengeScore(map.Id, slot), bar, map.ChallengeRankMode)
+                    : null;
+                if (medals || score is not null)
+                {
+                    wanted.Add((map.Id, slot, medals, score));
                 }
             }
         }
@@ -312,8 +333,10 @@ static class Progress
             return Outcome.Unchanged(fresh.Count == 0 ? "ALL HAVE 3 MEDALS" : $"{fresh.Count} MARKS CLEARED");
         }
 
+        var medalCount = wanted.Count(entry => entry.Medals);
+        var scoreCount = wanted.Count(entry => entry.Score is not null);
         var ask = new Confirmation("CAN'T UNDO", "GET ALL CHALLENGE MEDALS",
-            $"Gives three medals for {MedalWho[MedalsFor.Index].Label} on {wanted.Count} challenge {(wanted.Count == 1 ? "entry" : "entries")} in your save. Scores stay as they are.",
+            $"Gives three medals for {MedalWho[MedalsFor.Index].Label} on {medalCount} challenge {(medalCount == 1 ? "entry" : "entries")} and raises {scoreCount} {(scoreCount == 1 ? "score" : "scores")} to the three medal mark in your save. Better scores stay.",
             "GIVE", "CANCEL");
         if (!Confirm.Asked(ChallengeMedals, ask))
         {
@@ -321,14 +344,96 @@ static class Progress
         }
 
         var cheats = Game.GetCheatManager();
-        foreach (var (challenge, character) in wanted)
+        foreach (var (challenge, slot, medals, score) in wanted)
         {
-            cheats.ChallengeSetMedals(challenge, 3, character);
+            if (medals)
+            {
+                cheats.ChallengeSetMedals(challenge, 3, slot);
+            }
+
+            if (score is { } value)
+            {
+                cheats.ChallengeSetScore(challenge, value, slot);
+            }
         }
 
         Seen();
-        Log.Info($"Challenge medals: three on {wanted.Count} entries for {MedalWho[MedalsFor.Index].Label}.");
-        return Outcome.Done($"{wanted.Count} GIVEN");
+        Log.Info($"Challenge medals: three on {medalCount} entries and {scoreCount} scores raised for {MedalWho[MedalsFor.Index].Label}.");
+        return Outcome.Done($"{wanted.Count} SET");
+    }
+
+    // Who can play a challenge, as its menu lists them. The starred one is the challenge's own
+    // character, which the save files under 0. Team and story challenges have no list, so only
+    // their own character plays them.
+    static List<(int Slot, string Name)> Roster(int challenge, bool cars, Dictionary<string, int> ids)
+    {
+        var roster = new List<(int Slot, string Name)>();
+        var own = cars ? "Batmobile" : "Batman";
+        var names = Details($"{challenge}_Characters")?.Split('|');
+        if (names is { Length: > 1 })
+        {
+            foreach (var entry in names)
+            {
+                var name = entry.Trim();
+                if (name.StartsWith('*'))
+                {
+                    own = name[1..];
+                }
+                else if (ids.TryGetValue(name, out var id) && id > 0)
+                {
+                    roster.Add((id, name));
+                }
+            }
+        }
+
+        roster.Insert(0, (0, own));
+        return roster;
+    }
+
+    // The three medal mark from the challenge's own goal text. Times come out in hundredths.
+    // Goals that are tasks rather than a number give none.
+    static int? Bar(int challenge, string name, RGameInfo.EChallengeRankMode rank)
+    {
+        var goal = Details($"{challenge}_Goal_3_{name.ToUpperInvariant()}") ?? Details($"{challenge}_Goal_3");
+        if (goal is null)
+        {
+            return null;
+        }
+
+        if (rank is RGameInfo.EChallengeRankMode.ECRM_ShortestTime or RGameInfo.EChallengeRankMode.ECRM_LongestTime)
+        {
+            var times = Regex.Matches(goal, @"(\d+):(\d{2})");
+            if (times.Count == 0)
+            {
+                return null;
+            }
+
+            var time = times[^1];
+            return (int.Parse(time.Groups[1].Value) * 60 + int.Parse(time.Groups[2].Value)) * Second;
+        }
+
+        if (rank == RGameInfo.EChallengeRankMode.ECRM_HighScore)
+        {
+            var points = Regex.Match(goal, @"(?:\bscore\s+|\bx|\$)([\d,]+)", RegexOptions.IgnoreCase);
+            return points.Success ? int.Parse(points.Groups[1].Value.Replace(",", "")) : null;
+        }
+
+        return null;
+    }
+
+    // The score to save, or null when the one there already earns three medals. A time goal
+    // is beaten by a second.
+    static int? Raised(int score, int bar, RGameInfo.EChallengeRankMode rank) => rank switch
+    {
+        RGameInfo.EChallengeRankMode.ECRM_ShortestTime => score > 0 && score < bar ? null : bar - Second,
+        RGameInfo.EChallengeRankMode.ECRM_LongestTime => score > bar ? null : bar + Second,
+        _ => score >= bar ? null : bar,
+    };
+
+    static string? Details(string key)
+    {
+        var text = GameObject.Localize("Details", key, "ARChallenges").ToString()?.Trim();
+        return string.IsNullOrEmpty(text) || text.StartsWith('?') ? null : text;
     }
 
     static Outcome UnlockAchievements()
