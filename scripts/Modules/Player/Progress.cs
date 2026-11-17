@@ -69,6 +69,14 @@ static class Progress
         Block = static () => PlayerLocks.InChallenge(),
     };
 
+    public static readonly Command ChallengeMedals = new(
+        "player.progress.challenge_medals", "GET ALL CHALLENGE MEDALS",
+        "Gives three medals on every challenge map you have unlocked, for each character you have played it with. Kept in your save. This can't be undone.",
+        GiveMedals)
+    {
+        Block = static () => PlayerLocks.InChallenge(),
+    };
+
     public static readonly Command Achievements = new(
         "player.progress.achievements", "UNLOCK ALL ACHIEVEMENTS",
         "Unlocks every achievement on your Steam account, story pack ones included, skipping the ones you have. This can't be undone.",
@@ -82,7 +90,7 @@ static class Progress
     public static readonly Catalog.Section[] Sections =
     {
         new("POINTS", AddPoints, AddExperience, ExperienceScale, AllUpgrades),
-        new("UNLOCKS", RiddlerItems, AllExtras, Achievements),
+        new("UNLOCKS", RiddlerItems, AllExtras, ChallengeMedals, Achievements),
         new("SAVE", SaveNow),
     };
 
@@ -204,6 +212,74 @@ static class Progress
 
         Game.GetCheatManager().UnlockAll();
         return Outcome.Done();
+    }
+
+    // The game's own debug call sets the medals, the way its cheat does. A challenge never played
+    // gets them for the character it starts with.
+    static Outcome GiveMedals()
+    {
+        if (Story(out var refusal) is null)
+        {
+            return refusal;
+        }
+
+        if (!Game.TryGetGameRI(out var game) || game.PersistentOptions is not { IsValid: true } options)
+        {
+            return Outcome.Failed("NO SAVE DATA");
+        }
+
+        var wanted = new List<(int Challenge, int Character)>();
+        var challenges = options.UnlockedChallenges;
+        for (var i = 0; i < challenges.Count; i++)
+        {
+            var challenge = challenges[i];
+            if (challenge.Id <= 0)
+            {
+                continue;
+            }
+
+            var played = challenge.DataPerCharacter;
+            if (played.Count == 0)
+            {
+                wanted.Add((challenge.Id, challenge.DefaultCharacterId));
+                continue;
+            }
+
+            for (var c = 0; c < played.Count; c++)
+            {
+                if (played[c].Medals < 3)
+                {
+                    wanted.Add((challenge.Id, played[c].CharacterId));
+                }
+            }
+        }
+
+        if (challenges.Count == 0)
+        {
+            return Outcome.Failed("NO CHALLENGES UNLOCKED");
+        }
+
+        if (wanted.Count == 0)
+        {
+            return Outcome.Unchanged("ALL HAVE 3 MEDALS");
+        }
+
+        var ask = new Confirmation("CAN'T UNDO", "GET ALL CHALLENGE MEDALS",
+            $"Gives three medals on {wanted.Count} challenge {(wanted.Count == 1 ? "entry" : "entries")} in your save. Your scores stay as they are.",
+            "GIVE", "CANCEL");
+        if (!Confirm.Asked(ChallengeMedals, ask))
+        {
+            return Outcome.Asking;
+        }
+
+        var cheats = Game.GetCheatManager();
+        foreach (var (challenge, character) in wanted)
+        {
+            cheats.ChallengeSetMedals(challenge, 3, character);
+        }
+
+        Log.Info($"Challenge medals: three on {wanted.Count} entries.");
+        return Outcome.Done($"{wanted.Count} GIVEN");
     }
 
     static Outcome UnlockAchievements()
