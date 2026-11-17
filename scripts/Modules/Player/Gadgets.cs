@@ -178,6 +178,7 @@ static class Gadgets
         new("DISRUPTOR", UnlimitedDisruptor, DisruptAnything),
         new("HACKING", AutoPasswordHack),
         new("BATARANG", BatarangDamage),
+        new("GRAVITY GRAB", GravityGrab.Grab, GravityGrab.Distance, GravityGrab.Power),
         new("EXPLOSIVE GEL", LethalGel, GelDamage, GelRadius),
         new("FREEZE BLAST", AllFreezeUpgrades, FreezeClusterRadius),
         new("BATCLAW", BatclawRange, ZipKick.Option),

@@ -37,6 +37,9 @@ static class Moving
     static Vector3 _velocity;
     static object? _paused;
 
+    // What's held is carried by the physics grab rather than placed each tick.
+    static bool _physics;
+
     // Set once what's held is pushed or pulled, which then wins over GRAB DISTANCE.
     static bool _reached;
 
@@ -50,6 +53,9 @@ static class Moving
     // What the rows that move the selection show while it can't be moved. It sits above the rows,
     // which take it as they are made.
     static readonly Func<string?> Unmovable = static () => Stuck(Editor.Selected);
+
+    // Turning what the physics grab holds would only change the numbers shown, so those rows wait.
+    static readonly Func<string?> Unspinnable = static () => Stuck(Editor.Selected) ?? (_physics ? "HELD BY PHYSICS" : null);
 
     public static readonly Command GoTo = new(
         "editor.move.go_to", "GO TO IT",
@@ -98,7 +104,15 @@ static class Moving
         "The selected object floats in front of the camera and follows your view. The STEP and TURN rows shift it while you hold it. Turn it off to let go, and turn quickly as you do to throw it.",
         saved: false)
     {
-        Block = Unmovable,
+        Block = static () => Unmovable() ?? (GrabStyle.Index == 2 && Editor.Selected is { } picked && !GravityGrab.Grabbable(picked) ? "IT HAS NO PHYSICS" : null),
+    };
+
+    public static readonly Choice GrabStyle = new(
+        "editor.move.grab_style", "GRAB STYLE",
+        "How GRAB carries it. MOVE places it each tick and holds people upright. PHYSICS holds it with the physics grab, so people go limp and it swings and can be thrown. AUTO uses physics for people and objects that have it, and MOVE for the rest.",
+        new[] { ("auto", "AUTO"), ("move", "MOVE"), ("physics", "PHYSICS") })
+    {
+        Preference = true,
     };
 
     public static readonly Slider GrabDistance = new(
@@ -121,7 +135,7 @@ static class Moving
         "Takes the tilt and roll off the selected object, so it stands straight. Its turn stays.",
         StandUpright)
     {
-        Block = Unmovable,
+        Block = Unspinnable,
     };
 
     static readonly Slider[] Steps = { Forward, Right, Up, Turn, Tilt, Roll };
@@ -130,7 +144,7 @@ static class Moving
     public static readonly Catalog.Section[] Sections =
     {
         new("PUT", GoTo, Bring, AtCrosshair, Drop),
-        new("GRAB", Grab, GrabDistance),
+        new("GRAB", Grab, GrabStyle, GrabDistance),
         new("STEP", Forward, Right, Up),
         new("TURN", Turn, Tilt, Roll, Upright),
         new("UNDO", Editor.Undo, Editor.RestoreSelected),
@@ -150,7 +164,7 @@ static class Moving
         {
             Preference = true,
             Wraps = true,
-            Block = Unmovable,
+            Block = Unspinnable,
         };
 
     // A new selection, or none. The step rows show its totals and any grab lets go.
@@ -372,7 +386,18 @@ static class Moving
         if (!Carrying(actor!))
         {
             LetGo();
+            if (GrabStyle.Index == 2 && !GravityGrab.Grabbable(actor!))
+            {
+                Toasts.Show(Grab.Plain, "IT HAS NO PHYSICS", OutcomeKind.Failed, Grab);
+                Grab.Reset();
+                return;
+            }
+
             Edits.Touch(actor!, "GRAB");
+
+            // A frozen thing is kept still by the editor, and keeps its place by being put there.
+            var byPhysics = GrabStyle.Index != 1 && Edits.Find(actor!) is not { Still: true };
+            _physics = byPhysics && GravityGrab.Start(actor!);
             Things.Box(actor!, out var middle, out _);
             _offset = middle - actor!.Location;
             _distance = MathF.Max(GrabNearest, Vector3.Distance(eye, middle));
@@ -382,7 +407,7 @@ static class Moving
             _velocity = Vector3.Zero;
             _last = actor.Location;
             _lastAt = World.Now;
-            _paused = actor is RBMPawnAI body ? Freezer.Pause(body) : null;
+            _paused = !_physics && actor is RBMPawnAI body ? Freezer.Pause(body) : null;
             _reached = false;
             (_side, _rise) = (0f, 0f);
             _held = actor;
@@ -400,6 +425,20 @@ static class Moving
 
         _last = at;
         _lastAt = World.Now;
+        if (_physics)
+        {
+            // Carried by the physics grab. It lets go by itself when a person gets up or dies.
+            if (!GravityGrab.Carry(at + _offset))
+            {
+                _physics = false;
+                _holding = false;
+                _held = null;
+                Grab.Reset();
+            }
+
+            return;
+        }
+
         Edits.Put(actor!, at, new Rotator(_heldPitch, view.Yaw + _yawOffset, _heldRoll));
     }
 
@@ -435,6 +474,19 @@ static class Moving
         {
             Freezer.Unpause(paused);
             _paused = null;
+        }
+
+        if (_physics)
+        {
+            _physics = false;
+            var swing = throwIt ? _velocity : Vector3.Zero;
+            if (swing.Length() > ThrowFastest)
+            {
+                swing = Vector3.Normalize(swing) * ThrowFastest;
+            }
+
+            GravityGrab.Release(swing);
+            return;
         }
 
         if (!Things.Alive(held))
