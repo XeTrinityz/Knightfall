@@ -339,7 +339,7 @@ static class Threats
     }
 
     // A diamond on the spot, with a fainter one that keeps growing out of it.
-    static void Pin(Vector2 at, Rgba color, float time)
+    public static void Pin(Vector2 at, Rgba color, float time)
     {
         Diamond(at, 6f, color);
         Draw.Quad(at.X, at.Y - 2.5f, at.X + 2.5f, at.Y, at.X, at.Y + 2.5f, at.X - 2.5f, at.Y, color);
@@ -357,7 +357,7 @@ static class Threats
     }
 
     // The name over the distance, on a dark strip with the threat's colour down its left side.
-    static void Tag(float left, float top, string name, string distance, Rgba color)
+    public static void Tag(float left, float top, string name, string distance, Rgba color)
     {
         var width = MathF.Max(Draw.TrackedWidth(name, NameSize, 1.5f), Draw.TextWidth(distance, NoteSize)) + 12f;
         Draw.Rect(left, top, width, TagHeight, Ink with { A = 170 });

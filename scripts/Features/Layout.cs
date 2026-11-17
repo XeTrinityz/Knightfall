@@ -81,7 +81,7 @@ static class Layout
                 new Catalog.Section("TIME", WorldTime.Speed, WorldTime.Freeze), Streets.Section, Riots.Section, Spawns.Section, Joker.Section)
             .Add("ENEMIES", Enemies.Sections)
             .Add("FRIENDLIES", Enemies.FriendlySections)
-            .Add("MARKERS", Markings.Sections.Append(Threats.Section).ToArray())
+            .Add("MARKERS", Markings.Sections.Append(Threats.Section).Append(MapMarks.Section).ToArray())
             .Add("ATMOSPHERE", Atmosphere.Sections)
             .Add("WEATHER", Weather.Section, Rain.Section, Snow.Section, Lightning.Section, Wind.Section);
 

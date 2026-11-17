@@ -184,6 +184,34 @@ static class Places
         _ => true,
     };
 
+    // The map spots of one kind of place, for drawing in the world. Without the city's shift.
+    // Null while the list isn't built or the game's flags can't be read.
+    public static List<Vector3>? Marked(string id, bool leftOnly)
+    {
+        var kind = Array.Find(Kinds, one => one.Id == id);
+        if (!_built || kind is null)
+        {
+            return null;
+        }
+
+        RFlagManager? flags = null;
+        if (leftOnly && kind.Left != Rule.Always && (flags = Flags()) is null)
+        {
+            return null;
+        }
+
+        var spots = new List<Vector3>(kind.Items.Count);
+        foreach (var place in kind.Items)
+        {
+            if (flags is null || Left(kind.Left, place, flags))
+            {
+                spots.Add(place.At);
+            }
+        }
+
+        return spots;
+    }
+
     static RFlagManager? Flags() => Teleport.Ri?.FlagManager is { IsValid: true } flags ? flags : null;
 
     static string? None() => Shown.Count == 0 ? "NONE" : null;

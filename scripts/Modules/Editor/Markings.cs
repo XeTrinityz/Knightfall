@@ -115,11 +115,14 @@ static class Markings
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("MARKERS", new Feature[] { On }.Concat(Show).ToArray()),
-        new("LOOK", Boxes, Labels, Details, Tracers, Range, Most),
+        new("ENTITIES", new Feature[] { On }.Concat(Show).ToArray()),
+        new("LOOK", Boxes, Labels, Details, Thoughts.On, Tracers, Range, Most),
     };
 
     public static bool Showing => On.On && _marks.Count > 0;
+
+    // What is marked now, nearest first.
+    public static IEnumerable<Actor> Marked => _marks.Select(mark => mark.Actor);
 
     static Toggle ShowKind(string id, Things.Kind kind, bool on) =>
         new("world.markers.show_" + id, "SHOW " + Things.Plurals[(int)kind], $"Marks {Things.Plurals[(int)kind].ToLowerInvariant()}.", on)
