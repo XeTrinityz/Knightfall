@@ -6,11 +6,42 @@ using BmSDK.Engine;
 
 namespace Knightfall;
 
-// PLAYER > GADGETS, the remote hacking device's blind rows.
+// PLAYER > GADGETS, the remote hacking device's rows.
 static class Blinding
 {
     static readonly Held<RSentryGunBase, float> SentryJam = new("sentry blind time", gun => gun.Settings.jamDuration, (gun, time) => gun.Settings.jamDuration = time);
     static readonly Held<RTurret_WatchtowerBase, float> TowerJam = new("watchtower blind time", gun => gun.jamDuration, (gun, time) => gun.jamDuration = time);
+
+    static readonly Held<RRHD, bool> BlindDrones = new("hacking device drones", device => device.bBatmanHasBlindDroneUpgrade, (device, on) => device.bBatmanHasBlindDroneUpgrade = on);
+    static readonly Held<RRHD, bool> SecureTargets = new("hacking device secure", device => device.bCanResonateHS, (device, on) => device.bCanResonateHS = on);
+
+    static string? NoDevice() => Equipment.Missing(static pawn => pawn.RHD, "NO HACKING DEVICE");
+
+    public static readonly Toggle AnyDrone = new(
+        "player.gadgets.blind_any_drone", "BLIND ANY DRONE",
+        "The remote hacking device can blind drones, vehicles and helicopters without the upgrade.")
+    {
+        Block = NoDevice,
+        Tick = () => HoldDevice(BlindDrones),
+        Restore = BlindDrones.Release,
+    };
+
+    public static readonly Toggle SecureHacks = new(
+        "player.gadgets.hack_secure", "HACK HIGH SECURITY",
+        "The remote hacking device works on high security targets without the upgrade.")
+    {
+        Block = NoDevice,
+        Tick = () => HoldDevice(SecureTargets),
+        Restore = SecureTargets.Release,
+    };
+
+    public static readonly Slider HackRange = new(
+        "player.gadgets.hack_range", "HACK RANGE",
+        "How far away the remote hacking device can reach a target. 1X is the game's.",
+        min: 0.5, max: 3, step: 0.25, value: 1, unit: "X")
+    {
+        Block = NoDevice,
+    };
 
     public static readonly Toggle ManyTargets = new(
         "player.gadgets.blind_many", "BLIND MANY TARGETS",
@@ -27,6 +58,34 @@ static class Blinding
             TowerJam.Release();
         },
     };
+
+    static void HoldDevice(Held<RRHD, bool> flag)
+    {
+        if (World.Player?.RHD is { IsValid: true } device)
+        {
+            flag.Hold(device, true);
+        }
+    }
+
+    // Every target check passes the range it allows through here.
+    [Redirect(typeof(RRHD), nameof(RRHD.TargetOutOfRange))]
+    static bool TargetOutOfRange(RRHD self, Actor target, float fRange, out float fDistanceUntilInRange)
+    {
+        var range = fRange;
+        try
+        {
+            if (!HackRange.IsDefault && self.Owner is { IsValid: true } owner && owner.Ptr == World.Player?.Ptr)
+            {
+                range *= (float)HackRange.Value;
+            }
+        }
+        catch (Exception error)
+        {
+            Log.Error("gadgets.hack_range", "The hacking range could not be changed", error);
+        }
+
+        return self.TargetOutOfRange(target, range, out fDistanceUntilInRange);
+    }
 
     // Blinding a new target frees the old one through here, so only that call is skipped.
     [Redirect(typeof(RRHD), nameof(RRHD.UnBlindActor))]

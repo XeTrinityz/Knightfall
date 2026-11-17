@@ -174,15 +174,21 @@ static class Gadgets
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("USE", UnlockAll, UseWhileRecharging, VentsAndCover),
-        new("DISRUPTOR", UnlimitedDisruptor, DisruptAnything),
-        new("HACKING", AutoPasswordHack, Blinding.ManyTargets, Blinding.BlindTime),
-        new("BATARANG", BatarangDamage),
+        new("USE", UnlockAll, UseWhileRecharging, VentsAndCover, Equipment.RechargeTime, Equipment.UnlimitedAmmo),
+        new("BATARANG", BatarangDamage, Batarangs.Range, Batarangs.Electrified, Batarangs.ExtraThrows, GadgetUpgrades.Batarang),
+        new("REMOTE BATARANG", Batarangs.RemoteTime, Batarangs.RemoteHits, Batarangs.RemoteBounces),
+        Grapnel.Sections[0],
+        Grapnel.Sections[1],
+        new("BATCLAW", BatclawRange, ZipKick.Option, GadgetUpgrades.Batclaw),
         new("GRAVITY GRAB", GravityGrab.Grab, GravityGrab.Distance, GravityGrab.Power),
-        new("EXPLOSIVE GEL", LethalGel, GelDamage, GelRadius),
-        new("FREEZE BLAST", AllFreezeUpgrades, FreezeClusterRadius),
-        new("BATCLAW", BatclawRange, ZipKick.Option),
-        new("EFFECTS", SmokeDuration, JammedGunBlast),
+        new("DISRUPTOR", UnlimitedDisruptor, GadgetTuning.ExtraCharges, GadgetTuning.Reload.Slider, GadgetTuning.Swap.Slider, DisruptAnything),
+        new("HACKING", AutoPasswordHack, GadgetUpgrades.SimplerHacks, Blinding.ManyTargets, Blinding.BlindTime, Blinding.AnyDrone, Blinding.SecureHacks, Blinding.HackRange),
+        new("VOICE SYNTH", GadgetTuning.NoSynthPenalty),
+        new("REMOTE CHARGE", GadgetTuning.ChargeRange.Slider, GadgetTuning.ChargePush.Slider),
+        new("EXPLOSIVE GEL", LethalGel, GelDamage, GelRadius, GadgetTuning.GelDelay.Slider, GadgetTuning.GelFuse, GadgetTuning.LongGelStun),
+        new("FREEZE BLAST", AllFreezeUpgrades, FreezeClusterRadius, GadgetTuning.FreezeTrigger, GadgetTuning.FreezeDuration),
+        new("SMOKE", SmokeDuration, GadgetTuning.SmokeSize),
+        new("EFFECTS", JammedGunBlast),
     };
 
     // The game's cheat gives to whatever the controller is driving, so in the Batmobile it arms the
@@ -328,12 +334,14 @@ static class Gadgets
         var passed = damage;
         try
         {
-            if (!BatarangDamage.IsDefault
-                && damageCauser is RBatarangProjectile
+            if (damageCauser is RBatarangProjectile
                 && instigatedBy is { IsValid: true } thrower
                 && thrower.Ptr == World.Controller?.Ptr)
             {
-                passed = Math.Max(damage, (int)BatarangDamage.Value);
+                if (!BatarangDamage.IsDefault)
+                {
+                    passed = Math.Max(damage, (int)BatarangDamage.Value);
+                }
             }
         }
         catch (Exception error)
@@ -492,10 +500,23 @@ static class Gadgets
         }
     }
 
-    // Spawned at its default length, which PostBeginPlay times. InitSmoke then adds the upgrade.
+    // Spawned at its default length, which PostBeginPlay times. InitSmoke then adds the upgrade. The
+    // size goes in first, since InitSmoke stuns everyone in reach as it starts.
     [Redirect(typeof(RSmokeScreen), nameof(RSmokeScreen.InitSmoke))]
     static void InitSmoke(RSmokeScreen self, bool hitWall, bool smokePellet)
     {
+        try
+        {
+            if (smokePellet && !GadgetTuning.SmokeSize.IsDefault && self.IsValid)
+            {
+                GadgetTuning.SizeCloud(self);
+            }
+        }
+        catch (Exception error)
+        {
+            Log.Error("gadgets.smoke_size", "The smoke cloud size could not be changed", error);
+        }
+
         Redirects.RunOriginal();
         try
         {
