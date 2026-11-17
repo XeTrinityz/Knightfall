@@ -64,7 +64,7 @@ static class Progress
 
     public static readonly Command AllExtras = new(
         "player.progress.all_extras", "UNLOCK ALL EXTRAS",
-        "The game's own unlock-all. Challenge maps, the showcase, concept art, bios, tapes, Riddler puzzles, WayneTech and story episodes. Kept in your save.",
+        "The game's own unlock-all. Challenge maps, the showcase, concept art, bios, tapes, Riddler puzzles, WayneTech and story episodes. Everything it opens is marked as seen, so the menus lose their new marks. Kept in your save.",
         UnlockExtras)
     {
         Block = static () => PlayerLocks.InChallenge(),
@@ -236,13 +236,79 @@ static class Progress
 
     static Outcome UnlockExtras()
     {
-        if (Story(out var refusal) is null)
+        if (Story(out var refusal) is not { } game)
         {
             return refusal;
         }
 
         Game.GetCheatManager().UnlockAll();
+        var seen = MarkExtrasSeen(game);
+        Log.Info($"Extras: unlocked everything and marked {seen} as seen.");
         return Outcome.Done();
+    }
+
+    // The menus keep a new mark on each extra until it is opened. An opened showcase item gets
+    // a ShowcaseV_ flag and opened concept art a ConceptGalley_ one, both named after the unlock
+    // flag. Bios, episodes and the rest keep a new byte each.
+    static int MarkExtrasSeen(RGameInfo game)
+    {
+        var marked = 0;
+        if (Game.TryGetGameRI(out var info) && info.PersistentOptions is { IsValid: true } options)
+        {
+            var viewed = new List<string>();
+            var flags = options.OptionsFlags;
+            for (var i = 0; i < flags.Count; i++)
+            {
+                var flag = flags[i].ToString();
+                if (Between(flag, "Showcase_", "_Unlocked") is { } item)
+                {
+                    viewed.Add($"ShowcaseV_{item}");
+                }
+                else if (Between(flag, "ConceptArt_", "_Unlocked") is { } art)
+                {
+                    // The gallery drops the DLC_ from the racetrack names.
+                    viewed.Add($"ConceptGalley_{(art.StartsWith("DLC_", StringComparison.Ordinal) ? art[4..] : art)}_Viewed");
+                }
+            }
+
+            foreach (var flag in viewed)
+            {
+                if (!options.IsOptionsFlagSet(flag))
+                {
+                    options.SetOptionsFlag(flag, true);
+                    marked++;
+                }
+            }
+        }
+
+        if (game.PersistentShared is { IsValid: true } shared)
+        {
+            marked += Clear(shared.CharacterViewer_New) + Clear(shared.GalleryUnlocks_New) + Clear(shared.CharacterBios_New)
+                + Clear(shared.CatwomanEpisodes_New) + Clear(shared.DLCStory_New);
+        }
+
+        return marked;
+    }
+
+    static string? Between(string? text, string start, string end) =>
+        text is not null && text.Length > start.Length + end.Length && text.StartsWith(start, StringComparison.Ordinal)
+            && text.EndsWith(end, StringComparison.Ordinal)
+            ? text[start.Length..^end.Length]
+            : null;
+
+    static int Clear(TArray<byte> marks)
+    {
+        var cleared = 0;
+        for (var i = 0; i < marks.Count; i++)
+        {
+            if (marks[i] != 0)
+            {
+                marks[i] = 0;
+                cleared++;
+            }
+        }
+
+        return cleared;
     }
 
     // The game's own debug calls set the medals and scores, the way its cheats do. Only challenge
