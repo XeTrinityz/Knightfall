@@ -208,6 +208,14 @@ static class Progress
             return refusal == default ? Outcome.Failed("NO SAVE DATA") : refusal;
         }
 
+        var ask = new Confirmation("CAN'T UNDO", "GET ALL UPGRADES",
+            "Buys every Batman and Batmobile upgrade the story has opened, in your save. Your unspent points stay. This can't be undone.",
+            "BUY", "CANCEL");
+        if (!Confirm.Asked(AllUpgrades, ask))
+        {
+            return Outcome.Asking;
+        }
+
         var before = shared.UpgradesPurchased;
         shared.UpgradesPurchased = game.UpgradesUnlockAll(out var cost);
         shared.UpgradePointsUsed = Math.Max(shared.UpgradePointsUsed, cost);
@@ -237,11 +245,19 @@ static class Progress
             return refusal;
         }
 
+        var ask = new Confirmation("CAN'T UNDO", "SHOW RIDDLER ITEMS",
+            "Marks every Riddler trophy and puzzle on the map, in your save. This can't be undone.",
+            "SHOW", "CANCEL");
+        if (!Confirm.Asked(RiddlerItems, ask))
+        {
+            return Outcome.Asking;
+        }
+
         // Empty is every map. The game's default for it only applies when script calls it.
         var cheats = Game.GetCheatManager();
         cheats.RiddlerRevealItems(new FString(""));
         cheats.GiveRiddlerMap();
-        return Outcome.Done();
+        return Outcome.Done("SHOWN ON THE MAP");
     }
 
     static Outcome UnlockExtras()
@@ -251,18 +267,33 @@ static class Progress
             return refusal;
         }
 
+        var ask = new Confirmation("CAN'T UNDO", "UNLOCK ALL EXTRAS",
+            "Unlocks every challenge map, showcase item, concept art, bio, tape, Riddler puzzle, WayneTech upgrade and story episode in your save, and marks them as seen. This can't be undone.",
+            "UNLOCK", "CANCEL");
+        if (!Confirm.Asked(AllExtras, ask))
+        {
+            return Outcome.Asking;
+        }
+
+        var flagsBefore = OptionFlagCount();
         Game.GetCheatManager().UnlockAll();
+        var unlocked = OptionFlagCount() - flagsBefore;
         var seen = MarkExtrasSeen(game);
-        SaveAtMainMenu();
-        Log.Info($"Extras: unlocked everything and marked {seen} as seen.");
-        return Outcome.Done();
+        SaveOptions();
+        Log.Info($"Extras: unlocked everything, {unlocked} new, and marked {seen} as seen.");
+        return unlocked + seen == 0 ? Outcome.Unchanged("NOTHING NEW") : Outcome.Done(seen > 0 ? $"{seen} MARKED SEEN" : "UNLOCKED");
     }
 
-    // On the main menu nothing saves by itself, so a change is written the way the game's own
-    // unlock all does it.
-    static void SaveAtMainMenu()
+    // Showcase items and concept art are unlocked as flags in the options save, so a change in
+    // their number tells whether the unlock-all found anything new.
+    static int OptionFlagCount() =>
+        Game.TryGetGameRI(out var info) && info.PersistentOptions is { IsValid: true } options ? options.OptionsFlags.Count : 0;
+
+    // Medals, scores and seen marks live in the options save, which nothing else writes until the
+    // options screen closes. It is written now the way that screen does it.
+    static void SaveOptions()
     {
-        if (World.InFrontend && World.Controller is { } controller)
+        if (World.Controller is { } controller)
         {
             controller.SaveGameProgress(true);
         }
@@ -448,7 +479,7 @@ static class Progress
         var scoreCount = wanted.Count(entry => entry.Score is not null);
         var trainingText = training.Count == 0 ? "" : $" Marks {training.Count} training {(training.Count == 1 ? "challenge" : "challenges")} as done.";
         var ask = new Confirmation("CAN'T UNDO", "GET ALL CHALLENGE MEDALS",
-            $"Gives three medals for {MedalWho[MedalsFor.Index].Label} on {medalCount} challenge {(medalCount == 1 ? "entry" : "entries")} and raises {scoreCount} {(scoreCount == 1 ? "score" : "scores")} to the three medal mark in your save.{trainingText} Better scores stay.",
+            $"Gives three medals for {MedalWho[MedalsFor.Index].Label} on {medalCount} challenge {(medalCount == 1 ? "entry" : "entries")} and raises {scoreCount} {(scoreCount == 1 ? "score" : "scores")} to the three medal mark in your save.{trainingText} Better scores stay. This can't be undone.",
             "GIVE", "CANCEL");
         if (!Confirm.Asked(ChallengeMedals, ask))
         {
@@ -475,7 +506,7 @@ static class Progress
         }
 
         Seen();
-        SaveAtMainMenu();
+        SaveOptions();
         Log.Info($"Challenge medals: three on {medalCount} entries, {scoreCount} scores raised and {training.Count} training done for {MedalWho[MedalsFor.Index].Label}.");
         return Outcome.Done($"{wanted.Count + training.Count} SET");
     }

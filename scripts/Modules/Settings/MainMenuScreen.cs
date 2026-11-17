@@ -31,7 +31,6 @@ static class MainMenuScreen
     const int CheckMilliseconds = 100;
     const int ArtSearch = 40;
     const int TipWidth = 40;
-    const string Question = "This changes the medals and scores in your save and can't be undone. Go on?";
 
     // The screen reads and sets each row as it builds, and those sets aren't the player's.
     const long QuietMilliseconds = 1500;
@@ -43,7 +42,11 @@ static class MainMenuScreen
     static long _nextCheck;
     static long _quietUntil;
     static int _focused = -1;
-    static Command? _asking;
+    static Action? _onYes;
+
+    // The row pressed last, until its result has been shown.
+    static Command? _waiting;
+    static long _pressedAt;
     static RGFxMoviePopupRequester? _popup;
     static readonly Dictionary<int, Command> Buttons = new();
     static readonly Dictionary<string, string> Labels = new();
@@ -110,8 +113,9 @@ static class MainMenuScreen
         _screen = movie;
         _quietUntil = Environment.TickCount64 + QuietMilliseconds;
         _focused = -1;
-        _asking = null;
+        _onYes = null;
         _popup = null;
+        Confirm.Elsewhere = Ask;
         Buttons.Clear();
         Labels.Clear();
 
@@ -200,7 +204,7 @@ static class MainMenuScreen
         }
     }
 
-    // A row that can't be undone asks first, in the game's own yes/no box.
+    // The rows run as they do in the mod's own menu. Any that ask first ask in the game's own box.
     [Redirect(typeof(RGFxMovieUI), nameof(RGFxMovieUI.XI_OnClicked))]
     static void Clicked(RGFxMovieUI self, int id)
     {
@@ -213,17 +217,8 @@ static class MainMenuScreen
         try
         {
             Sound(self, "OnClicked");
-            if (command == Progress.ChallengeMedals)
-            {
-                if (_popup is null && !screen.IsInputBlocked())
-                {
-                    _asking = command;
-                    _popup = screen.OpenPopupMessage2("$Menu.Yes", "$Menu.No", Question, NoButton, true);
-                }
-
-                return;
-            }
-
+            _waiting = command;
+            _pressedAt = System.Diagnostics.Stopwatch.GetTimestamp();
             Catalog.Pressed(command);
         }
         catch (Exception error)
@@ -241,14 +236,30 @@ static class MainMenuScreen
             return;
         }
 
-        var command = _asking;
-        _asking = null;
+        var onYes = _onYes;
+        _onYes = null;
         _popup = null;
-        if (buttonId == YesButton && command is not null)
+        if (buttonId == YesButton)
         {
-            Confirm.Grant(command);
-            Catalog.Pressed(command);
+            onYes?.Invoke();
         }
+        else if (onYes is not null)
+        {
+            _waiting = null;
+        }
+    }
+
+    // A row that can't be undone asks here, in the game's own yes/no box, while the screen is up.
+    static bool Ask(Confirmation ask, Action onYes)
+    {
+        if (_screen is not { IsAlive: true } screen || !screen.bMovieIsOpen || screen.bClosing || _popup is not null)
+        {
+            return false;
+        }
+
+        _onYes = onYes;
+        _popup = screen.OpenPopupMessage2("$Menu.Yes", "$Menu.No", $"{ask.Text} Go on?", NoButton, true);
+        return true;
     }
 
     [Redirect(typeof(RGFxMovieUI_OptionsGame), nameof(RGFxMovieUI_OptionsGame.XI_OnFocus))]
@@ -346,6 +357,7 @@ static class MainMenuScreen
         }
 
         HideArt(screen);
+        ShowResult(screen);
         var now = Environment.TickCount64;
         if (now < _nextCheck)
         {
@@ -365,6 +377,26 @@ static class MainMenuScreen
                 field.SetText(new FString(text));
             }
         }
+    }
+
+    // The game's screen has nowhere to show what a row did, so the result comes up in the
+    // game's own OK box. A row still working shows only its final result.
+    static void ShowResult(RGFxMovieUI_OptionsGame screen)
+    {
+        if (_waiting is not { } command || _popup is not null || command.ReportedAt <= _pressedAt)
+        {
+            return;
+        }
+
+        command.Showing(command.ReportedAt, out var outcome);
+        if (outcome.Text.StartsWith("WORKING", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _waiting = null;
+        _onYes = null;
+        _popup = screen.OpenPopupMessage1("$Menu.Ok", $"{command.Plain}: {outcome.Text}", true);
     }
 
     // The screen's own tick runs inside Flash before a frame is drawn, so the art is gone from
