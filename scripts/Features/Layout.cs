@@ -127,10 +127,6 @@ static class Layout
 
         Catalog.Background("sounds.game_sounds", GameSounds.Tick, GameSounds.Release);
 
-        Catalog.AddPage("ASSETS")
-            .Add("TEXTURES", Textures.Sections)
-            .Add("FONTS", Fonts.Sections);
-
         Catalog.Background("assets.textures", Textures.Tick);
         Catalog.Background("assets.fonts", Fonts.Tick);
         Catalog.Background("assets.viewer", Viewer.Tick, Viewer.Release);
@@ -146,6 +142,8 @@ static class Layout
             .Add("CONTROLS", KeySetup.Sections)
             .Add("RADIAL", Radial.Sections)
             .Add("GAME", GameTweaks.Sections)
+            .Add("TEXTURES", Textures.Sections)
+            .Add("FONTS", Fonts.Sections)
             .Add("SAVES", Saves.Sections);
 
         Catalog.Background("settings.game.values", SystemValues.Tick);
