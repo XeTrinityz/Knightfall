@@ -107,6 +107,7 @@ static class Status
         try
         {
             self.TakeDamage(passed, instigatedBy, hitLocation, momentum, damageType, hitInfo, damageCauser);
+            Clumsy.Struck(self, passed);
             if (InfiniteArmour.On)
             {
                 FillArmour(self, grant: true);

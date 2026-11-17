@@ -138,6 +138,7 @@ static class Movement
         new("GRAPPLE", Grapple.Slider, Boost.Slider, Reach.Slider, Zip.Slider),
         new("FALLING", FallGravity),
         new("NOCLIP", Noclip.Clip, Noclip.Speed),
+        new("CLUMSY", Clumsy.Trips, Clumsy.Odds),
     };
 
     // A villain that walks at a share of the player's pace. It goes through the same hold as
