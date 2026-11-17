@@ -89,6 +89,7 @@ static class General
         Hotkeys.Relabel();
         Favourites.Load();
         Disguise.KeepStances();
+        SuitPaint.KeepSettings();
         Settings.Save();
     }
 }

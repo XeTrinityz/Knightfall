@@ -18,6 +18,8 @@ static class ModFiles
 
     public static string PreviousLog => Path.Combine(Data, "logs", "Knightfall.prev.log");
 
+    public static string Looks => Path.Combine(Data, "looks");
+
     // Only used when the game's own folder in Documents can't be found.
     public static string Saves => Path.Combine(Data, "saves");
 

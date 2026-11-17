@@ -5,7 +5,8 @@ using System.Runtime.InteropServices;
 
 namespace Knightfall;
 
-// Puts text on the Windows clipboard, for a path the player wants to paste somewhere else.
+// Text to and from the Windows clipboard, for a path the player wants to paste somewhere else
+// or a name pasted in.
 static class Clipboard
 {
     const uint UnicodeText = 13;
@@ -22,6 +23,9 @@ static class Clipboard
 
     [DllImport("user32.dll")]
     static extern IntPtr SetClipboardData(uint format, IntPtr data);
+
+    [DllImport("user32.dll")]
+    static extern IntPtr GetClipboardData(uint format);
 
     [DllImport("kernel32.dll")]
     static extern IntPtr GlobalAlloc(uint flags, UIntPtr bytes);
@@ -88,6 +92,38 @@ static class Clipboard
             }
 
             return true;
+        }
+        finally
+        {
+            CloseClipboard();
+        }
+    }
+
+    // The clipboard's text, or empty when it holds none or another program has it open.
+    public static string Get()
+    {
+        if (!OpenClipboard(IntPtr.Zero))
+        {
+            return "";
+        }
+
+        try
+        {
+            var data = GetClipboardData(UnicodeText);
+            var text = data == IntPtr.Zero ? IntPtr.Zero : GlobalLock(data);
+            if (text == IntPtr.Zero)
+            {
+                return "";
+            }
+
+            try
+            {
+                return Marshal.PtrToStringUni(text) ?? "";
+            }
+            finally
+            {
+                GlobalUnlock(data);
+            }
         }
         finally
         {

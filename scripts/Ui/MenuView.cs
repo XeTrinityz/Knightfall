@@ -98,6 +98,9 @@ abstract class Overlay
 
     public abstract void Render(MenuView view);
 
+    // Whether it types text, so the menu's own letter keys can't close it.
+    public virtual bool TakesText => false;
+
     public virtual void Shown()
     {
     }

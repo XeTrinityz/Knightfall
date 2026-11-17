@@ -18,10 +18,14 @@ static class Layout
             .Add("GADGETS", Gadgets.Sections)
             .Add("CHARACTER",
                 new Catalog.Section("SWITCH", Characters.PlayAs, Characters.Switch, Characters.Back),
-                new Catalog.Section("SUIT", Suits.Suit, Suits.Apply, Suits.Cancel),
-                new Catalog.Section("APPEARANCE", Appearance.NoCape, Appearance.BodySize, Appearance.Damage, Appearance.ApplyDamage),
                 new Catalog.Section("STYLE", MovementStyle.Style),
                 new Catalog.Section("DISGUISE", Disguise.Look, Disguise.Variant, Disguise.Option, Disguise.WearAimed, Disguise.Shuffle, Disguise.Stance, Disguise.Props, DisguiseFit.Camera, DisguiseFit.Gadgets))
+            .Add("SUIT",
+                new Catalog.Section("SUIT", Suits.Suit, Suits.Apply, Suits.Cancel),
+                new Catalog.Section("APPEARANCE", Appearance.NoCape, Appearance.BodySize, Appearance.Damage, Appearance.ApplyDamage),
+                new Catalog.Section("PAINT", SuitPaint.Paint, SuitPaint.Which, SuitPaint.Colour, SuitPaint.Strength, SuitPaint.Brightness,
+                    SuitPaint.CopyLook, SuitPaint.PasteLook, SuitPaint.Shuffle, SuitPaint.Back, SuitPaint.Unmark, SuitPaint.ClearPart, SuitPaint.ClearSuit),
+                new Catalog.Section("LOOKS", SuitLooks.Saved, SuitLooks.SaveNew, SuitLooks.WearSaved, SuitLooks.PutOn, SuitLooks.Delete))
             .Add("VILLAINS", Villains.Sections)
             .Add("SIDEKICK", Sidekick.Sections)
             .Add("PROGRESS", Progress.Sections);
@@ -34,6 +38,7 @@ static class Layout
         Catalog.Background("player.combat.auto_fight", AutoFight.Tick);
         Catalog.Background("player.character.remesh", Remesh.Tick, Remesh.Release);
         Catalog.Background("player.character.switch", Switcher.Tick, Switcher.Release);
+        Catalog.Background("player.suit.paint", SuitPaint.Tick, SuitPaint.Release);
         Catalog.Background("player.sidekick.who", Sidekick.Tick, Sidekick.Release);
         Catalog.Background("player.character.movement_style", MovementStyle.Tick);
         Catalog.Background("player.progress.achievements", Progress.Tick, Progress.Release);

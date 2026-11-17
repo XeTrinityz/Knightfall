@@ -432,7 +432,7 @@ sealed class ConsoleTheme : Theme
         switch (feature)
         {
             case Slider slider:
-                Kit.Meter(left, y, width, 10f, 30, slider.Fill, slider.DefaultFill, value, Empty, Soft);
+                Kit.Meter(left, y, width, 10f, 30, slider.Fill, slider.DefaultFill, Kit.Lit(slider, value), Kit.Unlit(slider, Empty), Soft);
                 Draw.Text(slider.MinText, left, y + 20f, 10f, Ghost);
                 Draw.TextRight(slider.MaxText, left + width, y + 20f, 10f, Ghost);
                 y += 42f;
@@ -444,7 +444,7 @@ sealed class ConsoleTheme : Theme
                 var x = left + Draw.TextWidth(current, 11f) + 5f;
                 Draw.Text("/", x, y, 11f, Ghost);
                 Draw.Text(Kit.Number(choice.Count), x + Draw.TextWidth("/", 11f) + 5f, y, 11f, Ghost);
-                Kit.Dashes(left + width, y + 5f, choice.Count, choice.Index, value, Empty);
+                Kit.Pick(choice, left + width, y + 5f, value, Empty);
                 y += 28f;
                 break;
         }

@@ -76,11 +76,7 @@ static class GauntletScreen
     public static void Release()
     {
         Give();
-        if (_texture is { IsValid: true } texture)
-        {
-            texture.RemoveFromRoot();
-        }
-
+        Scripted.Drop(_texture);
         _texture = null;
     }
 
@@ -100,33 +96,21 @@ static class GauntletScreen
             return _texture;
         }
 
-        // Create makes an object of the class it runs on, so running it on the scripted texture's
-        // default object makes a scripted texture. It is kept from the garbage collector while
-        // it is off the screen.
-        var made = TextureRenderTarget2DStatics.Create(ScriptedTexture.DefaultObject, TextureWidth, TextureHeight, Texture.EPixelFormat.PF_A8R8G8B8);
-        if (made is not ScriptedTexture { IsValid: true } texture)
+        Scripted.Drop(_texture);
+        if (Scripted.Make(TextureWidth, TextureHeight, Paint) is not { } texture)
         {
             Log.Warn("gauntlet.texture", "A texture for the gauntlet screen couldn't be made, so the menu is drawn over it.");
             return null;
         }
 
-        texture.AddToRoot();
         _texture = texture;
         return texture;
     }
 
-    // The engine asks a scripted texture to draw itself through this when it needs drawing.
-    [Redirect(typeof(ScriptedTexture), nameof(ScriptedTexture.Render))]
-    static void Render(ScriptedTexture self, Canvas canvas)
+    static void Paint(Canvas canvas)
     {
         try
         {
-            if (_texture is null || self.Ptr != _texture.Ptr)
-            {
-                self.Render(canvas);
-                return;
-            }
-
             // Never inside another drawing of ours, which would lose its place.
             if (Draw.Busy || !Draw.Begin(canvas))
             {

@@ -93,6 +93,10 @@ sealed class Slider : Feature
 
     public double Value { get; private set; }
 
+    // For a slider that sets something with a colour, the colour its lit blocks take. Null keeps
+    // the theme's own.
+    public Func<Rgba?>? Tone { get; init; }
+
     // How far along the track the value is, 0 to 1.
     public float Fill => Max > Min ? (float)((Value - Min) / (Max - Min)) : 0f;
 
@@ -197,6 +201,9 @@ sealed class Choice : Feature
     }
 
     public int Index { get; private set; }
+
+    // A colour for each option, drawn in place of the dashes that show where you are in the list.
+    public IReadOnlyList<Rgba>? Swatches { get; init; }
 
     // What accept does in place of stepping on, for a list whose pick is there to be used.
     public Action? Pressed { get; init; }

@@ -80,11 +80,14 @@ static class Menu
         // While a row waits for its key, the menu's own keys belong to that row.
         if (!World.Paused && Hotkeys.Listening is null)
         {
-            if (Controls.Pressed(Act.Open))
+            // A box that types text keeps the menu's keys for itself, apart from Escape and the pad's
+            // back button.
+            var typing = Covering is { TakesText: true };
+            if (Controls.Pressed(Act.Open) && !typing)
             {
                 Want(!_wanted);
             }
-            else if (_wanted && Controls.Pressed(Act.Back))
+            else if (_wanted && Controls.Pressed(Act.Back) && (!typing || Keyboard.WasPressed(Keys.Escape) || Controls.LastDevice == Device.Pad))
             {
                 // Back answers a question no, and leaves the menu open. A cover goes back to the
                 // menu under it.

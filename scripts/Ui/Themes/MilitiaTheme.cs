@@ -395,7 +395,7 @@ sealed class MilitiaTheme : Theme
         {
             case Slider slider:
                 Draw.TextRight(slider.ValueText, right, y + 7f, 15f, value);
-                Kit.Meter(right - ValueRoom - MeterWidth, y + 11f, MeterWidth, 8f, 16, slider.Fill, slider.DefaultFill, state, selected ? EmptyOnWhite : Empty, selected ? Ink : Dim);
+                Kit.Meter(right - ValueRoom - MeterWidth, y + 11f, MeterWidth, 8f, 16, slider.Fill, slider.DefaultFill, Kit.Lit(slider, state), Kit.Unlit(slider, selected ? EmptyOnWhite : Empty), selected ? Ink : Dim);
                 break;
 
             case Choice choice:
@@ -410,7 +410,7 @@ sealed class MilitiaTheme : Theme
                     Draw.TextRightFit(choice.ValueText, right, y + 6f, 13f, value, Inset + 28f - lean + Draw.TextWidth(feature.Label, 15f) + 16f);
                 }
 
-                Kit.Dashes(right, y + 24f, choice.Count, choice.Index, state, selected ? EmptyOnWhite : Empty);
+                Kit.Pick(choice, right, y + 24f, state, selected ? EmptyOnWhite : Empty, selected ? Ink : null);
                 break;
         }
     }
