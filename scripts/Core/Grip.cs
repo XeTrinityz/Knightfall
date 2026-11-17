@@ -19,7 +19,7 @@ sealed class Grip
     Actor? _owner;
     int _epoch;
 
-    public bool Holding => _epoch == World.Epoch && _handle is { IsValid: true } handle && handle.GrabbedComponent is { IsValid: true };
+    public bool Holding => _epoch == World.Epoch && _owner is { IsAlive: true } && _handle is { IsValid: true } handle && handle.GrabbedComponent is { IsValid: true };
 
     // Takes hold of the part by the bone, or the whole of it with no bone, at the spot given.
     public bool Take(Actor owner, PrimitiveComponent part, FName bone, Vector3 spot)
@@ -103,25 +103,27 @@ sealed class Limp
     float _stunWas;
     int _epoch;
 
+    // Calming off for a body about to be pulled. This much is all a loose body that is no person
+    // needs, every tick it is carried.
+    public void Loosen(SkeletalMeshComponent mesh)
+    {
+        Renew();
+        NoCalming.Hold(mesh, true);
+        if (!ReferenceEquals(_mesh, mesh))
+        {
+            _mesh = mesh;
+            mesh.ResetRagdollCalmingMeasures();
+        }
+    }
+
     // Every tick while carried. The ragdoll's own state only starts a tick or two after the
     // knock-down, so its part waits for that.
     public void Keep(RPawnVillain person)
     {
-        if (_epoch != World.Epoch)
-        {
-            _mesh = null;
-            _ragdoll = null;
-            _epoch = World.Epoch;
-        }
-
+        Renew();
         if (person.Mesh is { IsValid: true } mesh)
         {
-            NoCalming.Hold(mesh, true);
-            if (!ReferenceEquals(_mesh, mesh))
-            {
-                _mesh = mesh;
-                mesh.ResetRagdollCalmingMeasures();
-            }
+            Loosen(mesh);
         }
 
         if (person.RagdollProcessor is not { IsValid: true } ragdoll || ragdoll.CurrState != RRagdollProcessor.RagdollState.RAG_Ragdoll)
@@ -137,6 +139,17 @@ sealed class Limp
 
         NoFloorGetUp.Hold(ragdoll, false);
         ragdoll.StunTime = KeepDown;
+    }
+
+    // A new world freed what was kept, so it is only forgotten.
+    void Renew()
+    {
+        if (_epoch != World.Epoch)
+        {
+            _mesh = null;
+            _ragdoll = null;
+            _epoch = World.Epoch;
+        }
     }
 
     // Let go. They keep at least the stun time given, or what they had when picked up if that

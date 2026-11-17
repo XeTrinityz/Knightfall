@@ -23,8 +23,6 @@ static class GravityGrab
     const float ThrowPace = 300f;
     const float HangPerson = 120f;
     const float HangThing = 20f;
-    const float Stiffness = 8000f;
-    const float Damping = 400f;
 
     // How fast the hold point travels from where something was grabbed to where it is held, so a
     // far pull arrives at a speed the body can take instead of being snapped across the map.
@@ -35,28 +33,14 @@ static class GravityGrab
     const float LeftAfterDrop = 1f;
     const float LeftAfterThrow = 2.5f;
 
-    // A held person's ragdoll is given this long to run, again every tick.
-    const float KeepDown = 5f;
-
     static readonly FName Pelvis = new("Bip01_Pelvis");
 
-    // The game's own cut grab tool turns ragdoll calming off while it holds a body.
-    static readonly Held<SkeletalMeshComponent, bool> NoCalming = new("gravity grab calming",
-        mesh => mesh.bDebugDisableRagdollCalmingMeasures, (mesh, off) => mesh.bDebugDisableRagdollCalmingMeasures = off);
-
-    // A ragdoll ends early once the body has been still for a second, and a body in the grip is
-    // held still.
-    static readonly Held<RRagdollProcessor, bool> NoFloorGetUp = new("gravity grab floor get-up",
-        ragdoll => ragdoll.bGetUpWhenHitFloor, (ragdoll, on) => ragdoll.bGetUpWhenHitFloor = on);
+    static readonly Grip Hand = new();
+    static readonly Limp Down = new();
 
     static Vector3 _target;
-    static RRagdollProcessor? _ragdoll;
-    static float _stunWas;
     static float _pressedAt = float.NegativeInfinity;
     static bool _pressTaken;
-
-    static RB_Handle? _handle;
-    static RPawnPlayer? _owner;
     static int _epoch;
 
     static Actor? _held;
@@ -253,7 +237,7 @@ static class GravityGrab
             return false;
         }
 
-        var lost = !Things.Alive(_held) || World.Player is null || _owner is not { IsAlive: true } || _handle is not { IsValid: true } handle || handle.GrabbedComponent is not { IsValid: true }
+        var lost = !Things.Alive(_held) || World.Player is null || !Hand.Holding
             || stop is not null || _held is RPawnVillain { Health: <= 0 } || (_held is RPawnVillain up && !up.IsRagdoll());
         if (lost)
         {
@@ -273,15 +257,14 @@ static class GravityGrab
         var toGo = point - _target;
         var reach = PullSpeed * World.Delta;
         _target = toGo.Length() <= reach ? point : _target + Vector3.Normalize(toGo) * reach;
-        _handle!.SetLocation(_target);
-        if (_part is SkeletalMeshComponent held)
-        {
-            NoCalming.Hold(held, true);
-        }
-
+        Hand.Pull(_target);
         if (_held is RPawnVillain person)
         {
-            KeepLimp(person);
+            Down.Keep(person);
+        }
+        else if (_part is SkeletalMeshComponent loose)
+        {
+            Down.Loosen(loose);
         }
 
         _part?.WakeRigidBody(_bone);
@@ -348,29 +331,6 @@ static class GravityGrab
                 part.SetRBLinearVelocity(velocity, false);
             }
         }
-
-        // The editor's carry needs no handle between grabs, and the row may be off.
-        Detach();
-    }
-
-    // The game counts a ragdoll's stun time down and stands the person up at zero, or sooner once
-    // the body is still. Held, the time is topped up and the stillness rule is off. The ragdoll's
-    // own state only starts a tick or two after the knock-down, so this waits for it.
-    static void KeepLimp(RPawnVillain person)
-    {
-        if (person.RagdollProcessor is not { IsValid: true } ragdoll || ragdoll.CurrState != RRagdollProcessor.RagdollState.RAG_Ragdoll)
-        {
-            return;
-        }
-
-        if (!ReferenceEquals(_ragdoll, ragdoll))
-        {
-            _ragdoll = ragdoll;
-            _stunWas = ragdoll.StunTime;
-        }
-
-        NoFloorGetUp.Hold(ragdoll, false);
-        ragdoll.StunTime = KeepDown;
     }
 
     static void Hold(Actor target)
@@ -388,15 +348,19 @@ static class GravityGrab
             return;
         }
 
-        var handle = Handle(player);
         var bone = person is not null ? Pelvis : FName.None;
         var spot = person is not null && part is SkeletalMeshComponent mesh ? mesh.GetBoneLocation(bone, 0) : target.Location;
-        Loosen(part);
-        part.WakeRigidBody(bone);
-        handle.GrabComponent(part, bone, spot, false);
-        if (handle.GrabbedComponent is not { IsValid: true })
+
+        // Calming goes off before the pull starts, as the game's grab tool does it.
+        if (part is SkeletalMeshComponent loose)
         {
-            NoCalming.Release();
+            Down.Loosen(loose);
+        }
+
+        if (!Hand.Take(player, part, bone, spot))
+        {
+            Hand.Remove();
+            Down.Free(0f);
             Toasts.Show(Grab.Plain, "IT WON'T BUDGE", OutcomeKind.Failed, Grab);
             return;
         }
@@ -406,36 +370,6 @@ static class GravityGrab
         _bone = bone;
         _target = spot;
         _epoch = World.Epoch;
-    }
-
-    // Calming off for a body about to be pulled, as the game's grab tool does.
-    static void Loosen(PrimitiveComponent part)
-    {
-        if (part is not SkeletalMeshComponent mesh)
-        {
-            return;
-        }
-
-        NoCalming.Hold(mesh, true);
-        mesh.ResetRagdollCalmingMeasures();
-    }
-
-    // One handle on the player, kept while the row is on.
-    static RB_Handle Handle(RPawnPlayer player)
-    {
-        if (_handle is { IsValid: true } && ReferenceEquals(_owner, player) && _epoch == World.Epoch)
-        {
-            return _handle;
-        }
-
-        Detach();
-        _handle = Made.Tracked(new RB_Handle(player));
-        player.AttachComponent(_handle);
-        _handle.LinearStiffness = Stiffness;
-        _handle.LinearDamping = Damping;
-        _owner = player;
-        _epoch = World.Epoch;
-        return _handle;
     }
 
     static void Throw()
@@ -453,55 +387,22 @@ static class GravityGrab
         part.SetRBLinearVelocity(way * (float)Power.Value * Metre, false);
     }
 
-    // Lets go. A person keeps at least the stun time given, or what they had when picked up if
-    // that was longer, and the game stands them up from there in its own way.
+    // Lets go, and the handle comes off the player with it. A person keeps at least the stun time
+    // given, or what they had when picked up if that was longer.
     static void Drop(float left = LeftAfterDrop)
     {
-        if (_handle is { IsValid: true } handle && handle.GrabbedComponent is { IsValid: true })
-        {
-            handle.ReleaseComponent();
-        }
-
-        NoCalming.Release();
-        NoFloorGetUp.Release();
-        if (_ragdoll is { IsValid: true } ragdoll && ragdoll.CurrState == RRagdollProcessor.RagdollState.RAG_Ragdoll)
-        {
-            ragdoll.StunTime = MathF.Max(_stunWas, left);
-        }
-
-        _ragdoll = null;
+        Hand.Remove();
+        Down.Free(left);
         _held = null;
         _part = null;
         _bone = FName.None;
     }
 
-    static void Detach()
-    {
-        if (_handle is { IsValid: true } handle)
-        {
-            if (handle.GrabbedComponent is { IsValid: true })
-            {
-                handle.ReleaseComponent();
-            }
-
-            if (_owner is { IsAlive: true } owner)
-            {
-                owner.DetachComponent(handle);
-            }
-        }
-
-        _handle = null;
-        _owner = null;
-    }
-
     // A new world freed everything, so nothing is called on the old objects.
     static void Forget()
     {
-        _handle = null;
-        _owner = null;
         _held = null;
         _part = null;
-        _ragdoll = null;
         _waiting = null;
         _byEditor = false;
         _pressedAt = float.NegativeInfinity;
@@ -525,6 +426,5 @@ static class GravityGrab
 
         _waiting = null;
         Drop();
-        Detach();
     }
 }
