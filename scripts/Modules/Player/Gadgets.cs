@@ -176,7 +176,7 @@ static class Gadgets
     {
         new("USE", UnlockAll, UseWhileRecharging, VentsAndCover),
         new("DISRUPTOR", UnlimitedDisruptor, DisruptAnything),
-        new("HACKING", AutoPasswordHack),
+        new("HACKING", AutoPasswordHack, Blinding.ManyTargets, Blinding.BlindTime),
         new("BATARANG", BatarangDamage),
         new("GRAVITY GRAB", GravityGrab.Grab, GravityGrab.Distance, GravityGrab.Power),
         new("EXPLOSIVE GEL", LethalGel, GelDamage, GelRadius),
