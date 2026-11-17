@@ -15,10 +15,6 @@ static class Confirm
     static (Command Row, Confirmation Ask)? _yes;
     static long _yesAt;
 
-    // A screen of the game's own that asks in its own yes/no box while it is open. It returns
-    // false when it can't ask, and the question goes in the box over the menu instead.
-    public static Func<Confirmation, Action, bool>? Elsewhere { get; set; }
-
     // True when the player just said yes to this same question for this row. Otherwise it asks,
     // and a yes runs the row again, through again when it isn't a plain press.
     public static bool Asked(Command row, Confirmation ask, Action? again = null)
@@ -44,7 +40,9 @@ static class Confirm
             }
         }
 
-        if (Elsewhere?.Invoke(ask, Yes) != true)
+        // The KNIGHTFALL screen on the main menu asks in the game's own yes/no box while it is
+        // open. Anywhere else the question goes in the box over the menu.
+        if (!MainMenuScreen.Ask(ask, Yes))
         {
             Menu.Ask(ask, row, Yes);
         }

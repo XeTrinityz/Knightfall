@@ -30,6 +30,7 @@ static class MainMenuScreen
     const int NoButton = 2;
     const int CheckMilliseconds = 100;
     const int ArtSearch = 40;
+    const int ArtPieces = 2;
     const int TipWidth = 40;
 
     // The screen reads and sets each row as it builds, and those sets aren't the player's.
@@ -41,7 +42,6 @@ static class MainMenuScreen
     static string _path = "";
     static long _nextCheck;
     static long _quietUntil;
-    static int _focused = -1;
     static Action? _onYes;
 
     // The row pressed last, until its result has been shown.
@@ -49,28 +49,29 @@ static class MainMenuScreen
     static long _pressedAt;
     static RGFxMoviePopupRequester? _popup;
     static readonly Dictionary<int, Command> Buttons = new();
-    static readonly Dictionary<string, string> Labels = new();
+
+    // Each row's text, which is also the name the list gives the row.
+    static readonly List<string> Labels = new();
+
+    static readonly string[] ArtNames = Enumerable.Range(0, ArtSearch + 1).Select(static i => "instance" + i).ToArray();
+
+    // The names the title art has while this screen is open, once it has been found.
+    static readonly List<string> Art = new();
 
     // Our screen's Back goes to the main menu. The screen's own value is kept to put back when
     // the game opens it as Game Options again.
     static string? _backBefore;
 
-    // Opens the screen. False when it can't, and the caller opens the mod's own menu.
-    public static bool Begin(RGFxMovieUI_MainMenu menu, int rowId)
+    public static void Begin(RGFxMovieUI_MainMenu menu, int rowId)
     {
-        if (menu.bInTransition)
-        {
-            return false;
-        }
-
         _opening = true;
         _until = Environment.TickCount64 + WaitMilliseconds;
         _screen = null;
+        Art.Clear();
 
         // So the list comes back with this row picked, as it does for the game's own.
         menu.StoreButtonId(rowId);
         menu.TransitionForwards(ScreenName, true);
-        return true;
     }
 
     static bool Waiting => _opening && Environment.TickCount64 <= _until;
@@ -112,10 +113,8 @@ static class MainMenuScreen
         var menu = movie.GetVariableObject(path, GFxObject.StaticClass()) ?? throw new InvalidOperationException("menu path didn't resolve");
         _screen = movie;
         _quietUntil = Environment.TickCount64 + QuietMilliseconds;
-        _focused = -1;
         _onYes = null;
         _popup = null;
-        Confirm.Elsewhere = Ask;
         Buttons.Clear();
         Labels.Clear();
 
@@ -128,19 +127,23 @@ static class MainMenuScreen
         _backBefore ??= movie.OnBackCmd.ToString() ?? "";
         movie.OnBackCmd = new FString(MainMenuEvent);
 
-        Log.Info($"Main menu: the KNIGHTFALL screen is built. Back goes to '{movie.OnBackCmd}'.");
+        Log.Info("Main menu: the KNIGHTFALL screen is built.");
     }
 
     static void Button(GFxObject menu, int uid, Command command)
     {
         Buttons[uid] = command;
-        Labels[command.Plain] = command.Plain;
-        Invoke(menu, "AddButton", Int(uid), Str(command.Plain), Bool(true), Bool(false), Bool(false), Str(""));
+        Labels.Add(command.Plain);
+        AddButton(menu, uid, command.Plain);
     }
+
+    // A plain row on one of the game's own menu lists.
+    public static void AddButton(GFxObject menu, int uid, string label) =>
+        Invoke(menu, "AddButton", Int(uid), Str(label), Bool(true), Bool(false), Bool(false), Str(""));
 
     static void List(GFxObject menu, int uid, Choice choice)
     {
-        Labels[choice.Plain] = choice.Plain;
+        Labels.Add(choice.Plain);
         var values = new List<string>();
         for (var i = 0; i < choice.Count; i++)
         {
@@ -205,10 +208,10 @@ static class MainMenuScreen
     }
 
     // The rows run as they do in the mod's own menu. Any that ask first ask in the game's own box.
-    [Redirect(typeof(RGFxMovieUI), nameof(RGFxMovieUI.XI_OnClicked))]
-    static void Clicked(RGFxMovieUI self, int id)
+    [Redirect(typeof(RGFxMovieUI_OptionsGame), nameof(RGFxMovieUI_OptionsGame.XI_OnClicked))]
+    static void Clicked(RGFxMovieUI_OptionsGame self, int id)
     {
-        if (self is not RGFxMovieUI_OptionsGame screen || !Ours(screen) || !Buttons.TryGetValue(id, out var command))
+        if (!Ours(self) || !Buttons.TryGetValue(id, out var command))
         {
             Redirects.RunOriginal();
             return;
@@ -250,7 +253,7 @@ static class MainMenuScreen
     }
 
     // A row that can't be undone asks here, in the game's own yes/no box, while the screen is up.
-    static bool Ask(Confirmation ask, Action onYes)
+    public static bool Ask(Confirmation ask, Action onYes)
     {
         if (_screen is not { IsAlive: true } screen || !screen.bMovieIsOpen || screen.bClosing || _popup is not null)
         {
@@ -271,7 +274,6 @@ static class MainMenuScreen
             return;
         }
 
-        _focused = id;
         Sound(self, "OnFocus");
         Tip(id == MedalsForUid ? Progress.MedalsFor.Help : Buttons.TryGetValue(id, out var command) ? command.Help : "");
     }
@@ -285,10 +287,10 @@ static class MainMenuScreen
         }
     }
 
-    [Redirect(typeof(RGFxMovieUI), nameof(RGFxMovieUI.XI_GetTitle))]
-    static FString Title(RGFxMovieUI self)
+    [Redirect(typeof(RGFxMovieUI_OptionsGame), nameof(RGFxMovieUI_OptionsGame.XI_GetTitle))]
+    static FString Title(RGFxMovieUI_OptionsGame self)
     {
-        if (self is RGFxMovieUI_OptionsGame screen && (Ours(screen) || Waiting))
+        if (Ours(self) || Waiting)
         {
             // Big and grey like the art it stands in for.
             return new FString("<FONT FACE=\"$Game\" SIZE=\"72\" COLOR=\"#8A8A8A\">KNIGHTFALL</FONT>");
@@ -347,8 +349,8 @@ static class MainMenuScreen
         }
     }
 
-    // Runs every frame. The screen's baked title art is hidden, and the texts are put back when
-    // the screen re-localizes them.
+    // Runs every frame. A row's result is shown, and the texts are put back when the screen
+    // re-localizes them.
     public static void Tick()
     {
         if (_screen is not { IsAlive: true } screen || !screen.bMovieIsOpen || screen.bClosing)
@@ -356,7 +358,6 @@ static class MainMenuScreen
             return;
         }
 
-        HideArt(screen);
         ShowResult(screen);
         var now = Environment.TickCount64;
         if (now < _nextCheck)
@@ -366,9 +367,9 @@ static class MainMenuScreen
 
         _nextCheck = now + CheckMilliseconds;
         var menu = screen.GetVariableObject(_path, GFxObject.StaticClass());
-        foreach (var (name, text) in Labels)
+        foreach (var text in Labels)
         {
-            var label = menu?.GetObject(name, GFxObject.StaticClass())?.GetObject("Contents", GFxObject.StaticClass())?.GetObject("Label", GFxObject.StaticClass());
+            var label = menu?.GetObject(text, GFxObject.StaticClass())?.GetObject("Contents", GFxObject.StaticClass())?.GetObject("Label", GFxObject.StaticClass());
             var field = label?.GetObject("Label", GFxObject.StaticClass()) ?? label?.GetObject("Text", GFxObject.StaticClass()) ?? label;
             if (field is not null && field.GetText().ToString() != text)
             {
@@ -383,12 +384,11 @@ static class MainMenuScreen
     // game's own OK box. A row still working shows only its final result.
     static void ShowResult(RGFxMovieUI_OptionsGame screen)
     {
-        if (_waiting is not { } command || _popup is not null || command.ReportedAt <= _pressedAt)
+        if (_waiting is not { } command || _popup is not null || !command.Reported(_pressedAt, out var outcome))
         {
             return;
         }
 
-        command.Showing(command.ReportedAt, out var outcome);
         if (outcome.Text.StartsWith("WORKING", StringComparison.Ordinal))
         {
             return;
@@ -401,15 +401,15 @@ static class MainMenuScreen
 
     // The screen's own tick runs inside Flash before a frame is drawn, so the art is gone from
     // the first frame of the intro, before the screen is even built.
-    [Redirect(typeof(RGFxMovieUI), nameof(RGFxMovieUI.XI_Tick))]
-    static void FlashTick(RGFxMovieUI self)
+    [Redirect(typeof(RGFxMovieUI_OptionsGame), nameof(RGFxMovieUI_OptionsGame.XI_Tick))]
+    static void FlashTick(RGFxMovieUI_OptionsGame self)
     {
         Redirects.RunOriginal();
-        if (self is RGFxMovieUI_OptionsGame screen && (Ours(screen) || Waiting))
+        if (Ours(self) || Waiting)
         {
             try
             {
-                HideArt(screen);
+                HideArt(self);
             }
             catch (Exception error)
             {
@@ -419,7 +419,8 @@ static class MainMenuScreen
     }
 
     // The screen draws GAME and OPTIONS as two pieces of art about 471 by 87 each. Their names
-    // change every time the screen opens, so they are found by size.
+    // change every time the screen opens, so they are found by size. Once both are found, only
+    // those two are looked at again.
     static void HideArt(RGFxMovieUI_OptionsGame movie)
     {
         var screen = movie.GetVariableObject("root1.Screen", GFxObject.StaticClass());
@@ -431,20 +432,42 @@ static class MainMenuScreen
         // The title field is sized for the game's small title text, so it is let grow to fit ours.
         screen.GetObject("Title", GFxObject.StaticClass())?.GetObject("Label", GFxObject.StaticClass())?.GetObject("Text", GFxObject.StaticClass())?.SetString("autoSize", new FString("left"));
 
-        for (var i = 0; i <= ArtSearch; i++)
+        if (Art.Count >= ArtPieces)
         {
-            var art = screen.GetObject("instance" + i, GFxObject.StaticClass());
-            if (art is null || !art.GetBool("visible"))
+            foreach (var name in Art)
             {
-                continue;
+                Hide(screen, name);
             }
 
-            var width = art.GetFloat("width");
-            var height = art.GetFloat("height");
-            if (width is > 430f and < 520f && height is > 75f and < 120f)
+            return;
+        }
+
+        foreach (var name in ArtNames)
+        {
+            if (Hide(screen, name) && !Art.Contains(name))
             {
-                art.SetVisible(false);
+                Art.Add(name);
             }
         }
+    }
+
+    // True when this was a piece of the title art on show, which is now hidden.
+    static bool Hide(GFxObject screen, string name)
+    {
+        var art = screen.GetObject(name, GFxObject.StaticClass());
+        if (art is null || !art.GetBool("visible"))
+        {
+            return false;
+        }
+
+        var width = art.GetFloat("width");
+        var height = art.GetFloat("height");
+        if (width is > 430f and < 520f && height is > 75f and < 120f)
+        {
+            art.SetVisible(false);
+            return true;
+        }
+
+        return false;
     }
 }

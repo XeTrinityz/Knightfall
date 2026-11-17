@@ -4,7 +4,6 @@ using BmSDK;
 using BmSDK.BmGame;
 using BmSDK.BmScript;
 using BmSDK.GFxUI;
-using FASValue = BmSDK.GFxUI.GFxMoviePlayer.FASValue;
 
 namespace Knightfall;
 
@@ -20,14 +19,12 @@ static class MainMenuRow
 
     static RGFxMovieUI_MainMenu? _setup;
     static string _path = "";
-    static bool _added;
 
     [Redirect(typeof(RGFxMovieUI_MainMenu), nameof(RGFxMovieUI_MainMenu.XI_SetupMenu))]
     static void Setup(RGFxMovieUI_MainMenu self, FString targetPath)
     {
         _setup = self;
         _path = targetPath.ToString() ?? "";
-        _added = false;
         try
         {
             Redirects.RunOriginal();
@@ -36,20 +33,16 @@ static class MainMenuRow
         {
             _setup = null;
         }
-
-        // The game's script changed shape, so the row goes at the end rather than not at all.
-        if (!_added)
-        {
-            Add(self, _path);
-        }
     }
 
     [Redirect(typeof(RGameInfo), nameof(RGameInfo.ConceptGetTotalCollected))]
     static int ConceptArt(RGameInfo self, out int nTotalPossible, out int nNewCollected)
     {
         var collected = self.ConceptGetTotalCollected(out nTotalPossible, out nNewCollected);
-        if (_setup is { } menu && !_added)
+        if (_setup is { } menu)
         {
+            // Once per setup.
+            _setup = null;
             Add(menu, _path);
         }
 
@@ -58,7 +51,6 @@ static class MainMenuRow
 
     static void Add(RGFxMovieUI_MainMenu movie, string path)
     {
-        _added = true;
         try
         {
             var menu = movie.GetVariableObject(path, GFxObject.StaticClass());
@@ -68,14 +60,7 @@ static class MainMenuRow
                 return;
             }
 
-            var args = new TArray<FASValue>();
-            args.Add(new FASValue { Type = GFxMoviePlayer.ASType.AS_Int, I = Uid });
-            args.Add(new FASValue { Type = GFxMoviePlayer.ASType.AS_String, S = new FString(Label) });
-            args.Add(new FASValue { Type = GFxMoviePlayer.ASType.AS_Boolean, B = true });
-            args.Add(new FASValue { Type = GFxMoviePlayer.ASType.AS_Boolean, B = false });
-            args.Add(new FASValue { Type = GFxMoviePlayer.ASType.AS_Boolean, B = false });
-            args.Add(new FASValue { Type = GFxMoviePlayer.ASType.AS_String, S = new FString("") });
-            menu.Invoke("AddButton", args);
+            MainMenuScreen.AddButton(menu, Uid, Label);
             Log.Info("Main menu: KNIGHTFALL row added.");
         }
         catch (Exception error)
@@ -95,16 +80,14 @@ static class MainMenuRow
 
         try
         {
-            if (self.IsInputBlocked() || self.bClosing)
+            // What the game's own rows wait for, too.
+            if (self.IsInputBlocked() || self.bInTransition || self.bClosing || self.PopupType != 0)
             {
                 return;
             }
 
             Sound(self, "OnClicked");
-            if (!MainMenuScreen.Begin(self, Uid))
-            {
-                Menu.OpenFromGame();
-            }
+            MainMenuScreen.Begin(self, Uid);
         }
         catch (Exception error)
         {

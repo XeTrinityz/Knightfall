@@ -108,16 +108,7 @@ static class Catalog
 
         public string Name { get; }
 
-        // True for a page that is only there on the game's main menu. The others only show in a world.
-        public bool MenuOnly { get; private set; }
-
         public IReadOnlyList<Tab> Tabs => _tabs;
-
-        public Page AtMainMenu()
-        {
-            MenuOnly = true;
-            return this;
-        }
 
         // A tab with no headings.
         public Page Add(string tab, params Feature[] rows) => Add(tab, new Section("", rows));
@@ -164,9 +155,6 @@ static class Catalog
     static bool _openingDue;
 
     public static IReadOnlyList<Page> Pages => PageList;
-
-    // The pages the menu turns through on the main menu or in a world.
-    public static IReadOnlyList<Page> PagesFor(bool mainMenu) => PageList.Where(page => page.MenuOnly == mainMenu).ToList();
 
     public static IReadOnlyList<Feature> All => Everything;
 

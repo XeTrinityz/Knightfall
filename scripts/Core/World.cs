@@ -69,8 +69,6 @@ static class World
     }
 
     // Runs every drawn frame.
-    public static bool LooksLikeFrontend() => Game.TryGetGameInfo(out var rules) && rules is RGIFrontend;
-
     public static void Refresh()
     {
         if (!Game.TryGetWorldInfo(out var world))
@@ -80,7 +78,7 @@ static class World
             return;
         }
 
-        InFrontend = LooksLikeFrontend();
+        InFrontend = Game.TryGetGameInfo(out var rules) && rules is RGIFrontend;
         var was = Paused;
         Paused = world.Pauser is not null;
         if (was && !Paused)

@@ -125,9 +125,6 @@ static class Progress
         new("SAVE", SaveNow),
     };
 
-    // What works on the game's main menu, where only the save is there.
-    public static readonly Catalog.Section MainMenuSection = new("UNLOCKS", AllExtras, MedalsFor, ChallengeMedals, Achievements);
-
     // Every experience award passes through here before it is banked.
     [Redirect(typeof(RExperienceSystem), nameof(RExperienceSystem.AddUnbankedXP))]
     static void AddUnbankedXP(RExperienceSystem self, int xpAwarded, bool teeth)
@@ -286,8 +283,10 @@ static class Progress
 
     // Showcase items and concept art are unlocked as flags in the options save, so a change in
     // their number tells whether the unlock-all found anything new.
-    static int OptionFlagCount() =>
-        Game.TryGetGameRI(out var info) && info.PersistentOptions is { IsValid: true } options ? options.OptionsFlags.Count : 0;
+    static int OptionFlagCount() => Options()?.OptionsFlags.Count ?? 0;
+
+    static RPersistentOptions? Options() =>
+        Game.TryGetGameRI(out var info) && info.PersistentOptions is { IsValid: true } options ? options : null;
 
     // Medals, scores and seen marks live in the options save, which nothing else writes until the
     // options screen closes. It is written now the way that screen does it.
@@ -305,7 +304,7 @@ static class Progress
     static int MarkExtrasSeen(RGameInfo game)
     {
         var marked = 0;
-        if (Game.TryGetGameRI(out var info) && info.PersistentOptions is { IsValid: true } options)
+        if (Options() is { } options)
         {
             var viewed = new List<string>();
             var flags = options.OptionsFlags;
@@ -372,7 +371,7 @@ static class Progress
             return refusal;
         }
 
-        if (!Game.TryGetGameRI(out var info) || info.PersistentOptions is not { IsValid: true } options)
+        if (Options() is not { } options)
         {
             return Outcome.Failed("NO SAVE DATA");
         }
@@ -393,7 +392,6 @@ static class Progress
         for (var i = 0; i < maps.Count; i++)
         {
             var map = maps[i];
-            var group = map.ChallengeFrontendGroup.ToString();
             if (map.Id <= 0 || !options.IsChallengeUnlocked(map.Id))
             {
                 continue;
@@ -409,6 +407,8 @@ static class Progress
             {
                 continue;
             }
+
+            var group = map.ChallengeFrontendGroup.ToString();
 
             // Played training is saved as the awarded flag, with a score of 1 and three medals
             // on the challenge's own slot.

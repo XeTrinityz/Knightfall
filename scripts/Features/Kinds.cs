@@ -422,8 +422,12 @@ sealed class Command : Feature
         Toasts.Reported(this, outcome);
     }
 
-    // When the last result came, as a Stopwatch timestamp. 0 before the first.
-    public long ReportedAt => _lastAt;
+    // The last result, when it came after this Stopwatch timestamp.
+    public bool Reported(long since, out Outcome outcome)
+    {
+        outcome = _last;
+        return _lastAt > since;
+    }
 
     // The last result, while it is still fresh enough to show.
     public bool Showing(long now, out Outcome outcome)
