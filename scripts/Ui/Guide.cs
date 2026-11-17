@@ -38,7 +38,7 @@ static class Guide
         View.Time = (float)(now / (double)Stopwatch.Frequency % LoopSeconds);
 
         // Left as it was while fading out, so it fades with what it showed.
-        var showing = !World.Paused && !Menu.Showing && (EditorMode.Guide(View) || FreeCamera.Guide(View) || Eyes.Guide(View));
+        var showing = !World.Paused && !Menu.Showing && (EditorMode.Guide(View) || FreeCamera.Guide(View) || Eyes.Guide(View) || GravityGrab.Guide(View));
         _progress = showing
             ? MathF.Min(1f, _progress + seconds / InSeconds)
             : World.Paused ? 0f : MathF.Max(0f, _progress - seconds / OutSeconds);

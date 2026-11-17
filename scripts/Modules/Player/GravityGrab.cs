@@ -270,6 +270,24 @@ static class GravityGrab
         _part?.WakeRigidBody(_bone);
     }
 
+    static readonly GuideLine PickUpLine = new(Array.Empty<string>(), "FIRE TO PICK UP");
+    static readonly GuideLine ThrowLine = new(Array.Empty<string>(), "FIRE TO THROW");
+
+    // Fills the key guide's panel while the row is on and a gadget it takes over is aimed, so the
+    // fire button not firing the gadget is never a surprise.
+    public static bool Guide(GuideView view)
+    {
+        if (!Grab.On || _byEditor || !Aiming())
+        {
+            return false;
+        }
+
+        view.Title = "GRAVITY GRAB";
+        view.Lines.Clear();
+        view.Lines.Add(_held is not null ? ThrowLine : PickUpLine);
+        return true;
+    }
+
     // True while something is held or being knocked down to be held.
     public static bool Active => _held is not null || _waiting is not null;
 
