@@ -106,6 +106,7 @@ static class Layout
         Catalog.AddPage("SPAWNER")
             .Add("CHARACTERS", People.Sections)
             .Add("BODYGUARDS", Bodyguards.Sections)
+            .Add("WAVES", Waves.Sections)
             .Add("VEHICLES", Vehicles.Sections)
             .Add("OBJECTS", Objects.Sections)
             .Add("WEAPONS", Arms.Sections)
@@ -114,6 +115,7 @@ static class Layout
         Catalog.Background("spawner.spawned", Spawned.Tick, Spawned.Forget);
         Catalog.Background("spawner.characters", People.Tick);
         Catalog.Background("spawner.bodyguards", Bodyguards.Tick, Bodyguards.Release);
+        Catalog.Background("spawner.waves", Waves.Tick, Waves.Release);
         Catalog.Background("spawner.vehicles", Vehicles.Tick);
         Catalog.Background("spawner.objects", Objects.Tick);
         Catalog.Background("spawner.weapons", Arms.Tick);

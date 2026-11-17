@@ -211,7 +211,10 @@ static class Menu
             _onWrist = false;
             Theme.BeginMenu();
             Theme.Current.Render(View);
-            Beside?.Invoke(View);
+            if (Beside is { } beside)
+            {
+                Claims.Measure(() => beside(View));
+            }
             if (View.Modal is { } modal)
             {
                 Theme.Current.RenderModal(View, modal);

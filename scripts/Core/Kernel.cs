@@ -149,11 +149,13 @@ static class Kernel
         Run("guide", static () => Guide.Update());
         Run("freeze", static () => WorldTime.SyncFreeze());
         Run("bars draw", static target => CameraView.RenderBars(target), canvas);
-        Run("dash draw", static target => Dash.Render(target), canvas);
+        Claims.Clear();
+        Run("dash draw", static target => Claims.Measure(Dash.Render, target), canvas);
         Run("editor draw", static target => Marks.Render(target), canvas);
         Run("radial draw", static target => Radial.Render(target), canvas);
-        Run("guide draw", static target => Guide.Render(target), canvas);
-        Run("villain hud draw", static target => VillainHud.Render(target), canvas);
+        Run("guide draw", static target => Claims.Measure(Guide.Render, target), canvas);
+        Run("villain hud draw", static target => Claims.Measure(VillainHud.Render, target), canvas);
+        Run("wave hud draw", static target => Claims.Measure(WaveHud.Render, target), canvas);
         Run("draw", static target => Menu.Render(target), canvas);
 
         // After the menu, so they can see where it is and stay on top of it.

@@ -34,6 +34,13 @@ static class Crowd
     // Each body tries its own spot first, then nearer, then further.
     static readonly float[] RingTries = { 1f, 0.7f, 1.35f };
 
+    // How far out ScatterSpots looks, as shares of the distance asked for, in order.
+    static readonly float[] ScatterTries = { 1f, 0.75f, 1.25f, 0.5f, 0.35f };
+    const int Directions = 24;
+
+    // How far apart two scattered spots have to be.
+    const float Apart = 150f;
+
     public static readonly Slider Range = new(
         "world.enemies.move_range", "PULL AND LAUNCH RANGE",
         "How far away PULL and LAUNCH reach, for enemies and friendlies.",
@@ -190,6 +197,70 @@ static class Crowd
         }
 
         return spots;
+    }
+
+    // Up to count spots spread round the mover at about the given distance, for a wave of
+    // enemies. Each is open dry ground in sight of the mover, apart from the others. Directions
+    // are tried spread out first, then nearer and further, so a street with buildings on both
+    // sides still finds room for most of them. Turn moves where the first one lands. Nobody lands
+    // on top of anyone in taken.
+    public static List<Vector3> ScatterSpots(Pawn mover, int count, float radius, float turn, IEnumerable<Actor>? taken = null)
+    {
+        var spots = new List<Vector3>(count);
+        var here = mover.Location;
+        var eyes = here + new Vector3(0f, 0f, Eyes);
+        foreach (var scale in ScatterTries)
+        {
+            for (var k = 0; k < Directions && spots.Count < count; k++)
+            {
+                // Stepping by 7 of 24 visits every direction, each far from the last.
+                var angle = turn + MathF.Tau * (k * 7 % Directions) / Directions;
+                var spot = here + new Vector3(MathF.Cos(angle), MathF.Sin(angle), 0f) * radius * scale;
+                if (Teleport.Floor(mover, spot, here.Z + StepUp, here.Z - StepDown, out var floor) && Teleport.Dry(floor)
+                    && !Crowded(spots, floor) && !Near(taken, floor) && mover.FastTrace(floor + new Vector3(0f, 0f, Eyes), eyes, Vector3.Zero, false))
+                {
+                    spots.Add(floor);
+                }
+            }
+
+            if (spots.Count >= count)
+            {
+                break;
+            }
+        }
+
+        return spots;
+    }
+
+    static bool Near(IEnumerable<Actor>? taken, Vector3 at)
+    {
+        if (taken is null)
+        {
+            return false;
+        }
+
+        foreach (var actor in taken)
+        {
+            if (actor.IsAlive && Vector3.DistanceSquared(actor.Location with { Z = at.Z }, at) < Apart * Apart)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static bool Crowded(List<Vector3> spots, Vector3 at)
+    {
+        foreach (var spot in spots)
+        {
+            if (Vector3.DistanceSquared(spot, at) < Apart * Apart)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static Outcome Launch(Func<RBMPawnAI, bool> side)

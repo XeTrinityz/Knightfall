@@ -228,9 +228,10 @@ static class Toasts
         }
     }
 
-    // Works out where the stack goes. It sits in the chosen corner unless the menu covers that
-    // spot. Then it moves just past the menu, below or above it or to its side, whichever is the
-    // shorter move that still fits on screen. It glides there, and back when the menu shuts.
+    // Works out where the stack goes. It sits in the chosen corner unless the menu or something
+    // else drawn on screen covers that spot, like the dash or a HUD. Then it takes the nearest spot
+    // beside, below or above what's in the way that fits on screen and covers nothing. A move up or
+    // down wins a tie, so the stack stays at its own side. It glides there, and back once clear.
     static void Stack(Theme theme, float glide)
     {
         var zoom = Look.Zoom;
@@ -242,24 +243,47 @@ static class Toasts
         var x = right ? Draw.ScreenWidth - Side - width : Side;
         var y = down ? Top : Draw.ScreenHeight - Bottom;
 
-        if (Theme.MenuArea is { } menu && menu.Overlaps(Room(x, y, width, tall, down)))
+        Blockers.Clear();
+        if (Theme.MenuArea is { } menu)
         {
-            var best = float.MaxValue;
-            var (toX, toY) = (x, y);
+            Blockers.Add(menu);
+        }
 
-            var aside = right ? menu.Left - gap - width : menu.Right + gap;
-            if (aside >= Clear && aside + width <= Draw.ScreenWidth - Clear)
+        Blockers.AddRange(Claims.All);
+        if (Blocked(Room(x, y, width, tall, down)))
+        {
+            Xs.Clear();
+            Ys.Clear();
+            Xs.Add(x);
+            Ys.Add(y);
+            foreach (var area in Blockers)
             {
-                best = MathF.Abs(aside - x);
-                (toX, toY) = (aside, y);
+                Xs.Add(area.Left - gap - width);
+                Xs.Add(area.Right + gap);
+                Ys.Add(down ? area.Bottom + gap : area.Top - gap);
+                Ys.Add(down ? area.Top - gap - tall : area.Bottom + gap + tall);
             }
 
-            // Moving up or down wins a tie, so the stack stays at its own side of the screen.
-            var past = down ? menu.Bottom + gap : menu.Top - gap;
-            var fits = down ? past + tall <= Draw.ScreenHeight - Clear : past - tall >= Clear;
-            if (fits && MathF.Abs(past - y) <= best)
+            var best = float.MaxValue;
+            var (toX, toY) = (x, y);
+            foreach (var tryX in Xs)
             {
-                (toX, toY) = (x, past);
+                foreach (var tryY in Ys)
+                {
+                    var room = Room(tryX, tryY, width, tall, down);
+                    if (room.Left < Clear || room.Right > Draw.ScreenWidth - Clear || room.Top < Clear || room.Bottom > Draw.ScreenHeight - Clear
+                        || Blocked(room))
+                    {
+                        continue;
+                    }
+
+                    var cost = MathF.Abs(tryX - x) + MathF.Abs(tryY - y) * 0.999f;
+                    if (cost < best)
+                    {
+                        best = cost;
+                        (toX, toY) = (tryX, tryY);
+                    }
+                }
             }
 
             (x, y) = (toX, toY);
@@ -271,6 +295,23 @@ static class Toasts
         View.Down = down;
         View.Height = theme.ToastHeight;
         View.Zoom = zoom;
+    }
+
+    static readonly List<Theme.Area> Blockers = new();
+    static readonly List<float> Xs = new();
+    static readonly List<float> Ys = new();
+
+    static bool Blocked(Theme.Area room)
+    {
+        foreach (var area in Blockers)
+        {
+            if (area.Overlaps(room))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     static Theme.Area Room(float x, float y, float width, float tall, bool down)

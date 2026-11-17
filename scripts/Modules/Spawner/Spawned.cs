@@ -206,7 +206,7 @@ static class Spawned
 
     static string? NonePicked() => Pick.CurrentId.Length == 0 ? NoneSpawned() ?? "NONE OF THAT KIND" : null;
 
-    public static Spawn Add(Actor actor, string label, bool passive, Action? start = null, bool guard = false, bool kept = false)
+    public static Spawn Add(Actor actor, string label, bool passive, Action? start = null, bool guard = false, bool kept = false, bool quiet = false)
     {
         var spawn = new Spawn
         {
@@ -217,7 +217,7 @@ static class Spawned
 
         // A bodyguard has its own marker, and a kept spawn coming back with its part of the world
         // isn't something the player just made, so the editor selects neither.
-        if (!guard && !kept)
+        if (!guard && !kept && !quiet)
         {
             Editor.NewSpawn(actor);
         }

@@ -439,6 +439,11 @@ static class Draw
         _canvas.SetPos(PixelX(x), PixelY(y), 0f);
         _canvas.SetDrawColor(color.R, color.G, color.B, Alpha(color));
         _canvas.DrawText(text, false, scale, scale, out info);
+        if (_measuring)
+        {
+            PixelX(x + TextWidth(text, size));
+            PixelY(y + size);
+        }
     }
 
     // Draws text that ends at the given x. Returns where it starts.
@@ -682,9 +687,47 @@ static class Draw
         return Math.Clamp((int)MathF.Ceiling(length / unitsPerBand), 2, most);
     }
 
-    static float PixelX(float x) => MathF.Round((_originX + x * _zoom) * Scale);
+    static float PixelX(float x)
+    {
+        var pixel = MathF.Round((_originX + x * _zoom) * Scale);
+        if (_measuring)
+        {
+            _minX = MathF.Min(_minX, pixel);
+            _maxX = MathF.Max(_maxX, pixel);
+        }
 
-    static float PixelY(float y) => MathF.Round((_originY + y * _zoom) * Scale);
+        return pixel;
+    }
+
+    static float PixelY(float y)
+    {
+        var pixel = MathF.Round((_originY + y * _zoom) * Scale);
+        if (_measuring)
+        {
+            _minY = MathF.Min(_minY, pixel);
+            _maxY = MathF.Max(_maxY, pixel);
+        }
+
+        return pixel;
+    }
+
+    // While measuring, everything drawn grows one box, so an overlay can say what it covered.
+    static bool _measuring;
+    static float _minX, _minY, _maxX, _maxY;
+
+    public static void Measure()
+    {
+        _measuring = true;
+        _minX = _minY = float.MaxValue;
+        _maxX = _maxY = float.MinValue;
+    }
+
+    // The box drawn into since Measure, in screen units. Null when nothing was drawn.
+    public static Theme.Area? Measured()
+    {
+        _measuring = false;
+        return _maxX < _minX || _maxY < _minY ? null : new Theme.Area(_minX / Scale, _minY / Scale, _maxX / Scale, _maxY / Scale);
+    }
 
     static byte Alpha(Rgba color) => _fade >= 1f ? color.A : (byte)(color.A * _fade);
 

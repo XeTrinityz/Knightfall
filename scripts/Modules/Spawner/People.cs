@@ -163,6 +163,7 @@ static class People
         var weapons = new[] { ("own", "THEIR OWN"), ("none", "UNARMED") }.Concat(_weapons.Select(w => (w.Key, w.Label))).ToArray();
         Weapon.SetOptions(weapons, Math.Max(0, Array.FindIndex(weapons, w => w.Item1 == weapon)));
         Bodyguards.ListWho();
+        Waves.ListGroups(_recipes.Where(recipe => recipe.Enemy).Select(recipe => recipe.Group).Distinct().Order().ToArray());
     }
 
     // Reads the lists when this world's haven't been read, or came up empty. For what spawns
@@ -192,6 +193,87 @@ static class People
         return _recipes.Where(recipe => recipe.Enemy && recipe.Loaded && recipe.Group.Equals(group, StringComparison.OrdinalIgnoreCase)
                 && (kind is null || Is(recipe.Pawn, kind)))
             .OrderBy(recipe => recipe.Weapon is null ? 1 : 0).Select(recipe => recipe.Key).ToList();
+    }
+
+    // Enemies the area has loaded to draw a wave from. With no group named, everyone but the
+    // named villains. Each comes with its body's class name, which says what kind of enemy it is,
+    // and whether it comes with a gun.
+    public static List<(string Key, string Pawn, bool Gun)> WavePool(string group)
+    {
+        Fresh();
+        return _recipes.Where(recipe => recipe.Enemy && recipe.Loaded
+                && (group.Length == 0 ? recipe.Group != Folders["villain"] : recipe.Group.Equals(group, StringComparison.OrdinalIgnoreCase)))
+            .Select(recipe => (recipe.Key, recipe.Pawn.Name.ToString() ?? "", recipe.Weapon is { IsValid: true } weapon && Is(weapon, RBMWeaponRanged.StaticClass())))
+            .ToList();
+    }
+
+    // One hostile enemy for each spot, a random pick from keys, sent into the fight the way SPAWN
+    // does with FIGHT. Each is handed to adopt as it comes. Arm says, from their key and the
+    // weapon their character comes with, whether they keep their own or get the weapon it names,
+    // where none means unarmed. Without arm they all keep their own.
+    public static int Muster(IReadOnlyList<string> keys, IReadOnlyList<System.Numerics.Vector3> spots, Pawn mover, float health, Action<RPawnVillain> adopt,
+        Func<string, Class?, (bool Keep, Class? Weapon)>? arm = null)
+    {
+        if (World.Info?.PopulationManager is not { IsValid: true } people)
+        {
+            return 0;
+        }
+
+        var made = 0;
+        foreach (var floor in spots)
+        {
+            if (_recipes.Find(recipe => recipe.Key == keys[Random.Shared.Next(keys.Count)]) is not { Loaded: true } picked)
+            {
+                continue;
+            }
+
+            var toYou = mover.Location - floor;
+            var facing = new Rotator(0f, MathF.Atan2(toYou.Y, toYou.X) * 180f / MathF.PI, 0f);
+            Log.Info($"Waves: spawning {picked.Label} ({picked.Pawn.Name}, {picked.Define.GetPathName(null)}, {picked.Type.Name}).");
+            var body = people.SpawnPawn(picked.Pawn, picked.Define, picked.Type, floor + new System.Numerics.Vector3(0f, 0f, 100f), facing);
+            if (body is not { IsAlive: true })
+            {
+                continue;
+            }
+
+            if (body is not RPawnVillain thug || body.Controller is not { IsValid: true })
+            {
+                body.DestroyOrReturnToPool(true, false);
+                continue;
+            }
+
+            Spawned.Add(thug, picked.Label, false, () => Start(thug, Fight, false), quiet: true);
+            if (thug.AIController is { IsValid: true, RiotBrain: { IsValid: true } riot })
+            {
+                riot.bRiotWantsToFight = true;
+            }
+
+            // Riddler's robots only work with their own guns, so they are never handed anything else.
+            var robot = (picked.Type.Name.ToString() ?? "").Contains("Robot", StringComparison.Ordinal);
+            var (keep, wanted) = arm is null || robot ? (true, null) : arm(picked.Key, picked.Weapon);
+            if (keep)
+            {
+                if (!(body.CurrWeapon is { IsValid: true }) && picked.Weapon is { IsValid: true } own)
+                {
+                    Arms.Hand(body, own);
+                }
+            }
+            else if (wanted is { IsValid: true } given)
+            {
+                Arms.Hand(body, given);
+            }
+            else if (body.CurrWeapon is { IsValid: true })
+            {
+                body.DisappearDisarm();
+            }
+
+            Toughen(thug, health);
+            thug.bSpawnedInRiot = true;
+            adopt(thug);
+            made++;
+        }
+
+        return made;
     }
 
     // Everyone listed who can fight, for the bodyguards tab. Refresh hands it the new list each
@@ -295,7 +377,7 @@ static class People
     // GROUP as soon as it changes.
     public static void Tick()
     {
-        var shown = Menu.Shows(Who) || Menu.Shows(Bodyguards.Who);
+        var shown = Menu.Shows(Who) || Menu.Shows(Bodyguards.Who) || Menu.Shows(Waves.Enemies);
         if (shown && !_shown)
         {
             Refresh();
@@ -432,7 +514,7 @@ static class People
     }
 
     // Once the brain has taken over. FIGHT goes the way the game pulls a street thug into a fight.
-    static void Start(RBMPawnAI body, int behaviour, bool passive)
+    public static void Start(RBMPawnAI body, int behaviour, bool passive)
     {
         if (!body.IsAlive || body.AIController is not { IsValid: true } brain)
         {
