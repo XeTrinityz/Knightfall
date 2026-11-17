@@ -155,6 +155,10 @@ sealed class Slider : Feature
 
     public override void Press()
     {
+        if (!IsDefault)
+        {
+            Reset();
+        }
     }
 
     void Set(double value)

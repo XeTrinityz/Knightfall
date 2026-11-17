@@ -587,7 +587,7 @@ static class Menu
     {
         var listening = Hotkeys.Listening is not null;
         var focus = View.Focus;
-        (string? Press, string? Bind, string? Favourite, bool Passing) row = (focus?.PressName, focus?.BindKey?.Name, focus?.FavouriteKey?.Name, focus?.Passing ?? false);
+        (string? Press, string? Bind, string? Favourite, bool Passing) row = (focus is Slider { IsDefault: false } ? "RESET" : focus?.PressName, focus?.BindKey?.Name, focus?.FavouriteKey?.Name, focus?.Passing ?? false);
         if (_hintsBuilt && _hintDevice == Controls.LastDevice && _hintStyle == Pad.Look && _hintListening == listening && _hintRow == row)
         {
             return;
