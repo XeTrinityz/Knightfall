@@ -112,7 +112,7 @@ static class Villains
         new(RiddlerMech.Option, RiddlerMech.Sections, RiddlerMech.Fit, Keys: RiddlerMech.DefaultKeys, Marking: RiddlerMech.Marking, Marks: RiddlerMech.Marks,
             Rest: RiddlerMech.Rest, Dossier: new(CaseFile.Portrait(12, 3), "RiddlerMech_Desc", "Riddler")),
         new(MrFreeze.Option, MrFreeze.Sections, MrFreeze.AimView, MrFreeze.KeepAimFacing, Marking: MrFreeze.Marking, Marks: MrFreeze.Marks, Rest: MrFreeze.Rest,
-            Dossier: new(CaseFile.FreezeEmblem, "DLCMr_Freeze_Desc",
+            Dossier: new(null, "DLCMr_Freeze_Desc",
                 Withheld: new("Victor Fries", "REDACTED", "Keeps his wife Nora frozen until he can cure her Huntington's."))),
         new(JokerVillain.Option, JokerVillain.Sections, JokerVillain.AimView, JokerVillain.KeepAimFacing, Marking: JokerVillain.Marking, Marks: JokerVillain.Marks,
             Rest: JokerVillain.Rest, Dossier: new(CaseFile.Portrait(9, 2), "Joker_Desc", "Joker")),
@@ -122,7 +122,7 @@ static class Villains
             Rest: ArkhamKnight.Rest, Dossier: new(CaseFile.Portrait(3, 2), "ArkhamKnight_Desc", "Arkham_Knight")),
         new(KillerCroc.Option, KillerCroc.Sections, KillerCroc.Fit, KillerCroc.KeepFacing, KillerCroc.DefaultKeys, Hit: KillerCroc.Hit, Walks: true, Steps: KillerCroc.Steps,
             Rest: KillerCroc.Rest, Dossier: new(null, "DLCKillerCroc_Desc",
-                Withheld: new("Waylon Jones", "CLASSIFIED", "Tracked through the marshes outside Gotham and flown out by a unit that doesn't exist.", KillerCroc.InTheDark))),
+                Withheld: new("Waylon Jones", "CLASSIFIED", "Tracked through the marshes outside Gotham and flown out by a unit that doesn't exist."))),
         new(Scarecrow.Option, Scarecrow.Sections, BeforeCamera: Scarecrow.KeepFacing, Keys: Scarecrow.DefaultKeys, Walks: true, Steps: Scarecrow.Steps, Rest: Scarecrow.Rest,
             Dossier: new(CaseFile.Portrait(2, 3), "Scarecrow_Desc", "Scarecrow")),
         new(ManBat.Option, ManBat.Sections, ManBat.Fit, ManBat.KeepFacing, ManBat.DefaultKeys, ManBat.Marking, ManBat.Marks, ManBat.Hit, Walks: true,
@@ -564,6 +564,23 @@ static class Villains
         catch (Exception error)
         {
             Log.Error("villains.car_counter", "The car counter check failed", error);
+        }
+    }
+
+    // The counter icon over a car is the car's own effect, so it needs its own say.
+    [Redirect(typeof(RVehicleNPC), nameof(RVehicleNPC.ActivateCounterIcon))]
+    static void ActivateCounterIcon(RVehicleNPC self)
+    {
+        try
+        {
+            if (!On)
+            {
+                self.ActivateCounterIcon();
+            }
+        }
+        catch (Exception error)
+        {
+            Log.Error("villains.car_counter_icon", "The car counter icon check failed", error);
         }
     }
 

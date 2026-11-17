@@ -11,11 +11,8 @@ sealed record Dossier(Art? Photo, string Caption, string? Bio = null, Withheld? 
 
 // For a villain with no Bios page. Freeze and Croc came with Season of Infamy, which added none.
 // The file gives his real name, stamps his photo, blacks out the rest and keeps one note from the
-// game's own stories about him. With no photo at all, InTheDark draws something of his own there.
-sealed record Withheld(string RealName, string Stamp, string Note, Withheld.Dark? InTheDark = null)
-{
-    public delegate void Dark(float x, float y, float size, Rgba behind, float fade, float time);
-}
+// game's own stories about him.
+sealed record Withheld(string RealName, string Stamp, string Note);
 
 // The case file beside the menu while the cursor is on one villain's rows. The photos are the
 // portraits on the pause menu's Bios screen and the words are the game's own, so they follow the
@@ -61,9 +58,6 @@ static class CaseFile
     static readonly Rgba StampRed = new(208, 64, 50);
 
     public static Art Portrait(int column, int row) => new(BiosAtlas, column * Cell + 1f, GridTop + row * Cell + 1f, Cell - 2f, Cell - 2f);
-
-    // Freeze's snowflake, one of the case photos beside the portraits.
-    public static readonly Art FreezeEmblem = new(BiosAtlas, 1542f, 567f, 128f, 128f);
 
     // A null value or trait is blacked out.
     sealed record Page(int Seed, string Count, string Caption, (string Label, string? Value)[] Fields, string?[] Traits, string? Note, string? Stamp);
@@ -212,10 +206,6 @@ static class CaseFile
         if (dossier.Photo is { } photo)
         {
             shown = photo.At(x, y, size, size, Viewer.White);
-        }
-        else if (dossier.Withheld?.InTheDark is { } dark)
-        {
-            dark(x, y, size, Shade, fade, time);
         }
         else
         {

@@ -40,9 +40,8 @@ static partial class KillerCroc
     const float LinedUp = 8f;
 
     // He turns until he faces within this of his way before he steps, so he never walks
-    // backwards. A last shuffle this short onto the spot needs no turn.
-    const float FacingWalk = 60f;
-    const float Shuffle = 40f;
+    // backwards.
+    const float FacingWalk = 40f;
 
     // A step that gets less than this share of the way is blocked, and he tries this far to
     // either side, then twice that.
@@ -197,14 +196,20 @@ static partial class KillerCroc
     {
         var to = Level(_haulTo - player.Location);
         var distance = to.Length();
-        if (distance > Shuffle && MathF.Abs(Wrap(_aim - _base)) > FacingWalk)
+        if (distance > Arrived)
         {
-            _walkSpeedNow = 0f;
-        }
-        else if (distance > Arrived)
-        {
-            _walkSpeedNow = WalkUpSpeed;
-            _aim = Degrees(to.Y, to.X) + WalkAround(player, to / distance, MathF.Min(distance, WalkUpSpeed * World.Delta));
+            // He turns to face the thug before he steps, however close, or he'd back up to it.
+            var toward = Degrees(to.Y, to.X);
+            if (MathF.Abs(Wrap(toward - _base)) > FacingWalk)
+            {
+                _aim = toward;
+                _walkSpeedNow = 0f;
+            }
+            else
+            {
+                _walkSpeedNow = WalkUpSpeed;
+                _aim = toward + WalkAround(player, to / distance, MathF.Min(distance, WalkUpSpeed * World.Delta));
+            }
         }
         else
         {
