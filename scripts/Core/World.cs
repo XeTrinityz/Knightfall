@@ -11,6 +11,9 @@ static class World
     // Refreshed every drawn frame, so it is right while the game is paused too.
     public static bool Paused { get; private set; } = true;
 
+    // True on the game's main menu, which is a world of its own with no player in it.
+    public static bool InFrontend { get; private set; }
+
     // The rest is refreshed every game tick, which is when options act on the game.
     public static RPawnPlayer? Player { get; private set; }
 
@@ -66,14 +69,18 @@ static class World
     }
 
     // Runs every drawn frame.
+    public static bool LooksLikeFrontend() => Game.TryGetGameInfo(out var rules) && rules is RGIFrontend;
+
     public static void Refresh()
     {
         if (!Game.TryGetWorldInfo(out var world))
         {
             Paused = true;
+            InFrontend = false;
             return;
         }
 
+        InFrontend = LooksLikeFrontend();
         var was = Paused;
         Paused = world.Pauser is not null;
         if (was && !Paused)

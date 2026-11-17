@@ -125,6 +125,9 @@ static class Progress
         new("SAVE", SaveNow),
     };
 
+    // What works on the game's main menu, where only the save is there.
+    public static readonly Catalog.Section MainMenuSection = new("UNLOCKS", AllExtras, MedalsFor, ChallengeMedals, Achievements);
+
     // Every experience award passes through here before it is banked.
     [Redirect(typeof(RExperienceSystem), nameof(RExperienceSystem.AddUnbankedXP))]
     static void AddUnbankedXP(RExperienceSystem self, int xpAwarded, bool teeth)
@@ -139,16 +142,23 @@ static class Progress
         self.AddUnbankedXP((int)Math.Round(xpAwarded * scale), teeth);
     }
 
-    static RGameInfo? Story(out Outcome refusal)
+    // Only rows that change nothing but the save may run on the main menu.
+    static RGameInfo? Story(out Outcome refusal, bool mainMenu = false)
     {
         refusal = default;
-        if (World.Info is not { } game || World.Player is null)
+        if (World.InFrontend && !mainMenu)
         {
             refusal = Outcome.NoPlayer;
             return null;
         }
 
-        if (game.IsChallengeMode())
+        if (World.Info is not { } game || (World.Player is null && !World.InFrontend))
+        {
+            refusal = Outcome.NoPlayer;
+            return null;
+        }
+
+        if (!World.InFrontend && game.IsChallengeMode())
         {
             refusal = Outcome.Failed("NOT IN CHALLENGES");
             return null;
@@ -236,15 +246,26 @@ static class Progress
 
     static Outcome UnlockExtras()
     {
-        if (Story(out var refusal) is not { } game)
+        if (Story(out var refusal, mainMenu: true) is not { } game)
         {
             return refusal;
         }
 
         Game.GetCheatManager().UnlockAll();
         var seen = MarkExtrasSeen(game);
+        SaveAtMainMenu();
         Log.Info($"Extras: unlocked everything and marked {seen} as seen.");
         return Outcome.Done();
+    }
+
+    // On the main menu nothing saves by itself, so a change is written the way the game's own
+    // unlock all does it.
+    static void SaveAtMainMenu()
+    {
+        if (World.InFrontend && World.Controller is { } controller)
+        {
+            controller.SaveGameProgress(true);
+        }
     }
 
     // The menus keep a new mark on each extra until it is opened. An opened showcase item gets
@@ -315,7 +336,7 @@ static class Progress
     // maps the save has open, and only the entries short of three medals or of the score for them.
     static Outcome GiveMedals()
     {
-        if (Story(out var refusal) is not { } game)
+        if (Story(out var refusal, mainMenu: true) is not { } game)
         {
             return refusal;
         }
@@ -454,6 +475,7 @@ static class Progress
         }
 
         Seen();
+        SaveAtMainMenu();
         Log.Info($"Challenge medals: three on {medalCount} entries, {scoreCount} scores raised and {training.Count} training done for {MedalWho[MedalsFor.Index].Label}.");
         return Outcome.Done($"{wanted.Count + training.Count} SET");
     }

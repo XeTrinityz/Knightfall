@@ -148,6 +148,7 @@ static class Kernel
         Run("sidekick orders", static () => Sidekick.PollOrders());
         Run("guide", static () => Guide.Update());
         Run("freeze", static () => WorldTime.SyncFreeze());
+        Run("main menu screen", static () => MainMenuScreen.Tick());
         Run("bars draw", static target => CameraView.RenderBars(target), canvas);
         Claims.Clear();
         Run("dash draw", static target => Claims.Measure(Dash.Render, target), canvas);

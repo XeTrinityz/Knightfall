@@ -153,6 +153,10 @@ static class Layout
             .Add("FONTS", Fonts.Sections)
             .Add("SAVES", Saves.Sections);
 
+        Catalog.AddPage("MAIN MENU").AtMainMenu()
+            .Add("UNLOCKS", Progress.MainMenuSection)
+            .Add("LOOK", Look.Rows);
+
         Catalog.Background("settings.game.values", SystemValues.Tick);
         Catalog.Background("settings.game.debug_keys", DebugKeys.Tick, DebugKeys.Release);
         Catalog.Background("settings.saves", Saves.Tick);

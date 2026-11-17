@@ -19,6 +19,10 @@ static class Menu
 
     // What the player asked for. The menu still hides while the game is paused and comes back after.
     static bool _wanted;
+
+    // Whether the pages on show are the main menu's. A world has its own, so the menu shuts and
+    // starts over on the first page when the game moves between the two.
+    static bool _atMainMenu;
     static bool _hintsBuilt;
     static bool _hintListening;
     static Device _hintDevice;
@@ -54,7 +58,9 @@ static class Menu
 
     public static void Resume()
     {
-        View.Pages = Catalog.Pages;
+        // Read straight from the game, since a reload resumes before the first frame sets it.
+        _atMainMenu = World.LooksLikeFrontend();
+        View.Pages = Catalog.PagesFor(_atMainMenu);
         _tabOfPage = new int[View.Pages.Count];
         View.PageIndex = Survive.Get(Survive.MenuPage, 0);
         View.TabIndex = Survive.Get(Survive.MenuTab, 0);
@@ -76,6 +82,19 @@ static class Menu
         _lastFrame = now;
         View.Now = now;
         View.Time = (float)(now / (double)Stopwatch.Frequency % LoopSeconds);
+
+        if (World.InFrontend != _atMainMenu)
+        {
+            _atMainMenu = World.InFrontend;
+            Want(false);
+            View.Pages = Catalog.PagesFor(_atMainMenu);
+            _tabOfPage = new int[View.Pages.Count];
+            View.PageIndex = 0;
+            View.TabIndex = 0;
+            View.RowIndex = 0;
+            View.Glide = 0f;
+            Remember();
+        }
 
         // While a row waits for its key, the menu's own keys belong to that row.
         if (!World.Paused && Hotkeys.Listening is null)
@@ -574,6 +593,9 @@ static class Menu
         Survive.Set(Survive.MenuTab, View.TabIndex);
         Survive.Set(Survive.MenuRow, View.RowIndex);
     }
+
+    // For a row of the game's own menu that opens this one.
+    public static void OpenFromGame() => Want(true);
 
     static void Want(bool open)
     {

@@ -14,11 +14,25 @@ static class Confirm
 
     static (Command Row, Confirmation Ask)? _yes;
     static long _yesAt;
+    static (Command Row, long At)? _granted;
+
+    // For a screen that asks in its own way, like pressing a row twice. The row's next run goes
+    // through without asking.
+    public static void Grant(Command row) => _granted = (row, Stopwatch.GetTimestamp());
 
     // True when the player just said yes to this same question for this row. Otherwise it asks,
     // and a yes runs the row again, through again when it isn't a plain press.
     public static bool Asked(Command row, Confirmation ask, Action? again = null)
     {
+        if (_granted is { } granted)
+        {
+            _granted = null;
+            if (granted.Row == row && Stopwatch.GetElapsedTime(granted.At).TotalSeconds <= YesSeconds)
+            {
+                return true;
+            }
+        }
+
         var yes = _yes;
         _yes = null;
         if (yes == (row, ask) && Stopwatch.GetElapsedTime(_yesAt).TotalSeconds <= YesSeconds)
