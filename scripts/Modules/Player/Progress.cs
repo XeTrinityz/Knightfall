@@ -69,6 +69,45 @@ static class Progress
         Block = static () => PlayerLocks.InChallenge(),
     };
 
+    // The game's own character ids for challenges. People play the on-foot challenges and the
+    // Batmobile skins play the Batmobile ones, and every challenge counts three medals for each.
+    // The AR challenges out in the city are scored for the game's default character instead.
+    static readonly (string Id, string Label, int[] Ids)[] MedalWho =
+    {
+        ("all", "EVERYONE", Array.Empty<int>()),
+        ("city", "CITY AR CHALLENGES", new[] { City }),
+        ("batman", "BATMAN", new[] { 10 }),
+        ("robin", "ROBIN", new[] { 11 }),
+        ("nightwing", "NIGHTWING", new[] { 12 }),
+        ("azrael", "AZRAEL", new[] { 13 }),
+        ("catwoman", "CATWOMAN", new[] { 14 }),
+        ("harley", "HARLEY QUINN", new[] { 50 }),
+        ("redhood", "RED HOOD", new[] { 51 }),
+        ("batgirl", "BATGIRL", new[] { 52 }),
+        ("cars", "BATMOBILES", new[] { 100, 101, 102, 103, 104, 105, 110 }),
+    };
+
+    const int City = 0;
+
+    static readonly int[] People = { 10, 11, 12, 13, 14, 50, 51, 52 };
+    static readonly int[] Cars = { 100, 101, 102, 103, 104, 105, 110 };
+
+    public static readonly Choice MedalsFor = new(
+        "player.progress.medals_for", "MEDALS FOR",
+        "Who GET ALL CHALLENGE MEDALS gives them to. CITY AR CHALLENGES are the ones out in Gotham. EVERYONE is those, every character and every Batmobile.",
+        MedalWho.Select(who => (who.Id, who.Label)).ToArray())
+    {
+        Preference = true,
+    };
+
+    public static readonly Command ChallengeMedals = new(
+        "player.progress.challenge_medals", "GET ALL CHALLENGE MEDALS",
+        "Gives three medals on every challenge to whoever is picked in MEDALS FOR, so they show as done, and clears the orange new marks on them. Scores stay as they are. Kept in your save. This can't be undone.",
+        GiveMedals)
+    {
+        Block = static () => PlayerLocks.InChallenge(),
+    };
+
     public static readonly Command Achievements = new(
         "player.progress.achievements", "UNLOCK ALL ACHIEVEMENTS",
         "Unlocks every achievement on your Steam account, story pack ones included, skipping the ones you have. This can't be undone.",
@@ -82,7 +121,7 @@ static class Progress
     public static readonly Catalog.Section[] Sections =
     {
         new("POINTS", AddPoints, AddExperience, ExperienceScale, AllUpgrades),
-        new("UNLOCKS", RiddlerItems, AllExtras, Achievements),
+        new("UNLOCKS", RiddlerItems, AllExtras, MedalsFor, ChallengeMedals, Achievements),
         new("SAVE", SaveNow),
     };
 
@@ -204,6 +243,92 @@ static class Progress
 
         Game.GetCheatManager().UnlockAll();
         return Outcome.Done();
+    }
+
+    // The game's own debug call sets the medals, the way its cheat does. Only challenge maps the
+    // save has open, and only the pairs of map and character that are short of three.
+    static Outcome GiveMedals()
+    {
+        if (Story(out var refusal) is not { } game)
+        {
+            return refusal;
+        }
+
+        if (!Game.TryGetGameRI(out var info) || info.PersistentOptions is not { IsValid: true } options)
+        {
+            return Outcome.Failed("NO SAVE DATA");
+        }
+
+        var who = MedalWho[MedalsFor.Index].Ids;
+        var wanted = new List<(int Challenge, int Character)>();
+        var fresh = new List<int>();
+        var maps = game.ChallengeMapList;
+        for (var i = 0; i < maps.Count; i++)
+        {
+            var map = maps[i];
+            var group = map.ChallengeFrontendGroup.ToString();
+            if (map.Id <= 0 || !options.IsChallengeUnlocked(map.Id))
+            {
+                continue;
+            }
+
+            if (options.IsChallengeNew(map.Id) || options.IsChallengeDirty(map.Id))
+            {
+                fresh.Add(map.Id);
+            }
+
+            // Training counts as done once played, not by medals.
+            if (group.Contains("Tutorial", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // Only the maps placed in the city have a city entry. The rest are menu only.
+            var inCity = map.ChallengeFrontendState.ToString().EndsWith("_Default", StringComparison.Ordinal);
+            var cars = group.Contains("Batmobile", StringComparison.Ordinal);
+            foreach (var character in (cars ? Cars : People).Concat(inCity ? new[] { City } : Array.Empty<int>()))
+            {
+                if ((who.Length == 0 || Array.IndexOf(who, character) >= 0) && options.GetChallengeMedals(map.Id, character) < 3)
+                {
+                    wanted.Add((map.Id, character));
+                }
+            }
+        }
+
+        // The orange mark on a challenge is its dirty flag, the one the challenge wheel clears
+        // when you look at it. Finished ones needn't keep it, or the new flag either.
+        void Seen()
+        {
+            foreach (var id in fresh)
+            {
+                options.SetChallengeNew(id, false);
+                options.SetChallengeDirty(id, false);
+            }
+        }
+
+        if (wanted.Count == 0)
+        {
+            Seen();
+            return Outcome.Unchanged(fresh.Count == 0 ? "ALL HAVE 3 MEDALS" : $"{fresh.Count} MARKS CLEARED");
+        }
+
+        var ask = new Confirmation("CAN'T UNDO", "GET ALL CHALLENGE MEDALS",
+            $"Gives three medals for {MedalWho[MedalsFor.Index].Label} on {wanted.Count} challenge {(wanted.Count == 1 ? "entry" : "entries")} in your save. Scores stay as they are.",
+            "GIVE", "CANCEL");
+        if (!Confirm.Asked(ChallengeMedals, ask))
+        {
+            return Outcome.Asking;
+        }
+
+        var cheats = Game.GetCheatManager();
+        foreach (var (challenge, character) in wanted)
+        {
+            cheats.ChallengeSetMedals(challenge, 3, character);
+        }
+
+        Seen();
+        Log.Info($"Challenge medals: three on {wanted.Count} entries for {MedalWho[MedalsFor.Index].Label}.");
+        return Outcome.Done($"{wanted.Count} GIVEN");
     }
 
     static Outcome UnlockAchievements()
