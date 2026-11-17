@@ -76,15 +76,6 @@ static class SuitPaint
         Settings.KeepAll(SuitLooks.PutOnStore);
     }
 
-    // The grey that stands for the suit's own colour in the list, which isn't known.
-    static readonly (double R, double G, double B) Stand = (43, 51, 61);
-
-    // The colour each palette entry stands for, in the list. SUIT'S OWN is the stand-in grey. This
-    // comes before the rows, which use it as they are made.
-    static readonly Rgba[] Swatches = SuitLook.Palette
-        .Select((swatch, i) => i == 0 ? new Rgba((byte)Stand.R, (byte)Stand.G, (byte)Stand.B) : new Rgba(swatch.R, swatch.G, swatch.B))
-        .ToArray();
-
     public static readonly Toggle Paint = new(
         "player.suit.paint", "SUIT PAINT",
         "Wears the colours set below. Each suit keeps its own colours, so a change of suit brings back what you gave that one.");
@@ -107,7 +98,6 @@ static class SuitPaint
         "The colour for the picked parts. SUIT'S OWN keeps the suit's colour, so BRIGHTNESS can still lighten or darken it.",
         PaletteRows, saved: false)
     {
-        Swatches = Swatches,
         Changed = Edited,
         Block = NoPart,
         Preference = true,
@@ -118,7 +108,6 @@ static class SuitPaint
         "How much of the colour goes on. Lower keeps more of the suit's own colour showing through.",
         min: 0, max: 100, step: 5, value: 100, unit: "%", saved: false)
     {
-        Tone = Tone,
         Changed = Edited,
         Block = NoPart,
         Preference = true,
@@ -129,7 +118,6 @@ static class SuitPaint
         "Lightens or darkens the picked parts. A dark suit needs this turned up for a colour to show well.",
         min: 0.2, max: 4, step: 0.1, value: 1, unit: "X", saved: false)
     {
-        Tone = Tone,
         Changed = Edited,
         Block = NoPart,
         Preference = true,
@@ -190,9 +178,6 @@ static class SuitPaint
     {
         Block = () => NoPart() ?? (Looks.Count == 0 ? "NOTHING SET" : null),
     };
-
-    // The meters light in the picked colour. The suit's own colour keeps the theme's.
-    static Rgba? Tone() => Colour.Index == 0 ? null : Swatches[Colour.Index];
 
     static string? NoPart() => World.Player is null ? "NO PLAYER" : Parts.Count == 0 ? "NOTHING TO PAINT" : null;
 

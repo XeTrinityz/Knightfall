@@ -555,7 +555,7 @@ sealed class ProtocolTheme : Theme
 
             case Slider slider:
                 Draw.TextRight(slider.ValueText, right, y + 7f, 15f, value);
-                Kit.Meter(right - ValueRoom - MeterWidth, y + 11f, MeterWidth, 8f, 16, slider.Fill, slider.DefaultFill, Kit.Lit(slider, value), Kit.Unlit(slider, accent with { A = 34 }), Dim);
+                Kit.Meter(right - ValueRoom - MeterWidth, y + 11f, MeterWidth, 8f, 16, slider.Fill, slider.DefaultFill, value, accent with { A = 34 }, Dim);
                 break;
 
             case Choice choice:
@@ -570,7 +570,7 @@ sealed class ProtocolTheme : Theme
                     Draw.TextRightFit(choice.ValueText, right, y + 6f, 13f, value, LabelLeft + Draw.TextWidth(feature.Label, 15f) + 16f);
                 }
 
-                Kit.Pick(choice, right, y + 24f, value, accent with { A = 34 });
+                Kit.Dashes(right, y + 24f, choice.Count, choice.Index, value, accent with { A = 34 });
                 break;
 
             case Command command:

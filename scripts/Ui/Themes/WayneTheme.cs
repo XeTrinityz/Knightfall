@@ -724,7 +724,7 @@ sealed class WayneTheme : Theme
 
             case Slider slider:
                 Draw.TextRight(slider.ValueText, right, y + 7f, 15f, value);
-                Kit.Meter(right - ValueRoom - MeterWidth, y + 11f, MeterWidth, 8f, 16, slider.Fill, slider.DefaultFill, Kit.Lit(slider, value), Kit.Unlit(slider, accent with { A = 36 }), Dim);
+                Kit.Meter(right - ValueRoom - MeterWidth, y + 11f, MeterWidth, 8f, 16, slider.Fill, slider.DefaultFill, value, accent with { A = 36 }, Dim);
                 break;
 
             case Choice choice:
@@ -739,15 +739,7 @@ sealed class WayneTheme : Theme
                     Draw.TextRightFit(choice.ValueText, right, y + 6f, 13f, value, LabelLeft + Draw.TextWidth(feature.Label, 15f) + 16f);
                 }
 
-                if (Kit.HasSwatches(choice))
-                {
-                    Kit.Swatches(right, y + 22f, choice.Swatches!, choice.Index);
-                }
-                else
-                {
-                    Pips(right, y + 25f, choice.Count, choice.Index, value, accent);
-                }
-
+                Pips(right, y + 25f, choice.Count, choice.Index, value, accent);
                 break;
 
             case Command command:

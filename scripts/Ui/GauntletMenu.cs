@@ -268,7 +268,7 @@ static class GauntletMenu
                 const float size = 24f;
                 Draw.Text(slider.ValueText, Inset, top, size, tone);
                 var meter = top + size + 6f;
-                Kit.Meter(Inset, meter, FocusWidth, 6f, 24, slider.Fill, slider.DefaultFill, Kit.Lit(slider, tone), Kit.Unlit(slider, _accent with { A = 40 }), _dim);
+                Kit.Meter(Inset, meter, FocusWidth, 6f, 24, slider.Fill, slider.DefaultFill, tone, _accent with { A = 40 }, _dim);
                 Draw.Text(slider.MinText, Inset, meter + 12f, 7f, _ghost);
                 Draw.TextRight(slider.MaxText, FocusRight, meter + 12f, 7f, _ghost);
                 return meter + 19f;
@@ -296,8 +296,8 @@ static class GauntletMenu
                 }
 
                 Draw.Text(">", end + 4f, top + (size - 10f) / 2f, 10f, _dim);
-                Kit.Pick(choice, FocusRight, top + size + 6f, tone, _accent with { A = 40 });
-                return top + size + (Kit.HasSwatches(choice) ? 12f : 8f);
+                Kit.Dashes(FocusRight, top + size + 6f, choice.Count, choice.Index, tone, _accent with { A = 40 });
+                return top + size + 8f;
             }
 
             case Command command:

@@ -89,53 +89,6 @@ static class Kit
         Draw.Rect(x + mark * width - 0.5f, y + height + 2f, 1f, 3f, tick);
     }
 
-    // One small swatch per colour, drawn leftwards from the right edge. The current one stands
-    // taller, with a bright frame, so it reads at a glance among its neighbours.
-    public static void Swatches(float right, float y, IReadOnlyList<Rgba> colours, int index, Rgba? frame = null)
-    {
-        const float swatch = 8f;
-        const float gap = 2f;
-        const float height = 4f;
-        var x = right - colours.Count * swatch - (colours.Count - 1) * gap;
-
-        for (var i = 0; i < colours.Count; i++)
-        {
-            var left = x + i * (swatch + gap);
-            if (i == index)
-            {
-                Draw.Rect(left - 1f, y - 2f, swatch + 2f, height + 4f, frame ?? new Rgba(255, 255, 255));
-                Draw.Rect(left, y - 1f, swatch, height + 2f, colours[i]);
-            }
-            else
-            {
-                Draw.Rect(left, y, swatch, height, colours[i]);
-            }
-        }
-    }
-
-    // Whether a choice has a colour for each option, to be drawn as swatches.
-    public static bool HasSwatches(Choice choice) => choice.Swatches is { } swatches && swatches.Count == choice.Count;
-
-    // Where you are in a choice's list: swatches for a choice made of colours, else dashes. The
-    // dashes are a line at y and the swatches are centred on it.
-    public static void Pick(Choice choice, float right, float y, Rgba lit, Rgba empty, Rgba? frame = null)
-    {
-        if (HasSwatches(choice))
-        {
-            Swatches(right, y - 2f, choice.Swatches!, choice.Index, frame);
-        }
-        else
-        {
-            Dashes(right, y, choice.Count, choice.Index, lit, empty);
-        }
-    }
-
-    // The colour a slider's lit blocks take, or the theme's own when the slider has none.
-    public static Rgba Lit(Slider slider, Rgba theme) => slider.Tone?.Invoke() ?? theme;
-
-    // And the same colour faint, for the blocks the value hasn't reached.
-    public static Rgba Unlit(Slider slider, Rgba theme) => slider.Tone?.Invoke() is { } tone ? tone with { A = 34 } : theme;
-
     // One short dash per choice, with the current one lit. Drawn leftwards from the right edge. A
     // long list, like the skins, becomes a track with a marker so it keeps the same width.
     public static void Dashes(float right, float y, int count, int index, Rgba lit, Rgba empty)

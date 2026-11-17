@@ -655,7 +655,7 @@ sealed class EnigmaTheme : Theme
 
             case Slider slider:
                 Draw.TextRight(slider.ValueText, ValueRight, y + 7f, 15f, value);
-                Kit.Meter(ValueRight - ValueRoom - MeterWidth, y + 11f, MeterWidth, 8f, 16, slider.Fill, slider.DefaultFill, Kit.Lit(slider, value), Kit.Unlit(slider, accent with { A = 36 }), Dim);
+                Kit.Meter(ValueRight - ValueRoom - MeterWidth, y + 11f, MeterWidth, 8f, 16, slider.Fill, slider.DefaultFill, value, accent with { A = 36 }, Dim);
                 break;
 
             case Choice choice:
@@ -670,15 +670,7 @@ sealed class EnigmaTheme : Theme
                     Draw.TextRightFit(choice.ValueText, ValueRight, y + 6f, 13f, value, LabelLeft + Draw.TextWidth(feature.Label, 15f) + 16f);
                 }
 
-                if (Kit.HasSwatches(choice))
-                {
-                    Kit.Swatches(ValueRight, y + 22f, choice.Swatches!, choice.Index);
-                }
-                else
-                {
-                    Pips(ValueRight, y + 22f, choice.Count, choice.Index, value, accent);
-                }
-
+                Pips(ValueRight, y + 22f, choice.Count, choice.Index, value, accent);
                 break;
 
             case Command command:

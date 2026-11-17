@@ -490,7 +490,7 @@ sealed class NightwingTheme : Theme
                 Draw.TextRight(slider.ValueText, right, y + 7f, 15f, value);
                 if (grow > 0.5f)
                 {
-                    LeanMeter(right - ValueRoom - MeterWidth, y + 11f, MeterWidth, 8f, 16, slider.Fill, Kit.Lit(slider, state), Kit.Unlit(slider, selected ? Rgba.Mix(accent, Ink, 0.45f) : Empty));
+                    LeanMeter(right - ValueRoom - MeterWidth, y + 11f, MeterWidth, 8f, 16, slider.Fill, state, selected ? Rgba.Mix(accent, Ink, 0.45f) : Empty);
                     Draw.Rect(right - ValueRoom - MeterWidth + slider.DefaultFill * MeterWidth - 0.5f, y + 21f, 1f, 3f, selected ? White : Dim);
                 }
 
@@ -508,7 +508,7 @@ sealed class NightwingTheme : Theme
                     Draw.TextRightFit(choice.ValueText, right, y + 6f, 13f, value, Inset + 28f + Draw.TextWidth(feature.Label, 15f) + 16f);
                 }
 
-                Kit.Pick(choice, right, y + 24f, state, selected ? EmptyOnBlue : EmptyLine);
+                Kit.Dashes(right, y + 24f, choice.Count, choice.Index, state, selected ? EmptyOnBlue : EmptyLine);
                 break;
 
             case Command command:
