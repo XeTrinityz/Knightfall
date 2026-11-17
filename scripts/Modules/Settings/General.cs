@@ -90,6 +90,7 @@ static class General
         Favourites.Load();
         Disguise.KeepStances();
         SuitPaint.KeepSettings();
+        CarPaint.KeepSettings();
         Settings.Save();
     }
 }

@@ -73,6 +73,7 @@ static class Kernel
         Step("favourites", needed: false, Favourites.Load);
         Step("disguise stances", needed: false, Disguise.KeepStances);
         Step("suit colours", needed: false, SuitPaint.KeepSettings);
+        Step("car colours", needed: false, CarPaint.KeepSettings);
         Step("settings file", needed: false, Settings.Save);
         Step("menu", needed: true, Menu.Resume);
         _ready = !failed;

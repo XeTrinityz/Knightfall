@@ -14,7 +14,7 @@ readonly record struct SuitLook(int Colour, double Strength, double Brightness)
 
     public static readonly (string Id, string Label, byte R, byte G, byte B)[] Palette =
     {
-        ("own", "SUIT'S OWN", 255, 255, 255),
+        ("own", "ORIGINAL", 255, 255, 255),
         ("white", "WHITE", 235, 235, 235),
         ("silver", "SILVER", 170, 175, 185),
         ("grey", "GREY", 100, 100, 105),
@@ -106,6 +106,10 @@ sealed class SuitPart(string key, string label)
     public SuitLook Worn = SuitLook.Plain;
     public bool Lit;
     public bool Waiting;
+
+    // For a part that isn't a material. Called every tick with the look to wear, and with the
+    // plain look to put things back.
+    public Action<SuitLook>? Custom;
 }
 
 // Reads the parts off the suit the player wears. Every suit, modded ones too, names its
@@ -153,13 +157,15 @@ static class SuitParts
         return worn;
     }
 
-    public static List<SuitPart> Find(RPawnPlayer pawn)
+    public static List<SuitPart> Find(RPawnPlayer pawn) => Find(pawn, OwnerWords(pawn));
+
+    // Every part the actor's meshes wear. Owner words are left out of the part's name.
+    public static List<SuitPart> Find(Actor actor, string[] owner)
     {
         var parts = new List<SuitPart>();
-        var owner = OwnerWords(pawn);
         var found = new Dictionary<nint, SuitPart?>();
         var meshes = new HashSet<nint>();
-        var all = pawn.AllComponents;
+        var all = actor.AllComponents;
         for (var i = 0; i < all.Count; i++)
         {
             if (all[i] is not MeshComponent { IsValid: true } mesh || !meshes.Add(mesh.Ptr))
@@ -216,7 +222,12 @@ static class SuitParts
             name = name[..cut];
         }
 
-        // Ascii only, since it is written as a bare key in settings.toml.
+        return Safe(name);
+    }
+
+    // Ascii only, since it is written as a bare key in settings.toml.
+    public static string Safe(string name)
+    {
         var key = new string(name.Select(letter => char.IsAsciiLetterOrDigit(letter) ? letter : '_').ToArray());
         return key.Trim('_').Length == 0 ? "" : key;
     }
@@ -340,12 +351,13 @@ static class SuitParts
         return part;
     }
 
-    // Names like Glass_Colour, Glow Colour, edge_glow_colour and internal_reflection. Rain and
-    // displacement vectors aren't colours even when they sit beside them.
+    // Names like Glass_Colour, Glow Colour, edge_glow_colour and internal_reflection. Rain,
+    // displacement, mud, damage and headlight vectors aren't colours even when they sit beside them.
     static bool IsColour(string name)
     {
         var lower = name.ToLowerInvariant();
-        if (lower.Contains("rain") || lower.Contains("displace") || lower.Contains("size") || lower.Contains("point"))
+        if (lower.Contains("rain") || lower.Contains("displace") || lower.Contains("size") || lower.Contains("point")
+            || lower.Contains("mud") || lower.Contains("damage") || lower.Contains("dirt") || lower.Contains("headlight"))
         {
             return false;
         }

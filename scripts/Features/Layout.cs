@@ -51,12 +51,16 @@ static class Layout
             .Add("SKIN",
                 new Catalog.Section("SKINS", Skins.Skin, Skins.Apply, Skins.Cancel),
                 new Catalog.Section("SOUND", EngineSound.Sound),
-                new Catalog.Section("BODYWORK", CarWash.Clean, CarWash.KeepClean));
+                new Catalog.Section("BODYWORK", CarWash.Clean, CarWash.KeepClean),
+                new Catalog.Section("PAINT", CarPaint.Paint, CarPaint.Which, CarPaint.Colour, CarPaint.Strength, CarPaint.Brightness,
+                    CarPaint.CopyLook, CarPaint.PasteLook, CarPaint.Shuffle, CarPaint.Back, CarPaint.Unmark, CarPaint.ClearPart, CarPaint.ClearAll),
+                new Catalog.Section("LOOKS", CarLooks.Saved, CarLooks.SaveNew, CarLooks.WearSaved, CarLooks.PutOn, CarLooks.Delete));
 
         Catalog.Background("batmobile.car", Car.Tick);
         Catalog.Background("batmobile.driving.autopilot", Autopilot.Tick, Autopilot.Release);
         Catalog.Background("core.borrowed", Borrowed.Tick, Borrowed.Release);
         Catalog.Background("batmobile.skin", Skins.Tick, Skins.Release);
+        Catalog.Background("batmobile.skin.paint", CarPaint.Tick, CarPaint.Release);
         Catalog.Background("batmobile.driving.dashboard", Dashboard.Track);
 
         Catalog.AddPage("TELEPORT")
