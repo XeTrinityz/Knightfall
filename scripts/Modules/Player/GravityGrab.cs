@@ -167,7 +167,7 @@ static class GravityGrab
         }
 
         Begin(target);
-        return true;
+        return Active;
     }
 
     // Starts holding. A person is knocked down first and held once they are down.
