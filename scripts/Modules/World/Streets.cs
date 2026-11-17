@@ -16,16 +16,43 @@ static class Streets
     static readonly Held<RPopulationManager, bool> Off = new(
         "street population", people => people.bForceDisable, (people, off) => people.bForceDisable = off);
 
-    // The street life cleared once already, so it isn't cleared on every tick.
+    // The most street people the spawner keeps out is MaxRiotPawns times one of these, one for
+    // in the Batmobile and one for on foot. At 0 no riot or patrol volume can start. Neither is
+    // saved.
+    static readonly Held<RPopulationManager, float> CrowdInCar = new(
+        "street crowd in the car", people => people.BatmobilePawnCountMultiplier, (people, size) => people.BatmobilePawnCountMultiplier = size);
+
+    static readonly Held<RPopulationManager, float> CrowdOnFoot = new(
+        "street crowd on foot", people => people.NonBatmobilePawnCountMultiplier, (people, size) => people.NonBatmobilePawnCountMultiplier = size);
+
+    // A wandering group only starts while pooling is on or a population volume is, so with no
+    // volume this keeps them off. Only the spawner's volume and wanderer spawns read it.
+    static readonly Held<RPopulationManager, bool> Pooling = new(
+        "street pawn pooling", people => people.bUsePawnPooling, (people, on) => people.bUsePawnPooling = on);
+
+    // The street life cleared once already, and for which mode, so it isn't cleared every tick.
     static RPopulationManager? _cleared;
+    static string? _clearedFor;
 
     public static readonly Toggle Empty = new(
         "world.city.empty_streets", "EMPTY STREETS",
-        "Clears roaming thugs, rioters and militia patrols off the streets and stops new ones. Mission enemies and militia bases stay. Off lets the city refill.")
+        "Clears the streets and stops new street life coming, by what CLEAR picks. Mission enemies and militia bases stay. Off lets the city refill.")
     {
         Tick = KeepEmpty,
         Restore = Refill,
     };
+
+    public static readonly Choice What = new(
+        "world.city.empty_what", "CLEAR",
+        "What EMPTY STREETS clears. EVERYTHING takes all street life. CARS takes thug cars, police chases, drones, tanks and APCs and leaves people on foot. ON FOOT takes rioters, patrols and wandering thugs and leaves the cars.",
+        new[] { ("all", "EVERYTHING"), ("cars", "CARS"), ("foot", "ON FOOT") })
+    {
+        Block = static () => Empty.On ? null : "EMPTY STREETS IS OFF",
+    };
+
+    public static bool NoCars => Empty.On && What.CurrentId != "foot";
+
+    public static bool NoPeople => Empty.On && What.CurrentId != "cars";
 
     public static readonly Toggle Quiet = new(
         "world.city.no_chatter", "NO STREET CHATTER",
@@ -40,7 +67,7 @@ static class Streets
         "Turns every thug car, militia tank and APC around you upside down. Police cars, drones and the Batmobile are left alone.",
         FlipAll);
 
-    public static readonly Catalog.Section Section = new("STREETS", Empty, Quiet, Flip);
+    public static readonly Catalog.Section Section = new("STREETS", Empty, What, Quiet, Flip);
 
     // The game keeps chatter quiet while any object is on its suppression list, one per reason.
     // A class default object never goes away and is never one the game adds, so our entry is
@@ -77,21 +104,167 @@ static class Streets
             return;
         }
 
-        Off.Hold(people, true);
-
-        // The game's own clear-out, which it runs before a Most Wanted mission or AR challenge.
-        // It leaves mission enemies alone.
-        if (!ReferenceEquals(_cleared, people))
+        var mode = What.CurrentId;
+        var all = mode == "all";
+        if (all)
         {
-            _cleared = people;
+            Off.Hold(people, true);
+        }
+        else
+        {
+            Off.Release();
+        }
+
+        if (mode == "foot")
+        {
+            CrowdInCar.Hold(people, 0f);
+            CrowdOnFoot.Hold(people, 0f);
+            Pooling.Hold(people, false);
+        }
+        else
+        {
+            CrowdInCar.Release();
+            CrowdOnFoot.Release();
+            Pooling.Release();
+        }
+
+        if (ReferenceEquals(_cleared, people) && _clearedFor == mode)
+        {
+            return;
+        }
+
+        _cleared = people;
+        _clearedFor = mode;
+        if (all)
+        {
+            // The game's own clear-out, which it runs before a Most Wanted mission or AR
+            // challenge. It leaves mission enemies alone.
             people.bRemovePopulationOnNextTick = true;
+        }
+        else if (mode == "cars")
+        {
+            ClearCars(people);
+        }
+        else
+        {
+            ClearPeople(people);
         }
     }
 
     static void Refill()
     {
         Off.Release();
+        CrowdInCar.Release();
+        CrowdOnFoot.Release();
+        Pooling.Release();
         _cleared = null;
+        _clearedFor = null;
+    }
+
+    // The car half of the game's RemovePopulation. Destroying a car can call back into the
+    // spawner, so the cars are gathered before any goes.
+    static void ClearCars(RPopulationManager people)
+    {
+        var cars = new List<RVehicleNPC>();
+        foreach (var scenario in people.VehiclePopulation)
+        {
+            foreach (var car in scenario.Vehicles)
+            {
+                if (car is { IsValid: true })
+                {
+                    cars.Add(car);
+                }
+            }
+        }
+
+        foreach (var car in cars)
+        {
+            if (car.IsValid)
+            {
+                car.Destroy();
+            }
+        }
+
+        // The spawner's tick reads each entry's first car without a check, so none may be left
+        // pointing at a destroyed one.
+        people.VehiclePopulation.Clear();
+    }
+
+    // The on-foot half of the game's RemovePopulation: riot and patrol volumes, wandering groups
+    // and Batmobile mobs.
+    static void ClearPeople(RPopulationManager people)
+    {
+        var volumes = new List<ROverworldPopulationVolume>();
+        foreach (var volume in people.ActivePopulationVolumes)
+        {
+            if (volume is { IsValid: true })
+            {
+                volumes.Add(volume);
+            }
+        }
+
+        foreach (var volume in volumes)
+        {
+            volume.DeactivatePopulation();
+        }
+
+        people.ActivePopulationVolumes.Clear();
+
+        var walkers = new List<RBMPawnAI>();
+        foreach (var group in people.SpawnedWanderers)
+        {
+            foreach (var pawn in group.SpawnedPawns)
+            {
+                if (pawn is { IsValid: true })
+                {
+                    walkers.Add(pawn);
+                }
+            }
+        }
+
+        foreach (var pawn in people.CurrentBatmobileMobThugs)
+        {
+            if (pawn is { IsValid: true })
+            {
+                walkers.Add(pawn);
+            }
+        }
+
+        foreach (var pawn in walkers)
+        {
+            if (pawn.IsValid)
+            {
+                pawn.DestroyOrReturnToPool();
+            }
+        }
+
+        people.SpawnedWanderers.Clear();
+        people.ActiveWanderers = 0;
+        people.CurrentBatmobileMobThugs.Clear();
+    }
+
+    // Every car, drone, tank, APC and chase the city sends out goes through this, asked from the
+    // spawner's native tick.
+    [Redirect(typeof(RPopulationManager), nameof(RPopulationManager.SpawnVehicleScenario))]
+    static bool SpawnVehicleScenario(
+        RPopulationManager self,
+        RGameInfo.VehicleScenarioType type,
+        RVehicleNPC.EVehicleCombatEncounterType encounter,
+        bool forceApc)
+    {
+        try
+        {
+            if (NoCars)
+            {
+                return false;
+            }
+        }
+        catch (Exception error)
+        {
+            Log.Error("world.city.empty_streets.cars", "The street car check failed", error);
+        }
+
+        return self.SpawnVehicleScenario(type, encounter, forceApc);
     }
 
     static Outcome FlipAll()

@@ -38,7 +38,7 @@ static class Spawns
         "A gang of thugs comes out of the streets around the parked Batmobile and goes for it, as they do when you leave it alone. Use its thug zapper or fight them off.",
         SendMob)
     {
-        Block = static () => Emptied() ?? Car.InCar() ?? Car.Missing(),
+        Block = static () => NoPeople() ?? Car.InCar() ?? Car.Missing(),
     };
 
     public static readonly Command Getaway = new(
@@ -46,7 +46,7 @@ static class Spawns
         "Sends a thug car onto the roads near you and marks it. When the island has a police chase to give, the game makes it one, with the police after the car.",
         SendGetaway)
     {
-        Block = Emptied,
+        Block = NoCars,
     };
 
     public static readonly Command Apc = new(
@@ -54,13 +54,15 @@ static class Spawns
         "Sends out one of the militia's armoured APCs that you hunt down with the Batmobile, and marks it. Only once the APC hunt is open in your story.",
         SendApc)
     {
-        Block = Emptied,
+        Block = NoCars,
     };
 
     public static readonly Catalog.Section Section = new("SPAWN", Mob, Getaway, Apc);
 
-    // EMPTY STREETS switches the spawner off, so these rows wait for it.
-    static string? Emptied() => Streets.Empty.On ? "STREETS ARE EMPTY" : null;
+    // EMPTY STREETS turns off what it clears, so these rows wait for it.
+    static string? NoPeople() => Streets.NoPeople ? "STREETS ARE EMPTY" : null;
+
+    static string? NoCars() => Streets.NoCars ? "NO CARS ON THE STREETS" : null;
 
     // Why the spawner can't be asked now, or null with the population manager to ask.
     static Outcome? Refusal(out RPopulationManager people)
