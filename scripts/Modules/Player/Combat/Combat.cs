@@ -470,4 +470,54 @@ static class Combat
             return shown;
         }
     }
+
+    const string HeavyIconPath = "FFX_Combat.Particles.Icon.fx_AttackIndicator_p";
+    static ParticleSystem? _heavyIcon;
+
+    // Heavy objects thrown at Batman read the New Game + flag themselves and never ask the combat
+    // manager, so their icon is put up here the way their own script does it.
+    [Redirect(typeof(BmSDK.BmScript.RBMCombatThrownObject_HeavyObject), nameof(BmSDK.BmScript.RBMCombatThrownObject_HeavyObject.StartAttackingFX))]
+    static void HeavyObjectIcon(BmSDK.BmScript.RBMCombatThrownObject_HeavyObject self)
+    {
+        Redirects.RunOriginal();
+        try
+        {
+            if (!CounterIcons.On || self.bAttackingPSActive || self.HeadPSC is not { IsValid: true } icon)
+            {
+                return;
+            }
+
+            if (World.Info is not { IsValid: true } game || game.IsChallengeMode() || World.Player is { IsValid: true, bSpecialMovesDisabled: true })
+            {
+                return;
+            }
+
+            if (game.CombatManager is not { IsValid: true } manager || !manager.CanShowCounterIcons())
+            {
+                return;
+            }
+
+            if (_heavyIcon is not { IsValid: true })
+            {
+                _heavyIcon = Game.FindObject<ParticleSystem>(HeavyIconPath);
+                if (_heavyIcon is not { IsValid: true })
+                {
+                    return;
+                }
+            }
+
+            self.bAttackingPSActive = true;
+            icon.TranslucencySortPriority = 0;
+            icon.SetDepthPriorityGroup(Scene.ESceneDepthPriorityGroup.SDPG_World);
+            icon.SetTemplate(_heavyIcon);
+            icon.SetAbsolute(false, true, false);
+            icon.SetTranslation(new System.Numerics.Vector3(0, 0, 10));
+            icon.ActivateSystem();
+            self.SkeletalMeshComponent.AttachComponent(icon, new FName("None"));
+        }
+        catch (Exception error)
+        {
+            Log.Error("combat.counter_icons", "The heavy object counter icon failed", error);
+        }
+    }
 }
