@@ -142,6 +142,9 @@ static class Toasts
     {
         switch (feature)
         {
+            case ModeToggle moded:
+                Show(moded.Plain, moded.On ? moded.ModeText : "OFF", moded.On ? OutcomeKind.Done : OutcomeKind.Unchanged, moded);
+                break;
             case Toggle toggle:
                 Show(toggle.Plain, toggle.On ? "ON" : "OFF", toggle.On ? OutcomeKind.Done : OutcomeKind.Unchanged, toggle);
                 break;

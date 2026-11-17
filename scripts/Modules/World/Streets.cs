@@ -34,25 +34,19 @@ static class Streets
     static RPopulationManager? _cleared;
     static string? _clearedFor;
 
-    public static readonly Toggle Empty = new(
+    public static readonly ModeToggle Empty = new(
         "world.city.empty_streets", "EMPTY STREETS",
-        "Clears the streets and stops new street life coming, by what CLEAR picks. Mission enemies and militia bases stay. Off lets the city refill.")
+        "Clears the streets and stops new street life coming. Left and right pick what goes. EVERYTHING takes all of it. CARS takes thug cars, police chases, drones, tanks and APCs. ON FOOT takes rioters, patrols and wandering thugs. Mission enemies and militia bases stay. Off lets the city refill.",
+        "empty_what",
+        new[] { ("all", "EVERYTHING"), ("cars", "CARS"), ("foot", "ON FOOT") })
     {
         Tick = KeepEmpty,
         Restore = Refill,
     };
 
-    public static readonly Choice What = new(
-        "world.city.empty_what", "CLEAR",
-        "What EMPTY STREETS clears. EVERYTHING takes all street life. CARS takes thug cars, police chases, drones, tanks and APCs and leaves people on foot. ON FOOT takes rioters, patrols and wandering thugs and leaves the cars.",
-        new[] { ("all", "EVERYTHING"), ("cars", "CARS"), ("foot", "ON FOOT") })
-    {
-        Block = static () => Empty.On ? null : "EMPTY STREETS IS OFF",
-    };
+    public static bool NoCars => Empty.On && Empty.ModeId != "foot";
 
-    public static bool NoCars => Empty.On && What.CurrentId != "foot";
-
-    public static bool NoPeople => Empty.On && What.CurrentId != "cars";
+    public static bool NoPeople => Empty.On && Empty.ModeId != "cars";
 
     public static readonly Toggle Quiet = new(
         "world.city.no_chatter", "NO STREET CHATTER",
@@ -67,7 +61,7 @@ static class Streets
         "Turns every thug car, militia tank and APC around you upside down. Police cars, drones and the Batmobile are left alone.",
         FlipAll);
 
-    public static readonly Catalog.Section Section = new("STREETS", Empty, What, Quiet, Flip);
+    public static readonly Catalog.Section Section = new("STREETS", Empty, Quiet, Flip);
 
     // The game keeps chatter quiet while any object is on its suppression list, one per reason.
     // A class default object never goes away and is never one the game adds, so our entry is
@@ -104,7 +98,7 @@ static class Streets
             return;
         }
 
-        var mode = What.CurrentId;
+        var mode = Empty.ModeId;
         var all = mode == "all";
         if (all)
         {

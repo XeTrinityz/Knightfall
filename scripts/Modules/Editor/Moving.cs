@@ -99,20 +99,14 @@ static class Moving
         Preview = Shows(Dropping, "DROP TO GROUND"),
     };
 
-    public static readonly Toggle Grab = new(
+    public static readonly ModeToggle Grab = new(
         "editor.move.grab", "GRAB",
-        "The selected object floats in front of the camera and follows your view. The STEP and TURN rows shift it while you hold it. Turn it off to let go, and turn quickly as you do to throw it.",
+        "The selected object floats in front of the camera and follows your view. The STEP and TURN rows shift it while you hold it. Turn it off to let go, and turn quickly as you do to throw it. Left and right pick how it is carried. MOVE places it each tick and holds people upright. PHYSICS holds it with the physics grab, so people go limp and it swings and can be thrown. AUTO uses physics for people and objects that have it, and MOVE for the rest.",
+        "grab_style",
+        new[] { ("auto", "AUTO"), ("move", "MOVE"), ("physics", "PHYSICS") },
         saved: false)
     {
-        Block = static () => Unmovable() ?? (GrabStyle.Index == 2 && Editor.Selected is { } picked && !GravityGrab.Grabbable(picked) ? "IT HAS NO PHYSICS" : null),
-    };
-
-    public static readonly Choice GrabStyle = new(
-        "editor.move.grab_style", "GRAB STYLE",
-        "How GRAB carries it. MOVE places it each tick and holds people upright. PHYSICS holds it with the physics grab, so people go limp and it swings and can be thrown. AUTO uses physics for people and objects that have it, and MOVE for the rest.",
-        new[] { ("auto", "AUTO"), ("move", "MOVE"), ("physics", "PHYSICS") })
-    {
-        Preference = true,
+        Block = static () => Unmovable() ?? (Grab!.Mode == 2 && Editor.Selected is { } picked && !GravityGrab.Grabbable(picked) ? "IT HAS NO PHYSICS" : null),
     };
 
     public static readonly Slider GrabDistance = new(
@@ -144,7 +138,7 @@ static class Moving
     public static readonly Catalog.Section[] Sections =
     {
         new("PUT", GoTo, Bring, AtCrosshair, Drop),
-        new("GRAB", Grab, GrabStyle, GrabDistance),
+        new("GRAB", Grab, GrabDistance),
         new("STEP", Forward, Right, Up),
         new("TURN", Turn, Tilt, Roll, Upright),
         new("UNDO", Editor.Undo, Editor.RestoreSelected),
@@ -386,7 +380,7 @@ static class Moving
         if (!Carrying(actor!))
         {
             LetGo();
-            if (GrabStyle.Index == 2 && !GravityGrab.Grabbable(actor!))
+            if (Grab.Mode == 2 && !GravityGrab.Grabbable(actor!))
             {
                 Toasts.Show(Grab.Plain, "IT HAS NO PHYSICS", OutcomeKind.Failed, Grab);
                 Grab.Reset();
@@ -396,7 +390,7 @@ static class Moving
             Edits.Touch(actor!, "GRAB");
 
             // A frozen thing is kept still by the editor, and keeps its place by being put there.
-            var byPhysics = GrabStyle.Index != 1 && Edits.Find(actor!) is not { Still: true };
+            var byPhysics = Grab.Mode != 1 && Edits.Find(actor!) is not { Still: true };
             _physics = byPhysics && GravityGrab.Start(actor!);
             Things.Box(actor!, out var middle, out _);
             _offset = middle - actor!.Location;

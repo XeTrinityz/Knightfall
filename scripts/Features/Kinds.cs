@@ -4,7 +4,7 @@ using System.Globalization;
 
 namespace Knightfall;
 
-sealed class Toggle : Feature
+class Toggle : Feature
 {
     readonly bool _default;
     readonly bool _saved;
@@ -48,6 +48,85 @@ sealed class Toggle : Feature
             On = on;
             Catalog.Touched(this);
         }
+    }
+}
+
+// A toggle that also picks how it works. Accept, hotkeys and the radial switch it on and off,
+// left and right step the mode. The mode is saved under its own key beside the toggle's and
+// counts as a preference, so ALL OFF only switches it off.
+sealed class ModeToggle : Toggle
+{
+    readonly (string Id, string Label)[] _modes;
+    readonly int _default;
+
+    // A mode read from a value saved before the row had its own on and off, waiting for
+    // LoadMode.
+    int _carried = -1;
+
+    public ModeToggle(string id, string label, string help, string modeKey, (string Id, string Label)[] modes, int mode = 0, bool saved = true)
+        : base(id, label, help, saved: saved)
+    {
+        if (modes.Length == 0)
+        {
+            throw new ArgumentException($"Option '{id}' has no modes.");
+        }
+
+        ModeKey = modeKey;
+        _modes = modes;
+        _default = Math.Clamp(mode, 0, modes.Length - 1);
+        Mode = _default;
+    }
+
+    // Where the mode lives in settings.toml, in the toggle's own section.
+    public string ModeKey { get; }
+
+    public int Mode { get; private set; }
+
+    public int ModeCount => _modes.Length;
+
+    public string ModeId => _modes[Mode].Id;
+
+    public string ModeText => _modes[Mode].Label;
+
+    // A row that used to be a choice with OFF first saved its pick as text under this key. A
+    // mode's id means on with that mode, anything else means off.
+    public override void Load(object? stored)
+    {
+        if (stored is string id)
+        {
+            _carried = Find(id);
+            base.Load(_carried >= 0);
+            return;
+        }
+
+        _carried = -1;
+        base.Load(stored);
+    }
+
+    public void LoadMode(object? stored)
+    {
+        var found = stored is string id ? Find(id) : -1;
+        Mode = found >= 0 ? found : _carried >= 0 ? _carried : _default;
+        _carried = -1;
+    }
+
+    // Changes the mode the way the player would, for a row that sets others.
+    public void SetMode(int mode)
+    {
+        mode = Math.Clamp(mode, 0, _modes.Length - 1);
+        if (mode != Mode)
+        {
+            Mode = mode;
+            Catalog.Touched(this);
+        }
+    }
+
+    int Find(string id) => Array.FindIndex(_modes, mode => string.Equals(mode.Id, id, StringComparison.OrdinalIgnoreCase));
+
+    public override void Step(int direction)
+    {
+        Mode = (Mode + direction + _modes.Length) % _modes.Length;
+        Catalog.Touched(this);
     }
 }
 

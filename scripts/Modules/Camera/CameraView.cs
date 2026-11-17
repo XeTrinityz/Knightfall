@@ -73,10 +73,11 @@ static class CameraView
     // How wide the picture is between the bars, in the same order as the choices.
     static readonly float[] BarShapes = { 0f, 2f, 2.39f, 2.76f };
 
-    public static readonly Choice Bars = new(
+    public static readonly ModeToggle Bars = new(
         "camera.view.black_bars", "BLACK BARS",
-        "Black bars above and below the picture, like a film. They cover the HUD's top and bottom edges, so they go well with HIDE HUD.",
-        new[] { ("off", "OFF"), ("wide", "2:1"), ("film", "2.39:1"), ("epic", "2.76:1") });
+        "Black bars above and below the picture, like a film. Left and right pick how wide the picture is. They cover the HUD's top and bottom edges, so they go well with HIDE HUD.",
+        "black_bars_shape",
+        new[] { ("wide", "2:1"), ("film", "2.39:1"), ("epic", "2.76:1") });
 
     // The camera's states copy their sway and hip follow from these when they begin, and the run
     // state plays its bob at RunOverlayStrength. Holding the live values too covers the state
@@ -255,6 +256,15 @@ static class CameraView
                 case Slider slider:
                     slider.SetTo(value);
                     break;
+                // A mode row's value is 0 for off, or which mode from 1 on.
+                case ModeToggle moded:
+                    moded.SetTo(value != 0);
+                    if (value != 0)
+                    {
+                        moded.SetMode((int)value - 1);
+                    }
+
+                    break;
                 case Toggle toggle:
                     toggle.SetTo(value != 0);
                     break;
@@ -418,7 +428,7 @@ static class CameraView
         var seconds = _barsAt == 0 ? 0f : MathF.Min((float)((now - _barsAt) / (double)Stopwatch.Frequency), 0.1f);
         _barsAt = now;
 
-        var shape = BarShapes[Math.Clamp(Bars.Index, 0, BarShapes.Length - 1)];
+        var shape = BarShapes[Bars.On ? Math.Clamp(Bars.Mode + 1, 1, BarShapes.Length - 1) : 0];
         var wanted = shape > 0f && !World.Paused ? 1f : 0f;
         _bars += (wanted - _bars) * (1f - MathF.Exp(-BarsEase * seconds));
         if (wanted == 0f && _bars < 0.002f)

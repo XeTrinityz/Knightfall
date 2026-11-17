@@ -482,7 +482,27 @@ sealed class NightwingTheme : Theme
                     FadeWith(grow);
                 }
 
-                Draw.TextRight(toggle.ValueText, x - 10f, y + 10f, 11f, toggle.On ? state : off);
+                if (toggle is ModeToggle moded)
+                {
+                    // The mode sits where ON and OFF go, since the sticks already say which.
+                    var tone = selected ? White : toggle.On ? state : Dim;
+                    var left = x - 10f;
+                    if (selected)
+                    {
+                        left = Draw.TextRight(">", left, y + 8f, 13f, White) - 8f;
+                    }
+
+                    left = Draw.TextRight(moded.ModeText, left, y + 8f, 13f, tone);
+                    if (selected)
+                    {
+                        Draw.TextRight("<", left - 8f, y + 8f, 13f, White);
+                    }
+                }
+                else
+                {
+                    Draw.TextRight(toggle.ValueText, x - 10f, y + 10f, 11f, toggle.On ? state : off);
+                }
+
                 break;
             }
 

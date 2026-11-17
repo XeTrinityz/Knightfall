@@ -393,6 +393,27 @@ sealed class MilitiaTheme : Theme
 
         switch (feature)
         {
+            // The chip already says on or off, so the slab carries the mode like a choice.
+            case ModeToggle moded:
+            {
+                // The slab ends at the chip, so the mode is laid out from there.
+                var edge = mainRight - Inset - lean;
+                var left = Inset + 28f - lean + Draw.TextWidth(feature.Label, 15f) + 16f;
+                if (selected)
+                {
+                    var x = Draw.TextRight(">", edge, y + 6f, 13f, Ink);
+                    x = Draw.TextRightFit(moded.ModeText, x - 8f, y + 6f, 13f, Ink, left + Draw.TextWidth("<", 13f) + 8f);
+                    Draw.TextRight("<", x - 8f, y + 6f, 13f, Ink);
+                }
+                else
+                {
+                    Draw.TextRightFit(moded.ModeText, edge, y + 6f, 13f, moded.On ? state : Dim, left);
+                }
+
+                Kit.Dashes(edge, y + 24f, moded.ModeCount, moded.Mode, moded.On ? state : Dim, selected ? EmptyOnWhite : Empty);
+                break;
+            }
+
             case Slider slider:
                 Draw.TextRight(slider.ValueText, right, y + 7f, 15f, value);
                 Kit.Meter(right - ValueRoom - MeterWidth, y + 11f, MeterWidth, 8f, 16, slider.Fill, slider.DefaultFill, state, selected ? EmptyOnWhite : Empty, selected ? Ink : Dim);

@@ -74,6 +74,55 @@ static class Kit
         }
     }
 
+    // A two-part cap for a toggle with a mode, drawn leftwards from the right edge. The state cell
+    // fills when on. The mode stays readable when off so the player sees what on will do. The
+    // arrows show on the picked row. Returns its left edge.
+    public static float Capsule(float right, float y, float height, float size, ModeToggle row, bool arrows, Rgba lit, Rgba ink, Rgba frame, Rgba text, Rgba hint)
+    {
+        const float pad = 7f;
+        const float arrowGap = 6f;
+
+        var state = row.On ? "ON" : "OFF";
+        var stateWidth = MathF.Max(Draw.TextWidth("OFF", size), Draw.TextWidth(state, size)) + 2f * pad;
+        var modeWidth = Draw.TextWidth(row.ModeText, size) + 2f * pad;
+        var arrowWidth = Draw.TextWidth("<", size);
+        if (arrows)
+        {
+            modeWidth += 2f * (arrowWidth + arrowGap);
+        }
+
+        var left = right - stateWidth - modeWidth;
+        var textY = y + (height - size) / 2f;
+        var edge = row.On ? lit : frame;
+
+        if (row.On)
+        {
+            Draw.Rect(left - 2f, y - 2f, stateWidth + modeWidth + 4f, height + 4f, lit with { A = 22 });
+            Draw.Rect(left, y, stateWidth, height, lit);
+            Draw.Rect(left + stateWidth, y, modeWidth, height, lit with { A = 40 });
+        }
+
+        Draw.Frame(left, y, stateWidth + modeWidth, height, 1f, edge);
+        Draw.Rect(left + stateWidth, y, 1f, height, edge);
+        Draw.Text(state, left + (stateWidth - Draw.TextWidth(state, size)) / 2f, textY, size, row.On ? ink : frame);
+
+        var x = left + stateWidth + pad;
+        var modeColour = row.On ? lit : text;
+        if (arrows)
+        {
+            Draw.Text("<", x, textY, size, hint);
+            x += arrowWidth + arrowGap;
+        }
+
+        Draw.Text(row.ModeText, x, textY, size, modeColour);
+        if (arrows)
+        {
+            Draw.Text(">", right - pad - arrowWidth, textY, size, hint);
+        }
+
+        return left;
+    }
+
     // A row of blocks that fill up with the value, with a small tick under the default.
     public static void Meter(float x, float y, float width, float height, int blocks, float fill, float mark, Rgba lit, Rgba empty, Rgba tick)
     {

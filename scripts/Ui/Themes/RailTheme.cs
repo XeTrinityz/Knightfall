@@ -288,6 +288,10 @@ sealed class RailTheme : Theme
 
         switch (feature)
         {
+            case ModeToggle moded:
+                Kit.Capsule(right, y + (RowHeight - 16f) / 2f, 16f, 10f, moded, selected, value, PanelBottom with { A = 255 }, selected ? accent : Ghost, selected ? accent : Dim, Dim);
+                break;
+
             case Toggle toggle:
                 Kit.Switch(right - Kit.SwitchWidth, y + (RowHeight - Kit.SwitchHeight) / 2f, toggle.On, value, Ghost);
                 Draw.TextRight(toggle.ValueText, right - Kit.SwitchWidth - 9f, y + 10f, 11f, toggle.On ? value : Ghost);

@@ -104,20 +104,14 @@ static class Eyes
     static GuideLine? _tagLine;
     static GuideLine? _nobodyLine;
 
-    public static readonly Toggle On = new(
+    public static readonly ModeToggle On = new(
         "camera.eyes.on", "THROUGH THEIR EYES",
-        "Shows Batman through the eyes of someone nearby who can see him, like a thug, a cop or a rioter. You play as normal and the stick follows what you see. When nobody can see you the normal camera comes back.",
+        "Shows Batman through the eyes of someone nearby who can see him, like a thug, a cop or a rioter. You play as normal and the stick follows what you see. When nobody can see you the normal camera comes back. Left and right pick who can lend you their eyes. FRIENDLIES are the police, fire crews and your bodyguards.",
+        "whose",
+        new[] { ("anyone", "ANYONE"), ("enemies", "ENEMIES"), ("friendlies", "FRIENDLIES") },
         saved: false)
     {
         Restore = Release,
-    };
-
-    public static readonly Choice Whose = new(
-        "camera.eyes.whose", "WHOSE EYES",
-        "Who can lend you their eyes. FRIENDLIES are the police, fire crews and your bodyguards.",
-        new[] { ("anyone", "ANYONE"), ("enemies", "ENEMIES"), ("friendlies", "FRIENDLIES") })
-    {
-        Preference = true,
     };
 
     public static readonly Choice Look = new(
@@ -162,7 +156,7 @@ static class Eyes
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("EYES", On, Whose, Look, Switch, Range, ShowWho, Next),
+        new("EYES", On, Look, Switch, Range, ShowWho, Next),
     };
 
     // True while someone is lending their eyes, so Batman keeps his head.
@@ -430,7 +424,7 @@ static class Eyes
             return false;
         }
 
-        return Whose.Index switch
+        return On.Mode switch
         {
             1 => Crowd.IsEnemy(body),
             2 => Crowd.IsFriendly(body),

@@ -50,18 +50,11 @@ static class Dashboard
     static RPlayerController? _lentTo;
     static Vector3 _heading;
 
-    public static readonly Toggle Speedometer = new(
+    public static readonly ModeToggle Speedometer = new(
         "batmobile.driving.speedometer", "SPEEDOMETER",
-        "Shows your speed while you drive, with the car's armour and weapon power, and whether you are boosting or on autopilot. It takes the look of the menu theme.");
-
-    public static readonly Choice Units = new(
-        "batmobile.driving.speed_units", "SPEED UNITS",
-        "Miles or kilometres an hour on the speedometer.",
-        new[] { ("mph", "MPH"), ("kmh", "KM/H") })
-    {
-        Preference = true,
-        Block = static () => Speedometer.On ? null : "SPEEDOMETER IS OFF",
-    };
+        "Shows your speed while you drive, with the car's armour and weapon power, and whether you are boosting or on autopilot. It takes the look of the menu theme. Left and right pick miles or kilometres an hour.",
+        "speed_units",
+        new[] { ("mph", "MPH"), ("kmh", "KM/H") });
 
     // In the same order as DashSpot.
     public static readonly Choice Position = new(
@@ -96,7 +89,7 @@ static class Dashboard
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("SPEEDOMETER", Speedometer, Units, Position, Stats, ResetStats),
+        new("SPEEDOMETER", Speedometer, Position, Stats, ResetStats),
         new("RADAR", RadarOnFoot),
     };
 
@@ -114,7 +107,7 @@ static class Dashboard
 
     public static void Fill(DashView view, RVehicleBatmobileBase car, float seconds)
     {
-        var kmh = Units.Index == 1;
+        var kmh = Speedometer.Mode == 1;
         view.Spot = (DashSpot)Position.Index;
 
         // Upright whatever the car is doing, like a projection that steadies itself. Its heading

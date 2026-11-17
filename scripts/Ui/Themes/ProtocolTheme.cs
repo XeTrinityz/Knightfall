@@ -548,6 +548,10 @@ sealed class ProtocolTheme : Theme
 
         switch (feature)
         {
+            case ModeToggle moded:
+                Kit.Capsule(right, y + 7f, 16f, 10f, moded, selected, value, NodeBack, selected ? accent : Ghost, selected ? accent : Dim, Dim);
+                break;
+
             case Toggle toggle:
                 Kit.Switch(right - Kit.SwitchWidth, y + (RowHeight - Kit.SwitchHeight) / 2f, toggle.On, value, Ghost);
                 Draw.TextRight(toggle.ValueText, right - Kit.SwitchWidth - 9f, y + 10f, 11f, toggle.On ? value : Ghost);

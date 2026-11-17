@@ -112,7 +112,7 @@ static class FreeCamera
     // While true, the player's move controls are off because of the free camera.
     public static bool TakesMoves => _inputOffFor is not null;
 
-    // EDITOR MODE flies whatever FREE CAMERA MODE says, and takes W and S while it carries
+    // EDITOR MODE flies whatever FREE CAMERA's mode says, and takes W and S while it carries
     // something, to push it away and pull it in.
     public static bool ForceFly;
     public static bool HoldsForward;
@@ -130,15 +130,7 @@ static class FreeCamera
 
     public static bool OnPad => _onPad;
 
-    public static readonly Toggle Free = new(
-        "camera.free_camera.on", "FREE CAMERA",
-        "Lets the camera go. In FLY you steer it while Batman stays where he is, and its controls show on screen.",
-        saved: false)
-    {
-        Restore = Stop,
-    };
-
-    // In the same order as Mode's options.
+    // In the same order as Free's modes.
     enum Kind
     {
         Fly,
@@ -147,12 +139,14 @@ static class FreeCamera
         Follow,
     }
 
-    public static readonly Choice Mode = new(
-        "camera.free_camera.mode", "FREE CAMERA MODE",
-        "FLY moves the camera while Batman waits. STAY leaves it where it is and you play on. WATCH leaves it where it is and turns it to follow you. FOLLOW keeps it beside you as you go and turns it to follow you.",
-        new[] { ("fly", "FLY"), ("stay", "STAY"), ("watch", "WATCH"), ("follow", "FOLLOW") })
+    public static readonly ModeToggle Free = new(
+        "camera.free_camera.on", "FREE CAMERA",
+        "Lets the camera go. Left and right pick how. FLY moves the camera while Batman waits, and its controls show on screen. STAY leaves it where it is and you play on. WATCH leaves it where it is and turns it to follow you. FOLLOW keeps it beside you as you go and turns it to follow you.",
+        "mode",
+        new[] { ("fly", "FLY"), ("stay", "STAY"), ("watch", "WATCH"), ("follow", "FOLLOW") },
+        saved: false)
     {
-        Preference = true,
+        Restore = Stop,
     };
 
     public static readonly Slider Speed = new(
@@ -205,13 +199,13 @@ static class FreeCamera
 
     public static readonly Catalog.Section[] Sections =
     {
-        new("FREE CAMERA", Free, Mode),
+        new("FREE CAMERA", Free),
         new("FLYING", Speed, LookSpeed, Smoothing),
         new("PICTURE", HideHud, Zoom, Roll),
         new("WORLD", WorldTime.Freeze) { Borrowed = true },
     };
 
-    static Kind Current => ForceFly ? Kind.Fly : (Kind)Mode.Index;
+    static Kind Current => ForceFly ? Kind.Fly : (Kind)Free.Mode;
 
     // Called from the camera hook with the view the game worked out. Scenes keep the game's own
     // camera, and the free one carries on from where it was after. Input is held and given back

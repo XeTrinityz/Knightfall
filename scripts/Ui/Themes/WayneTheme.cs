@@ -717,6 +717,10 @@ sealed class WayneTheme : Theme
 
         switch (feature)
         {
+            case ModeToggle moded:
+                Kit.Capsule(right, y + (RowHeight - 16f) / 2f, 16f, 10f, moded, selected, value, Black, selected ? accent : Ghost, selected ? accent : Dim, Dim);
+                break;
+
             case Toggle toggle:
                 Switch(right - SwitchWidth, y + (RowHeight - SwitchHeight) / 2f, toggle.On, value);
                 Draw.TextRight(toggle.ValueText, right - SwitchWidth - 9f, y + 10f, 11f, toggle.On ? value : Ghost);

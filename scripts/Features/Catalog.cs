@@ -210,13 +210,18 @@ static class Catalog
     {
         foreach (var feature in Everything)
         {
-            if (feature.Stored is null)
+            // The toggle is read first, since an old saved value there can carry the mode.
+            if (feature.Stored is not null)
             {
-                continue;
+                feature.Load(Settings.Raw(feature.Section, feature.Key));
+                Settings.Set(feature.Section, feature.Key, feature.Stored!);
             }
 
-            feature.Load(Settings.Raw(feature.Section, feature.Key));
-            Settings.Set(feature.Section, feature.Key, feature.Stored!);
+            if (feature is ModeToggle moded)
+            {
+                moded.LoadMode(Settings.Raw(moded.Section, moded.ModeKey));
+                Settings.Set(moded.Section, moded.ModeKey, moded.ModeId);
+            }
         }
 
         _activeStale = true;
@@ -236,6 +241,11 @@ static class Catalog
         if (feature.Stored is { } stored)
         {
             Settings.Set(feature.Section, feature.Key, stored);
+        }
+
+        if (feature is ModeToggle moded)
+        {
+            Settings.Set(moded.Section, moded.ModeKey, moded.ModeId);
         }
 
         feature.Changed?.Invoke();

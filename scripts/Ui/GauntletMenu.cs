@@ -254,6 +254,22 @@ static class GauntletMenu
 
         switch (feature)
         {
+            case ModeToggle moded:
+            {
+                const float size = 24f;
+                const float modeSize = 16f;
+                var color = moded.On ? tone : _ghost;
+                Draw.Text(moded.ValueText, Inset, top, size, color);
+                Kit.Switch(Inset + Draw.TextWidth(moded.ValueText, size) + 10f, top + (size - Kit.SwitchHeight) / 2f, moded.On, tone, _ghost);
+                var modeTop = top + size + 8f;
+                var x = Draw.TextWidth("<", modeSize) + 8f;
+                Draw.Text("<", Inset, modeTop, modeSize, _dim);
+                x = Inset + x;
+                Draw.Text(moded.ModeText, x, modeTop, modeSize, moded.On ? tone : _dim);
+                Draw.Text(">", x + Draw.TextWidth(moded.ModeText, modeSize) + 8f, modeTop, modeSize, _dim);
+                return modeTop + modeSize;
+            }
+
             case Toggle toggle:
             {
                 const float size = 24f;
@@ -423,6 +439,10 @@ static class GauntletMenu
             // A row that can't be used right now shows a padlock where its value goes.
             case var _ when why is not null:
                 valueLeft = right - Kit.Padlock(right - MathF.Round(size * 0.8f), top, size, _ghost);
+                break;
+
+            case ModeToggle moded:
+                valueLeft = Draw.TextRightFit(moded.On ? moded.ModeText : moded.ValueText, right, top, size, moded.On ? tone : _ghost, LabelLeft + 70f);
                 break;
 
             case Toggle toggle:

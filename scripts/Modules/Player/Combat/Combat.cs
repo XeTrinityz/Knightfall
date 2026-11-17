@@ -140,7 +140,7 @@ static class Combat
     {
         new("AUTOMATIC", AutoFight.Option, AutoDefence.AutoCounter, AutoDefence.AutoDodgeRed, DodgeGunfire),
         new("FIGHTING", ComboNeverResets, ComboMultiplier, Batsuit, FreeflowFocus, HeavyCounters, SlowMoGroupAttacks, CounterIcons),
-        new("YOUR HITS", OneHitKo, SuperPunch.Mode, SuperPunch.Force, LastEnemyFightsOn, RagdollOnEveryHit, KnockOffHelmets, DropWeaponsWhenHit, HideStunStars),
+        new("YOUR HITS", OneHitKo, SuperPunch.Punch, SuperPunch.Force, LastEnemyFightsOn, RagdollOnEveryHit, KnockOffHelmets, DropWeaponsWhenHit, HideStunStars),
         new("TAKEDOWNS", SpecialTakedownsAnytime, FearTakedownsAnytime, QuickStealthTakedowns, ForceEnvironmentTakedowns, DualTakedowns),
     };
 

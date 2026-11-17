@@ -12,8 +12,8 @@ namespace Knightfall;
 // push, the thug is made to go limp for it, and once the body is loose it is thrown.
 static class SuperPunch
 {
-    const int EveryHit = 1;
-    const int Knockouts = 2;
+    // The mode that only launches with the knockout hit.
+    const int Knockouts = 1;
 
     // The push the game gets with the hit, and the speed the loose body is thrown at.
     const float Push = 3000f;
@@ -43,10 +43,11 @@ static class SuperPunch
     // The thug being hit right now, whose ragdoll checks say yes.
     static RPawnVillain? _forcing;
 
-    public static readonly Choice Mode = new(
+    public static readonly ModeToggle Punch = new(
         "player.combat.super_punch", "SUPER PUNCH",
-        "Your hits on foot send thugs flying. EVERY HIT launches on every strike and counter. KNOCKOUTS only launches with the hit that puts one down.",
-        new[] { ("off", "OFF"), ("every", "EVERY HIT"), ("knockouts", "KNOCKOUTS") })
+        "Your hits on foot send thugs flying. Left and right pick when. EVERY HIT launches on every strike and counter. KNOCKOUTS only launches with the hit that puts one down.",
+        "super_punch_mode",
+        new[] { ("every", "EVERY HIT"), ("knockouts", "KNOCKOUTS") })
     {
         Tick = Step,
         Restore = Throws.Clear,
@@ -59,7 +60,7 @@ static class SuperPunch
         min: 0.25, max: 3, step: 0.25, value: 1, unit: "X")
     {
         Preference = true,
-        Block = static () => Mode.Index == 0 ? "SUPER PUNCH IS OFF" : null,
+        Block = static () => Punch.On ? null : "SUPER PUNCH IS OFF",
     };
 
     // Makes the hit a launch when it should be one. The way to throw them is handed back, or
@@ -68,14 +69,13 @@ static class SuperPunch
     {
         // A hit with no damage isn't a punch. Gas, smoke and stuns reach thugs this way, and
         // launching them would stop their own reaction. A villain's hits are their own.
-        var mode = Mode.Index;
-        if (mode == 0 || Villains.On || info.DamageAmount <= 0f || World.Player is not { } you || !ReferenceEquals(info.Attacker, you) || you.Base is Vehicle
+        if (!Punch.On || Villains.On || info.DamageAmount <= 0f || World.Player is not { } you || !ReferenceEquals(info.Attacker, you) || you.Base is Vehicle
             || !Crowd.Standing(thug) || thug.IsRagdoll() || thug.Base is Vehicle || Bodyguards.Is(thug))
         {
             return Vector3.Zero;
         }
 
-        if (mode == Knockouts && info.DamageAmount < thug.Health)
+        if (Punch.Mode == Knockouts && info.DamageAmount < thug.Health)
         {
             return Vector3.Zero;
         }

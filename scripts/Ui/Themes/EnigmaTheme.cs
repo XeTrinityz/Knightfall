@@ -648,6 +648,10 @@ sealed class EnigmaTheme : Theme
 
         switch (feature)
         {
+            case ModeToggle moded:
+                Kit.Capsule(ValueRight, y + (RowHeight - 16f) / 2f, 16f, 10f, moded, selected, value, Ink, selected ? accent : Ghost, selected ? accent : Dim, Dim);
+                break;
+
             case Toggle toggle:
                 Switch(ValueRight - SwitchWidth, y + (RowHeight - SwitchHeight) / 2f, toggle.On, value);
                 Draw.TextRight(toggle.ValueText, ValueRight - SwitchWidth - 9f, y + 10f, 11f, toggle.On ? value : Ghost);
