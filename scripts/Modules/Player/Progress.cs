@@ -102,7 +102,7 @@ static class Progress
 
     public static readonly Command ChallengeMedals = new(
         "player.progress.challenge_medals", "GET ALL CHALLENGE MEDALS",
-        "Gives three medals on every challenge to whoever is picked in MEDALS FOR, so they show as done, and clears the orange new marks on them. A score short of three medals is raised to the three medal mark. Better scores stay. Kept in your save. This can't be undone.",
+        "Gives three medals on every challenge to whoever is picked in MEDALS FOR, so they show as done, and clears the orange new marks on them. A score short of three medals is raised to the three medal mark. Predator challenges with no time get one between 2:30 and 4:30. Better scores stay. Kept in your save. This can't be undone.",
         GiveMedals)
     {
         Block = static () => PlayerLocks.InChallenge(),
@@ -269,6 +269,7 @@ static class Progress
         var who = MedalWho[MedalsFor.Index].Names;
         var cityOnly = MedalsFor.Index == CityPick;
         var wanted = new List<(int Challenge, int Slot, bool Medals, int? Score)>();
+        var training = new List<int>();
         var fresh = new List<int>();
         var maps = game.ChallengeMapList;
         for (var i = 0; i < maps.Count; i++)
@@ -285,19 +286,17 @@ static class Progress
                 fresh.Add(map.Id);
             }
 
-            // Training counts as done once played, not by medals.
-            if (group.Contains("Tutorial", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
             var inCity = map.ChallengeFrontendState.ToString().EndsWith("_Default", StringComparison.Ordinal);
             if (cityOnly && !inCity)
             {
                 continue;
             }
 
+            // Played training is saved as the awarded flag, with a score of 1 and three medals
+            // on the challenge's own slot.
+            var tutorial = group.Contains("Tutorial", StringComparison.Ordinal);
             var cars = group.Contains("Batmobile", StringComparison.Ordinal);
+            var predator = group.Contains("Predator", StringComparison.Ordinal);
             foreach (var (slot, name) in Roster(map.Id, cars, ids))
             {
                 if (cityOnly ? slot != 0 : who.Length > 0 && Array.IndexOf(who, name) < 0)
@@ -305,10 +304,35 @@ static class Progress
                     continue;
                 }
 
+                if (tutorial)
+                {
+                    if (slot != 0)
+                    {
+                        continue;
+                    }
+
+                    var short3 = options.GetChallengeMedals(map.Id, 0) < 3;
+                    var unscored = options.GetChallengeScore(map.Id, 0) < 1;
+                    if (short3 || unscored)
+                    {
+                        wanted.Add((map.Id, 0, short3, unscored ? 1 : null));
+                    }
+
+                    if (!options.IsChallengeAwarded(map.Id))
+                    {
+                        training.Add(map.Id);
+                    }
+
+                    continue;
+                }
+
                 var medals = options.GetChallengeMedals(map.Id, slot) < 3;
+                var had = options.GetChallengeScore(map.Id, slot);
                 var score = Bar(map.Id, name, map.ChallengeRankMode) is { } bar
-                    ? Raised(options.GetChallengeScore(map.Id, slot), bar, map.ChallengeRankMode)
-                    : null;
+                    ? Raised(had, bar, map.ChallengeRankMode)
+                    : predator && had == 0 && map.ChallengeRankMode == RGameInfo.EChallengeRankMode.ECRM_ShortestTime
+                        ? RunTime(map.Id, slot)
+                        : null;
                 if (medals || score is not null)
                 {
                     wanted.Add((map.Id, slot, medals, score));
@@ -327,7 +351,7 @@ static class Progress
             }
         }
 
-        if (wanted.Count == 0)
+        if (wanted.Count == 0 && training.Count == 0)
         {
             Seen();
             return Outcome.Unchanged(fresh.Count == 0 ? "ALL HAVE 3 MEDALS" : $"{fresh.Count} MARKS CLEARED");
@@ -335,8 +359,9 @@ static class Progress
 
         var medalCount = wanted.Count(entry => entry.Medals);
         var scoreCount = wanted.Count(entry => entry.Score is not null);
+        var trainingText = training.Count == 0 ? "" : $" Marks {training.Count} training {(training.Count == 1 ? "challenge" : "challenges")} as done.";
         var ask = new Confirmation("CAN'T UNDO", "GET ALL CHALLENGE MEDALS",
-            $"Gives three medals for {MedalWho[MedalsFor.Index].Label} on {medalCount} challenge {(medalCount == 1 ? "entry" : "entries")} and raises {scoreCount} {(scoreCount == 1 ? "score" : "scores")} to the three medal mark in your save. Better scores stay.",
+            $"Gives three medals for {MedalWho[MedalsFor.Index].Label} on {medalCount} challenge {(medalCount == 1 ? "entry" : "entries")} and raises {scoreCount} {(scoreCount == 1 ? "score" : "scores")} to the three medal mark in your save.{trainingText} Better scores stay.",
             "GIVE", "CANCEL");
         if (!Confirm.Asked(ChallengeMedals, ask))
         {
@@ -357,9 +382,14 @@ static class Progress
             }
         }
 
+        foreach (var id in training)
+        {
+            options.SetChallengeAwarded(id, true);
+        }
+
         Seen();
-        Log.Info($"Challenge medals: three on {medalCount} entries and {scoreCount} scores raised for {MedalWho[MedalsFor.Index].Label}.");
-        return Outcome.Done($"{wanted.Count} SET");
+        Log.Info($"Challenge medals: three on {medalCount} entries, {scoreCount} scores raised and {training.Count} training done for {MedalWho[MedalsFor.Index].Label}.");
+        return Outcome.Done($"{wanted.Count + training.Count} SET");
     }
 
     // Who can play a challenge, as its menu lists them. The starred one is the challenge's own
@@ -414,11 +444,29 @@ static class Progress
 
         if (rank == RGameInfo.EChallengeRankMode.ECRM_HighScore)
         {
+            // Goals that count things, like armored cars, score the count. Their rival line
+            // starts paying out over the same number, so it gives the mark when the goal doesn't.
             var points = Regex.Match(goal, @"(?:\bscore\s+|\bx|\$)([\d,]+)", RegexOptions.IgnoreCase);
+            if (!points.Success && Details($"{challenge}_Rival") is { } rival)
+            {
+                points = Regex.Match(rival, @"\bover\s+x?([\d,]+)", RegexOptions.IgnoreCase);
+            }
+
             return points.Success ? int.Parse(points.Groups[1].Value.Replace(",", "")) : null;
         }
 
         return null;
+    }
+
+    // Predator challenges are ranked by their tasks and give no time to beat, so a clear time
+    // between 2:30 and 4:30 is picked. The same challenge and character always get the same one.
+    static int RunTime(int challenge, int slot)
+    {
+        var mix = (uint)(challenge * 7919 + slot * 104729 + 1);
+        mix ^= mix >> 13;
+        mix *= 0x5bd1e995;
+        mix ^= mix >> 15;
+        return 150 * Second + (int)(mix % (120 * Second));
     }
 
     // The score to save, or null when the one there already earns three medals. A time goal
