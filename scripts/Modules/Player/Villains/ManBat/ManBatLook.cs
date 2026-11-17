@@ -587,9 +587,6 @@ static partial class ManBat
         _downed = 0;
         Shrieks.Unload();
         _impactLook = null;
-        _dangleIn = null;
-        _dangle = null;
-        _dangleLooked = false;
         _loadTried = false;
         Borrowed.Let(Lender);
     }

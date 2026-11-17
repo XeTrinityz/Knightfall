@@ -27,6 +27,13 @@ static partial class ManBat
     // How far below him the ground is looked for when he stops flying.
     const float GroundReach = 60f;
 
+    // The city only brings its street crowds in ahead of a player whose pawn has kept one heading
+    // for a second, and it reads that from the pawn's own velocity. He is moved without one, so
+    // the streets emptied as he flew. While he flies faster than the first speed, the pawn is
+    // given the second along his heading. Flying physics adds it as drift, too little to notice.
+    const float HeadingFrom = 100f;
+    const float Heading = 50f;
+
     static readonly Held<RPawnPlayer, Actor.EPhysics> Flying = new("man-bat flying", pawn => pawn.Physics, (pawn, physics) => pawn.SetPhysics(physics));
 
     // Without this the game's movement driver puts the body back on walking or falling every
@@ -72,7 +79,8 @@ static partial class ManBat
         }
 
         // Flying physics would add its own drift on top of the moves made here.
-        player.Velocity = Vector3.Zero;
+        var level = _velocity with { Z = 0f };
+        player.Velocity = level.Length() > HeadingFrom ? Vector3.Normalize(level) * Heading : Vector3.Zero;
         if (!ReferenceEquals(_inputOffFor, controller))
         {
             GiveBackInput();
