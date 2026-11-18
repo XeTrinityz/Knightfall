@@ -143,14 +143,17 @@ static class Updates
     {
         try
         {
-            using var response = await Web.GetAsync($"https://api.github.com/repos/{repo}/releases/latest").ConfigureAwait(false);
-            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            string reply;
+            try
+            {
+                reply = await Web.GetStringAsync($"https://api.github.com/repos/{repo}/releases/latest").ConfigureAwait(false);
+            }
+            catch (HttpRequestException missing) when (missing.Message.Contains("404"))
             {
                 return (null, null, true);
             }
 
-            response.EnsureSuccessStatusCode();
-            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+            using var json = JsonDocument.Parse(reply);
             var tag = json.RootElement.GetProperty("tag_name").GetString();
             var link = json.RootElement.GetProperty("html_url").GetString();
             var body = json.RootElement.TryGetProperty("body", out var text) ? text.GetString() : null;
