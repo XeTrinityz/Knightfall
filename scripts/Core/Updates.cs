@@ -5,25 +5,24 @@ using System.Text.Json;
 
 namespace Knightfall;
 
-// Asks GitHub once per game session whether Knightfall or BmSDK-AK has a newer release, and says so. Nothing
-// is downloaded or installed. The player updates by hand.
+// Asks GitHub once per game session whether Knightfall has a newer release, and says so. Nothing is downloaded
+// or installed. The player updates by hand.
 static class Updates
 {
     const string ModRepo = "XeTrinityz/Knightfall";
     const string ModPage = "https://www.nexusmods.com/batmanarkhamknight/mods/3660";
-    const string SdkRepo = "XeTrinityz/BmSDK-AK";
 
     sealed record Found(string Version, string Link);
 
     static readonly HttpClient Web = Made();
 
-    static Task<(Found? Mod, Found? Sdk, string? Notes, bool Reached)>? _asking;
+    static Task<(Found? Mod, string? Notes, bool Reached)>? _asking;
     static bool _forced;
     static bool _forcedReport;
 
     public static readonly Toggle Check = new(
         "settings.general.check_updates", "CHECK FOR UPDATES",
-        "Asks GitHub when the game starts if there is a newer Knightfall or BmSDK-AK and tells you. Nothing is downloaded. It sends no information about you or your game.",
+        "Asks GitHub when the game starts if there is a newer Knightfall and tells you. Nothing is downloaded. It sends no information about you or your game.",
         on: true)
     {
         Preference = true,
@@ -31,7 +30,7 @@ static class Updates
 
     public static readonly Command Now = new(
         "settings.general.check_now", "CHECK NOW",
-        "Looks for a newer Knightfall or BmSDK-AK right now.",
+        "Looks for a newer Knightfall right now.",
         static () =>
         {
             if (_asking is not null)
@@ -64,15 +63,6 @@ static class Updates
         Block = static () => Why(Survive.NewMod),
     };
 
-    public static readonly Command CopySdk = new(
-        "settings.general.copy_sdk_link", "COPY BMSDK-AK LINK",
-        "Copies the download page of the newer BmSDK-AK, to paste in your browser. Close the game before you install it.",
-        static () => Copy(Pending(Survive.NewSdk)))
-    {
-        Cap = "COPY",
-        Block = static () => Why(Survive.NewSdk),
-    };
-
     public static void Tick()
     {
         if (_asking is { IsCompleted: true } done)
@@ -95,14 +85,13 @@ static class Updates
         }
 
         var mine = Read(Kernel.Version);
-        var sdk = Read(typeof(Script).Assembly.GetName().Version?.ToString());
-        _asking = Task.Run(async () => await Ask(mine, sdk).ConfigureAwait(false));
+        _asking = Task.Run(async () => await Latest(ModRepo, mine).ConfigureAwait(false));
         _forcedReport = forced;
     }
 
     static bool Due() => Check.On && !Survive.Get(Survive.UpdateAsked, false) && Read(Kernel.Version) is not null;
 
-    static void Finish(Task<(Found? Mod, Found? Sdk, string? Notes, bool Reached)> done)
+    static void Finish(Task<(Found? Newer, string? Notes, bool Reached)> done)
     {
         var report = _forcedReport;
         _forcedReport = false;
@@ -118,7 +107,7 @@ static class Updates
             return;
         }
 
-        var (mod, sdk, notes, reached) = done.Result;
+        var (mod, notes, reached) = done.Result;
         if (!reached)
         {
             Log.Info("The update check could not reach GitHub.");
@@ -131,7 +120,6 @@ static class Updates
         }
 
         Survive.Set(Survive.NewMod, mod is null ? "" : mod.Version + "|" + mod.Link);
-        Survive.Set(Survive.NewSdk, sdk is null ? "" : sdk.Version + "|" + sdk.Link);
         if (notes is not null)
         {
             Survive.Set(Survive.ModNotes, notes);
@@ -143,26 +131,13 @@ static class Updates
             Log.Info($"Knightfall {mod.Version} is out. This is {Kernel.Version}. {mod.Link}");
         }
 
-        if (sdk is not null)
-        {
-            Toasts.Show("BMSDK-AK " + sdk.Version, "NEW VERSION, SEE SETTINGS > GENERAL", OutcomeKind.Done, always: true);
-            Log.Info($"BmSDK-AK {sdk.Version} is out. {sdk.Link}");
-        }
-
         if (report)
         {
-            Now.Report(mod is null && sdk is null ? Outcome.Unchanged("UP TO DATE") : Outcome.Done("NEWER FOUND"));
+            Now.Report(mod is null ? Outcome.Unchanged("UP TO DATE") : Outcome.Done("NEWER FOUND"));
         }
     }
 
     // A repo with no release yet answers 404, which just means nothing newer.
-    static async Task<(Found? Mod, Found? Sdk, string? Notes, bool Reached)> Ask(Version? mine, Version? sdk)
-    {
-        var (mod, notes, modReached) = await Latest(ModRepo, mine).ConfigureAwait(false);
-        var (lib, _, libReached) = await Latest(SdkRepo, sdk).ConfigureAwait(false);
-        return (mod, lib, notes, modReached || libReached);
-    }
-
     // Notes are the release's text, with its version on the first line.
     static async Task<(Found? Newer, string? Notes, bool Reached)> Latest(string repo, Version? have)
     {

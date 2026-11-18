@@ -51,7 +51,7 @@ static class General
     {
         new("MENU", SlowTime, Toasts.On, Toasts.Corner, WorldMarks.On),
         new("OPTIONS", AllOff),
-        new("UPDATES", Updates.Check, Updates.Now, Updates.CopyMod, Updates.CopySdk),
+        new("UPDATES", Updates.Check, Updates.Now, Updates.CopyMod),
         new("SETTINGS FILE", Reload, ResetAll),
     };
 
