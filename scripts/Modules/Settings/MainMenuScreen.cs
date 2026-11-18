@@ -51,6 +51,14 @@ static class MainMenuScreen
     static RGFxMoviePopupRequester? _popup;
     static readonly Dictionary<int, Command> Buttons = new();
 
+    // WHAT'S NEW, a page at a time. OK opens the next one.
+    const int NoteRows = 9;
+    const int NoteRowChars = 80;
+    static readonly List<string> Pages = new();
+    static int _page;
+    static bool _paging;
+    static bool _pageDue;
+
     // Each row's text, which is also the name the list gives the row.
     static readonly List<string> Labels = new();
 
@@ -116,6 +124,8 @@ static class MainMenuScreen
         _quietUntil = Environment.TickCount64 + QuietMilliseconds;
         _onYes = null;
         _popup = null;
+        _paging = false;
+        _pageDue = false;
         Buttons.Clear();
         Labels.Clear();
 
@@ -246,8 +256,71 @@ static class MainMenuScreen
         }
 
         _waiting = null;
-        _popup = screen.OpenPopupMessage1("$Menu.Ok", text, true);
+        Paginate(text);
+        _page = 0;
+        _paging = true;
+        _popup = screen.OpenPopupMessage1("$Menu.Ok", Pages[0], true);
         return Outcome.Asking;
+    }
+
+    // The game's box doesn't scroll and runs over its button past about this many wrapped rows.
+    // Each page repeats the section heading it continues under.
+    static void Paginate(string text)
+    {
+        Pages.Clear();
+        var lines = text.Split('\n');
+        var page = new List<string>();
+        var rows = 0;
+        var heading = "";
+        foreach (var line in lines.Skip(1))
+        {
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            var bullet = line.StartsWith("- ", StringComparison.Ordinal);
+            if (!bullet)
+            {
+                heading = line;
+            }
+
+            var cost = (line.Length + NoteRowChars - 1) / NoteRowChars + (bullet ? 0 : 1);
+            if (page.Count > 0 && rows + cost > NoteRows)
+            {
+                Pages.Add(string.Join("\n", page));
+                page.Clear();
+                rows = 0;
+                if (bullet)
+                {
+                    page.Add(heading);
+                    rows = 1;
+                }
+            }
+
+            if (page.Count > 0 && !bullet)
+            {
+                page.Add("");
+            }
+
+            page.Add(line);
+            rows += cost;
+        }
+
+        if (page.Count > 0)
+        {
+            Pages.Add(string.Join("\n", page));
+        }
+
+        for (var i = 0; i < Pages.Count && Pages.Count > 1; i++)
+        {
+            Pages[i] = $"{lines[0]}  ({i + 1}/{Pages.Count})\n\n{Pages[i]}";
+        }
+
+        if (Pages.Count == 1)
+        {
+            Pages[0] = lines[0] + "\n\n" + Pages[0];
+        }
     }
 
     [Redirect(typeof(RGFxMovieUI_OptionsGame), nameof(RGFxMovieUI_OptionsGame.PopupRequester_Callback))]
@@ -262,6 +335,12 @@ static class MainMenuScreen
         var onYes = _onYes;
         _onYes = null;
         _popup = null;
+        if (_paging)
+        {
+            _paging = ++_page < Pages.Count;
+            _pageDue = _paging;
+        }
+
         if (buttonId == YesButton)
         {
             onYes?.Invoke();
@@ -379,6 +458,12 @@ static class MainMenuScreen
         }
 
         ShowResult(screen);
+        if (_pageDue && _popup is null)
+        {
+            _pageDue = false;
+            _popup = screen.OpenPopupMessage1("$Menu.Ok", Pages[_page], true);
+        }
+
         var now = Environment.TickCount64;
         if (now < _nextCheck)
         {
