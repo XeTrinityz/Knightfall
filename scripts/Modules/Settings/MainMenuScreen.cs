@@ -42,6 +42,7 @@ static class MainMenuScreen
     static RGFxMovieUI_OptionsGame? _screen;
     static string _path = "";
     static long _nextCheck;
+    static long _nextArtScan;
     static long _quietUntil;
     static Action? _onYes;
 
@@ -64,7 +65,7 @@ static class MainMenuScreen
 
     static readonly string[] ArtNames = Enumerable.Range(0, ArtSearch + 1).Select(static i => "instance" + i).ToArray();
 
-    // The names the title art has while this screen is open, once it has been found.
+    // The names the title art has while this screen is open, as last found.
     static readonly List<string> Art = new();
 
     // Our screen's Back goes to the main menu. The screen's own value is kept to put back when
@@ -524,8 +525,9 @@ static class MainMenuScreen
     }
 
     // The screen draws GAME and OPTIONS as two pieces of art about 471 by 87 each. Their names
-    // change every time the screen opens, so they are found by size. Once both are found, only
-    // those two are looked at again.
+    // change every time the screen opens, so they are found by size. Once both are found, those
+    // are checked every frame and the full search runs a few times a second in case the art
+    // comes back under new names.
     static void HideArt(RGFxMovieUI_OptionsGame movie)
     {
         var screen = movie.GetVariableObject("root1.Screen", GFxObject.StaticClass());
@@ -537,7 +539,8 @@ static class MainMenuScreen
         // The title field is sized for the game's small title text, so it is let grow to fit ours.
         screen.GetObject("Title", GFxObject.StaticClass())?.GetObject("Label", GFxObject.StaticClass())?.GetObject("Text", GFxObject.StaticClass())?.SetString("autoSize", new FString("left"));
 
-        if (Art.Count >= ArtPieces)
+        var now = Environment.TickCount64;
+        if (Art.Count >= ArtPieces && now < _nextArtScan)
         {
             foreach (var name in Art)
             {
@@ -547,6 +550,7 @@ static class MainMenuScreen
             return;
         }
 
+        _nextArtScan = now + CheckMilliseconds;
         foreach (var name in ArtNames)
         {
             if (Hide(screen, name) && !Art.Contains(name))
