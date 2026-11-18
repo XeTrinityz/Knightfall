@@ -453,9 +453,39 @@ static class MainMenuScreen
     // re-localizes them.
     public static void Tick()
     {
+        // The screen is drawn a few frames before it asks to be set up, so its art is hidden from here.
+        if (_screen is null && Waiting)
+        {
+            try
+            {
+                foreach (var movie in Game.FindObjects<RGFxMovieUI_OptionsGame>())
+                {
+                    if (movie.IsValid)
+                    {
+                        HideArt(movie);
+                    }
+                }
+            }
+            catch (Exception error)
+            {
+                Log.Warn("main menu screen art", $"Hiding the screen's art failed: {error.Message}");
+            }
+
+            return;
+        }
+
         if (_screen is not { IsAlive: true } screen || !screen.bMovieIsOpen || screen.bClosing)
         {
             return;
+        }
+
+        try
+        {
+            HideArt(screen);
+        }
+        catch (Exception error)
+        {
+            Log.Warn("main menu screen art", $"Hiding the screen's art failed: {error.Message}");
         }
 
         ShowResult(screen);
