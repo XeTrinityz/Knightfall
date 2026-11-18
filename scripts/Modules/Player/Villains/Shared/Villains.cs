@@ -1019,19 +1019,10 @@ static class Villains
         return away.LengthSquared() > 1f ? Vector3.Normalize(away) * 100f : Vector3.Zero;
     }
 
-    // The switch alone isn't enough. These four reach the gadget in hand with no check of it,
-    // so they are skipped while a villain is on.
+    // The switch alone isn't enough. These three reach the gadget in hand with no check of it,
+    // so they are skipped while a villain is on. GadgetPressed is skipped in GravityGrab.
     [Redirect(typeof(RPlayerController), nameof(RPlayerController.ReadyGadget))]
     static void ReadyGadget(RPlayerController self, bool cantQuickThrow)
-    {
-        if (!On)
-        {
-            Redirects.RunOriginal();
-        }
-    }
-
-    [Redirect(typeof(RPlayerController), nameof(RPlayerController.GadgetPressed))]
-    static void GadgetPressed(RPlayerController self)
     {
         if (!On)
         {

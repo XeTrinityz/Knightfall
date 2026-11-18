@@ -72,10 +72,12 @@ static class GravityGrab
         min: 5, max: 80, step: 5, value: 30, unit: " M/S");
 
     // The batclaw's fire press goes through GadgetPressed. FireGrapple is the grapple's own path.
+    // The villain skip lives here too. With two redirects on one function, BmSDK-AK before 0.24.1
+    // never runs the game's own GadgetPressed, and no gadget fires.
     [Redirect(typeof(RPlayerController), nameof(RPlayerController.GadgetPressed))]
     static void GadgetPressed(RPlayerController self)
     {
-        if (!Fire(self))
+        if (!Villains.On && !Fire(self))
         {
             Redirects.RunOriginal();
         }
