@@ -40,6 +40,10 @@ static class Survive
     public const string KeptCopies = "Knightfall.KeptCopies";
     public const string SuitWorn = "Knightfall.SuitWorn";
     public const string SkinWorn = "Knightfall.SkinWorn";
+    public const string UpdateAsked = "Knightfall.UpdateAsked";
+    public const string NewMod = "Knightfall.NewMod";
+    public const string NewSdk = "Knightfall.NewSdk";
+    public const string ModNotes = "Knightfall.ModNotes";
 
     public static T Get<T>(string key, T fallback)
     {

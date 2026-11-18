@@ -156,6 +156,7 @@ static class Layout
         Catalog.Background("settings.game.values", SystemValues.Tick);
         Catalog.Background("settings.game.debug_keys", DebugKeys.Tick, DebugKeys.Release);
         Catalog.Background("settings.saves", Saves.Tick);
+        Catalog.Background("settings.general.updates", Updates.Tick);
         Catalog.Background("settings.look.gauntlet", Gauntlet.Tick, Gauntlet.Release);
     }
 

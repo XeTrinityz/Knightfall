@@ -23,6 +23,7 @@ static class MainMenuScreen
     const int MedalsForUid = 9611;
     const int MedalsUid = 9612;
     const int AchievementsUid = 9613;
+    const int ChangesUid = 9614;
     const long WaitMilliseconds = 10000;
 
     // The game's own yes/no box answers with the number of the button, and the first is yes.
@@ -122,6 +123,7 @@ static class MainMenuScreen
         List(menu, MedalsForUid, Progress.MedalsFor);
         Button(menu, MedalsUid, Progress.ChallengeMedals);
         Button(menu, AchievementsUid, Progress.Achievements);
+        Button(menu, ChangesUid, Updates.Changes);
         Invoke(menu, "SetLastUID", Int(AllExtrasUid));
 
         _backBefore ??= movie.OnBackCmd.ToString() ?? "";
@@ -228,6 +230,24 @@ static class MainMenuScreen
         {
             Log.Error("main menu screen", "pressing a row of the KNIGHTFALL screen", error);
         }
+    }
+
+    // The latest changelog in the game's own OK box.
+    public static Outcome ShowNotes()
+    {
+        if (Updates.Notes() is not { } text)
+        {
+            return Outcome.Unchanged("NO NOTES YET");
+        }
+
+        if (_screen is not { IsAlive: true } screen || !screen.bMovieIsOpen || screen.bClosing || _popup is not null)
+        {
+            return Outcome.Failed("NOT OPEN");
+        }
+
+        _waiting = null;
+        _popup = screen.OpenPopupMessage1("$Menu.Ok", text, true);
+        return Outcome.Asking;
     }
 
     [Redirect(typeof(RGFxMovieUI_OptionsGame), nameof(RGFxMovieUI_OptionsGame.PopupRequester_Callback))]
